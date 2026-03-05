@@ -19,6 +19,10 @@ export interface DieSide {
   resolve(context: SideResolveContext): import("./combat-event-bus").CombatEvent[];
 }
 
+type UpgradableDieSide = DieSide & {
+  applyUpgrade: (upgrade: import("./faces").FaceUpgrade) => boolean;
+};
+
 export type Die = {
   id: string;
   name: string;
@@ -76,4 +80,23 @@ export function replaceDieSide(die: Die, sideId: string, nextSide: DieSide): voi
   }
 
   die.sides[sideIndex] = nextSide;
+}
+
+export function applyUpgradeToDieSide(
+  die: Die,
+  sideId: string,
+  upgrade: import("./faces").FaceUpgrade,
+): boolean {
+  const side = die.sides.find((entry) => entry.id === sideId);
+
+  if (!side) {
+    return false;
+  }
+
+  const upgradableSide = side as Partial<UpgradableDieSide>;
+  if (typeof upgradableSide.applyUpgrade !== "function") {
+    return false;
+  }
+
+  return upgradableSide.applyUpgrade(upgrade);
 }
