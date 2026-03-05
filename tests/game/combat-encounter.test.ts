@@ -24,13 +24,14 @@ describe("combat encounter", () => {
   it("rolls enemy dice first and exposes pending intent", () => {
     const { state } = createCombatEncounter({ randomSource: fixedRandomSource() });
 
+    expect(state.round).toBe(1);
     expect(state.enemyIntent.events).toHaveLength(3);
     expect(state.enemyIntent.pendingPlayerDamage).toBe(3);
     expect(state.enemyIntent.pendingEnemyHealing).toBe(1);
     expect(state.player.hp).toBe(20);
   });
 
-  it("rolls player dice one at a time and applies effects immediately", () => {
+  it("rolls player dice one at a time and starts next round when both survive", () => {
     const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
@@ -43,9 +44,25 @@ describe("combat encounter", () => {
     expect(encounter.state.enemy.hp).toBe(11);
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
-    expect(encounter.state.phase).toBe("resolved");
+    expect(encounter.state.phase).toBe("player-turn");
+    expect(encounter.state.round).toBe(2);
+    expect(encounter.state.playerRollIndex).toBe(0);
     expect(encounter.state.player.hp).toBe(17);
     expect(encounter.state.enemy.hp).toBe(12);
+  });
+
+  it("continues rounds until a combatant is defeated", () => {
+    const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
+
+    let safety = 0;
+    while (encounter.state.phase !== "resolved" && safety < 50) {
+      rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+      safety += 1;
+    }
+
+    expect(safety).toBeLessThan(50);
+    expect(encounter.state.phase).toBe("resolved");
+    expect(encounter.state.enemy.hp === 0 || encounter.state.player.hp === 0).toBe(true);
   });
 
   it("supports pub-sub triggers when damage events are published", () => {

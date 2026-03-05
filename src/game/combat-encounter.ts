@@ -32,6 +32,7 @@ export type PendingEnemyIntent = {
 export type CombatEncounterState = {
   player: CombatActor;
   enemy: CombatActor;
+  round: number;
   phase: "player-turn" | "resolved";
   playerRollIndex: number;
   enemyIntent: PendingEnemyIntent;
@@ -217,10 +218,12 @@ export function createCombatEncounter(
   const state: CombatEncounterState = {
     player,
     enemy,
+    round: 1,
     phase: "player-turn",
     playerRollIndex: 0,
     enemyIntent,
     combatLog: [
+      `Round 1 begins.`,
       `${enemy.name} prepares ${enemyIntent.pendingPlayerDamage} damage and ${enemyIntent.pendingEnemyHealing} healing.`,
     ],
   };
@@ -228,9 +231,21 @@ export function createCombatEncounter(
   return { state, eventBus };
 }
 
+function startNextRound(state: CombatEncounterState, randomSource: RandomSource): void {
+  state.round += 1;
+  state.playerRollIndex = 0;
+  state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
+
+  state.combatLog.push(`Round ${state.round} begins.`);
+  state.combatLog.push(
+    `${state.enemy.name} prepares ${state.enemyIntent.pendingPlayerDamage} damage and ${state.enemyIntent.pendingEnemyHealing} healing.`,
+  );
+}
+
 function resolveEnemyIntentIfNeeded(
   state: CombatEncounterState,
   eventBus: CombatEventBus,
+  randomSource: RandomSource,
 ): CombatEncounterState {
   if (state.playerRollIndex < state.player.dice.length) {
     return state;
@@ -243,8 +258,15 @@ function resolveEnemyIntentIfNeeded(
   }
 
   resolveImmediateEvents(state, eventBus, state.enemyIntent.events);
-  state.phase = "resolved";
   state.combatLog.push("Enemy intent resolves.");
+
+  if (state.player.hp <= 0) {
+    state.phase = "resolved";
+    state.combatLog.push("Player defeated.");
+    return state;
+  }
+
+  startNextRound(state, randomSource);
   return state;
 }
 
@@ -259,7 +281,7 @@ export function rollNextPlayerDie(
 
   const nextDie = state.player.dice[state.playerRollIndex];
   if (!nextDie) {
-    return resolveEnemyIntentIfNeeded(state, eventBus);
+    return resolveEnemyIntentIfNeeded(state, eventBus, randomSource);
   }
 
   const side = rollDie(nextDie, randomSource);
@@ -279,7 +301,7 @@ export function rollNextPlayerDie(
     return state;
   }
 
-  return resolveEnemyIntentIfNeeded(state, eventBus);
+  return resolveEnemyIntentIfNeeded(state, eventBus, randomSource);
 }
 
 export function getEnemyIntentSummary(state: CombatEncounterState): string {
