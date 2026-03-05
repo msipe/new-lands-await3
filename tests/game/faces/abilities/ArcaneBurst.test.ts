@@ -1,9 +1,9 @@
 import { EffectType } from "../../../../src/game/dice";
-import { ArcaneBurstFace } from "../../../../src/game/faces";
+import { ArcaneBurst } from "../../../../src/game/faces";
 
-describe("ArcaneBurstFace", () => {
+describe("ArcaneBurst", () => {
   it("deals 3 damage by default", () => {
-    const face = new ArcaneBurstFace("arcane-burst-face");
+    const face = new ArcaneBurst("arcane-burst-face");
 
     const event = face.resolve({
       source: "player",
@@ -17,7 +17,7 @@ describe("ArcaneBurstFace", () => {
   });
 
   it("supports face-specific numeric upgrade", () => {
-    const face = new ArcaneBurstFace("arcane-burst-upgrade-face");
+    const face = new ArcaneBurst("arcane-burst-upgrade-face");
     face.applyUpgrade({ type: "numeric-plus-1" });
 
     const event = face.resolve({

@@ -3,7 +3,7 @@ import { HealEffectScript } from "../../dice-effects";
 import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 
-export class HealSelfFace extends Face {
+export class HealSelf extends Face {
   private heal: number;
 
   constructor(id: string, label: string, heal: number) {

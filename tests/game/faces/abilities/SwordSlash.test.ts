@@ -1,18 +1,18 @@
 import { EffectType } from "../../../../src/game/dice";
-import { ShieldBashFace } from "../../../../src/game/faces";
+import { SwordSlash } from "../../../../src/game/faces";
 
-describe("ShieldBashFace", () => {
-  it("deals 2 damage to opponent", () => {
-    const face = new ShieldBashFace("shield-bash-face");
+describe("SwordSlash", () => {
+  it("deals 1 damage to opponent", () => {
+    const face = new SwordSlash("sword-slash-face");
 
     const event = face.resolve({
       source: "player",
       cause: "player-roll",
-      dieId: "die-2",
+      dieId: "die-1",
     })[0];
 
     expect(event.effect).toBe(EffectType.Damage);
-    expect(event.value).toBe(2);
+    expect(event.value).toBe(1);
     expect(event.target).toBe("opponent");
   });
 });

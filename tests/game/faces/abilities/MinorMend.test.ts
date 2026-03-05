@@ -1,9 +1,9 @@
 import { EffectType } from "../../../../src/game/dice";
-import { MinorMendFace } from "../../../../src/game/faces";
+import { MinorMend } from "../../../../src/game/faces";
 
-describe("MinorMendFace", () => {
+describe("MinorMend", () => {
   it("heals self for 1", () => {
-    const face = new MinorMendFace("minor-mend-face");
+    const face = new MinorMend("minor-mend-face");
 
     const event = face.resolve({
       source: "player",

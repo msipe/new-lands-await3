@@ -3,7 +3,7 @@ import { DamageEffectScript } from "../../dice-effects";
 import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 
-export class DealDamageFace extends Face {
+export class DealDamage extends Face {
   private damage: number;
 
   constructor(id: string, label: string, damage: number) {

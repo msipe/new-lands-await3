@@ -6,7 +6,7 @@ import {
   defaultRandomSource,
   rollDie,
 } from "./dice";
-import { MinorMendFace, ShieldBashFace, SwordSlashFace } from "./faces";
+import { MinorMend, ShieldBash, SwordSlash } from "./faces";
 
 type CombatActor = {
   id: string;
@@ -86,17 +86,17 @@ function createPlayerDice(): Die[] {
     {
       id: "player-die-1",
       name: "Spark Die",
-      sides: [new ShieldBashFace("player-die-1-side-1")],
+      sides: [new ShieldBash("player-die-1-side-1")],
     },
     {
       id: "player-die-2",
       name: "Ward Die",
-      sides: [new SwordSlashFace("player-die-2-side-1")],
+      sides: [new SwordSlash("player-die-2-side-1")],
     },
     {
       id: "player-die-3",
       name: "Mend Die",
-      sides: [new MinorMendFace("player-die-3-side-1")],
+      sides: [new MinorMend("player-die-3-side-1")],
     },
   ];
 }
@@ -111,17 +111,17 @@ export function createStubEnemies(): EnemyStub[] {
         {
           id: "enemy-die-1",
           name: "Slime Claw",
-          sides: [new ShieldBashFace("enemy-die-1-side-1")],
+          sides: [new ShieldBash("enemy-die-1-side-1")],
         },
         {
           id: "enemy-die-2",
           name: "Slime Jab",
-          sides: [new SwordSlashFace("enemy-die-2-side-1")],
+          sides: [new SwordSlash("enemy-die-2-side-1")],
         },
         {
           id: "enemy-die-3",
           name: "Slime Ooze",
-          sides: [new MinorMendFace("enemy-die-3-side-1")],
+          sides: [new MinorMend("enemy-die-3-side-1")],
         },
       ],
     },
@@ -133,17 +133,17 @@ export function createStubEnemies(): EnemyStub[] {
         {
           id: "goblin-die-1",
           name: "Hex Bolt",
-          sides: [new ShieldBashFace("goblin-die-1-side-1")],
+          sides: [new ShieldBash("goblin-die-1-side-1")],
         },
         {
           id: "goblin-die-2",
           name: "Knife Toss",
-          sides: [new SwordSlashFace("goblin-die-2-side-1")],
+          sides: [new SwordSlash("goblin-die-2-side-1")],
         },
         {
           id: "goblin-die-3",
           name: "Brew Sip",
-          sides: [new MinorMendFace("goblin-die-3-side-1")],
+          sides: [new MinorMend("goblin-die-3-side-1")],
         },
       ],
     },

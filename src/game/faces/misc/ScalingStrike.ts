@@ -1,8 +1,8 @@
-import { DealDamageFace } from "../abilities/DealDamageFace";
+import { DealDamage } from "../abilities/DealDamage";
 import type { FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 
-export class ScalingStrikeFace extends DealDamageFace {
+export class ScalingStrike extends DealDamage {
   private readonly rollThreshold: number;
   private scalingStep: number;
 

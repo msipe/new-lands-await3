@@ -5,7 +5,7 @@ import {
   EffectType,
   type SideResolveContext,
 } from "../../src/game/dice";
-import { ArcaneBurstFace, MinorMendFace, ScalingStrikeFace } from "../../src/game/faces";
+import { ArcaneBurst, MinorMend, ScalingStrike } from "../../src/game/faces";
 
 const resolveContext: SideResolveContext = {
   source: "player",
@@ -18,7 +18,7 @@ describe("upgrade flow", () => {
     const die: Die = {
       id: "die-upgrade-1",
       name: "Upgrade Die",
-      sides: [new ArcaneBurstFace("arcane-burst-side")],
+      sides: [new ArcaneBurst("arcane-burst-side")],
     };
 
     const didApply = applyUpgradeToDieSide(die, "arcane-burst-side", { type: "numeric-plus-1" });
@@ -33,7 +33,7 @@ describe("upgrade flow", () => {
     const healDie: Die = {
       id: "heal-die",
       name: "Heal Die",
-      sides: [new MinorMendFace("minor-mend-side")],
+      sides: [new MinorMend("minor-mend-side")],
     };
 
     const didApply = applyUpgradeToDieSide(healDie, "minor-mend-side", {
@@ -51,7 +51,7 @@ describe("upgrade flow", () => {
     const damageDie: Die = {
       id: "damage-die",
       name: "Damage Die",
-      sides: [new ArcaneBurstFace("damage-side")],
+      sides: [new ArcaneBurst("damage-side")],
     };
 
     const didApply = applyUpgradeToDieSide(damageDie, "damage-side", {
@@ -65,8 +65,8 @@ describe("upgrade flow", () => {
   });
 
   it("keeps upgrade changes isolated to a single face instance", () => {
-    const first = new ArcaneBurstFace("first");
-    const second = new ArcaneBurstFace("second");
+    const first = new ArcaneBurst("first");
+    const second = new ArcaneBurst("second");
     const die: Die = {
       id: "instance-die",
       name: "Instance Die",
@@ -83,7 +83,7 @@ describe("upgrade flow", () => {
   });
 
   it("supports scaling-step upgrades for scaling faces", () => {
-    const scaling = new ScalingStrikeFace("scaling", 1, 5, 1);
+    const scaling = new ScalingStrike("scaling", 1, 5, 1);
     const die: Die = {
       id: "scaling-die",
       name: "Scaling Die",
@@ -104,7 +104,7 @@ describe("upgrade flow", () => {
     const die: Die = {
       id: "missing-side-die",
       name: "Missing Side Die",
-      sides: [new ArcaneBurstFace("existing")],
+      sides: [new ArcaneBurst("existing")],
     };
 
     const didApply = applyUpgradeToDieSide(die, "unknown-side", { type: "numeric-plus-1" });

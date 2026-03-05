@@ -1,9 +1,9 @@
 import { EffectType } from "../../../../src/game/dice";
-import { RestorationCharmFace } from "../../../../src/game/faces";
+import { RestorationCharm } from "../../../../src/game/faces";
 
-describe("RestorationCharmFace", () => {
+describe("RestorationCharm", () => {
   it("heals self for 2", () => {
-    const face = new RestorationCharmFace("restoration-charm-face");
+    const face = new RestorationCharm("restoration-charm-face");
 
     const event = face.resolve({
       source: "player",
