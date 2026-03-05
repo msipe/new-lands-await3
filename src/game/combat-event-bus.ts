@@ -4,6 +4,7 @@ export type CombatEvent = {
   effect: EffectType;
   value: number;
   source: "player" | "enemy";
+  target: "self" | "opponent";
   cause: "enemy-intent" | "player-roll" | "triggered";
   dieId: string;
   sideId: string;

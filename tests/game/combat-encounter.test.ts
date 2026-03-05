@@ -61,6 +61,7 @@ describe("combat encounter", () => {
           effect: EffectType.Heal,
           value: 1,
           source: "player",
+          target: "self",
           cause: "triggered",
           dieId: "trigger",
           sideId: "trigger",

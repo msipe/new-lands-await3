@@ -1,12 +1,12 @@
 import { CombatEvent, CombatEventBus } from "./combat-event-bus";
 import {
-  type DiceEffect,
   type Die,
   EffectType,
   type RandomSource,
   defaultRandomSource,
   rollDie,
 } from "./dice";
+import { Deal1DamageSide, Deal2DamageSide, Heal1Side } from "./dice-sides";
 
 type CombatActor = {
   id: string;
@@ -39,43 +39,21 @@ export type CombatEncounterState = {
 };
 
 function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void {
+  const appliesToPlayer =
+    (event.source === "enemy" && event.target === "opponent") ||
+    (event.source === "player" && event.target === "self");
+
+  const recipient = appliesToPlayer ? state.player : state.enemy;
+  const recipientLabel = appliesToPlayer ? "Player" : "Enemy";
+
   if (event.effect === EffectType.Damage) {
-    if (event.source === "player") {
-      state.enemy.hp = Math.max(0, state.enemy.hp - event.value);
-      state.combatLog.push(`Player deals ${event.value} damage.`);
-      return;
-    }
-
-    state.player.hp = Math.max(0, state.player.hp - event.value);
-    state.combatLog.push(`Enemy deals ${event.value} damage.`);
+    recipient.hp = Math.max(0, recipient.hp - event.value);
+    state.combatLog.push(`${recipientLabel} takes ${event.value} damage.`);
     return;
   }
 
-  if (event.source === "player") {
-    state.player.hp = Math.min(state.player.maxHp, state.player.hp + event.value);
-    state.combatLog.push(`Player heals ${event.value}.`);
-    return;
-  }
-
-  state.enemy.hp = Math.min(state.enemy.maxHp, state.enemy.hp + event.value);
-  state.combatLog.push(`Enemy heals ${event.value}.`);
-}
-
-function emitEffectEvents(
-  source: "player" | "enemy",
-  die: Die,
-  sideId: string,
-  effects: DiceEffect[],
-  cause: CombatEvent["cause"],
-): CombatEvent[] {
-  return effects.map((effect) => ({
-    effect: effect.effect,
-    value: effect.value,
-    source,
-    cause,
-    dieId: die.id,
-    sideId,
-  }));
+  recipient.hp = Math.min(recipient.maxHp, recipient.hp + event.value);
+  state.combatLog.push(`${recipientLabel} heals ${event.value}.`);
 }
 
 function resolveImmediateEvents(
@@ -107,35 +85,17 @@ function createPlayerDice(): Die[] {
     {
       id: "player-die-1",
       name: "Spark Die",
-      sides: [
-        {
-          id: "player-die-1-side-1",
-          label: "Strike 2",
-          effects: [{ id: "player-die-1-e1", effect: EffectType.Damage, value: 2 }],
-        },
-      ],
+      sides: [new Deal2DamageSide("player-die-1-side-1")],
     },
     {
       id: "player-die-2",
       name: "Ward Die",
-      sides: [
-        {
-          id: "player-die-2-side-1",
-          label: "Strike 1",
-          effects: [{ id: "player-die-2-e1", effect: EffectType.Damage, value: 1 }],
-        },
-      ],
+      sides: [new Deal1DamageSide("player-die-2-side-1")],
     },
     {
       id: "player-die-3",
       name: "Mend Die",
-      sides: [
-        {
-          id: "player-die-3-side-1",
-          label: "Heal 1",
-          effects: [{ id: "player-die-3-e1", effect: EffectType.Heal, value: 1 }],
-        },
-      ],
+      sides: [new Heal1Side("player-die-3-side-1")],
     },
   ];
 }
@@ -150,35 +110,17 @@ export function createStubEnemies(): EnemyStub[] {
         {
           id: "enemy-die-1",
           name: "Slime Claw",
-          sides: [
-            {
-              id: "enemy-die-1-side-1",
-              label: "Damage 2",
-              effects: [{ id: "enemy-die-1-e1", effect: EffectType.Damage, value: 2 }],
-            },
-          ],
+          sides: [new Deal2DamageSide("enemy-die-1-side-1")],
         },
         {
           id: "enemy-die-2",
           name: "Slime Jab",
-          sides: [
-            {
-              id: "enemy-die-2-side-1",
-              label: "Damage 1",
-              effects: [{ id: "enemy-die-2-e1", effect: EffectType.Damage, value: 1 }],
-            },
-          ],
+          sides: [new Deal1DamageSide("enemy-die-2-side-1")],
         },
         {
           id: "enemy-die-3",
           name: "Slime Ooze",
-          sides: [
-            {
-              id: "enemy-die-3-side-1",
-              label: "Heal 1",
-              effects: [{ id: "enemy-die-3-e1", effect: EffectType.Heal, value: 1 }],
-            },
-          ],
+          sides: [new Heal1Side("enemy-die-3-side-1")],
         },
       ],
     },
@@ -190,35 +132,17 @@ export function createStubEnemies(): EnemyStub[] {
         {
           id: "goblin-die-1",
           name: "Hex Bolt",
-          sides: [
-            {
-              id: "goblin-die-1-side-1",
-              label: "Damage 2",
-              effects: [{ id: "goblin-die-1-e1", effect: EffectType.Damage, value: 2 }],
-            },
-          ],
+          sides: [new Deal2DamageSide("goblin-die-1-side-1")],
         },
         {
           id: "goblin-die-2",
           name: "Knife Toss",
-          sides: [
-            {
-              id: "goblin-die-2-side-1",
-              label: "Damage 1",
-              effects: [{ id: "goblin-die-2-e1", effect: EffectType.Damage, value: 1 }],
-            },
-          ],
+          sides: [new Deal1DamageSide("goblin-die-2-side-1")],
         },
         {
           id: "goblin-die-3",
           name: "Brew Sip",
-          sides: [
-            {
-              id: "goblin-die-3-side-1",
-              label: "Heal 1",
-              effects: [{ id: "goblin-die-3-e1", effect: EffectType.Heal, value: 1 }],
-            },
-          ],
+          sides: [new Heal1Side("goblin-die-3-side-1")],
         },
       ],
     },
@@ -233,16 +157,30 @@ function buildEnemyIntent(
 
   for (const die of enemy.dice) {
     const side = rollDie(die, randomSource);
-    events.push(...emitEffectEvents("enemy", die, side.id, side.effects, "enemy-intent"));
+    events.push(
+      ...side.resolve({
+        source: "enemy",
+        cause: "enemy-intent",
+        dieId: die.id,
+      }),
+    );
   }
 
   return {
     events,
     pendingPlayerDamage: events
-      .filter((event) => event.effect === EffectType.Damage)
+      .filter(
+        (event) =>
+          event.effect === EffectType.Damage &&
+          event.source === "enemy" &&
+          event.target === "opponent",
+      )
       .reduce((total, event) => total + event.value, 0),
     pendingEnemyHealing: events
-      .filter((event) => event.effect === EffectType.Heal)
+      .filter(
+        (event) =>
+          event.effect === EffectType.Heal && event.source === "enemy" && event.target === "self",
+      )
       .reduce((total, event) => total + event.value, 0),
   };
 }
@@ -325,7 +263,11 @@ export function rollNextPlayerDie(
   }
 
   const side = rollDie(nextDie, randomSource);
-  const events = emitEffectEvents("player", nextDie, side.id, side.effects, "player-roll");
+  const events = side.resolve({
+    source: "player",
+    cause: "player-roll",
+    dieId: nextDie.id,
+  });
 
   state.combatLog.push(`Player rolls ${nextDie.name}: ${side.label}.`);
   resolveImmediateEvents(state, eventBus, events);

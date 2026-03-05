@@ -3,17 +3,21 @@ export enum EffectType {
   Heal = "heal",
 }
 
-export type DiceEffect = {
-  id: string;
-  effect: EffectType;
-  value: number;
+export type DiceEventSource = "player" | "enemy";
+
+export type DiceEventCause = "enemy-intent" | "player-roll" | "triggered";
+
+export type SideResolveContext = {
+  source: DiceEventSource;
+  cause: DiceEventCause;
+  dieId: string;
 };
 
-export type DieSide = {
+export interface DieSide {
   id: string;
   label: string;
-  effects: DiceEffect[];
-};
+  resolve(context: SideResolveContext): import("./combat-event-bus").CombatEvent[];
+}
 
 export type Die = {
   id: string;
