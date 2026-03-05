@@ -3,8 +3,10 @@ import {
   onCombatMousePressed,
   onCombatMouseReleased,
   updateCombatUiState,
+  drainSettledPlayerDieIds,
+  fastForwardCombatUi,
 } from "../../src/combat-ui";
-import { createCombatEncounter } from "../../src/game/combat-encounter";
+import { createCombatEncounter, resolveNextEnemyDie } from "../../src/game/combat-encounter";
 
 describe("combat ui", () => {
   beforeAll(() => {
@@ -105,8 +107,98 @@ describe("combat ui", () => {
 
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
+    expect(uiState.enemyArenaDice).toHaveLength(2);
+    expect(uiState.enemyParkedDice).toHaveLength(0);
+    expect(uiState.enemyThrowResolvedForRound).toBe(0);
+
+    updateCombatUiState(uiState, encounter.state, uiState.enemySettleDelay + 0.05);
+
     expect(uiState.enemyArenaDice).toHaveLength(0);
     expect(uiState.enemyParkedDice).toHaveLength(2);
     expect(uiState.enemyThrowResolvedForRound).toBe(encounter.state.round);
+  });
+
+  it("requires explicit advance to commit settled player dice", () => {
+    const encounter = createCombatEncounter();
+    while (encounter.state.phase === "enemy-turn") {
+      resolveNextEnemyDie(encounter.state, encounter.eventBus);
+    }
+
+    const uiState = createCombatUiState(encounter.state);
+
+    for (let index = 0; index < uiState.playerDice.length; index += 1) {
+      const die = uiState.playerDice[index];
+      onCombatMousePressed(uiState, encounter.state, die.x, die.y, 1);
+      onCombatMouseReleased(
+        uiState,
+        encounter.state,
+        uiState.layout.arenaX + 80 + index * 60,
+        uiState.layout.arenaY + 80,
+        1,
+      );
+    }
+
+    for (const die of uiState.arenaPlayerDice) {
+      die.vx = 0;
+      die.vy = 0;
+      die.spin = 0;
+    }
+
+    updateCombatUiState(uiState, encounter.state, 1 / 60);
+
+    expect(uiState.readyPlayerDieIds).toHaveLength(3);
+    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(0);
+
+    fastForwardCombatUi(uiState, encounter.state);
+
+    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(3);
+  });
+
+  it("queues throw during enemy turn and executes it when player turn is available", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+    const die = uiState.playerDice[0];
+
+    const dropX = uiState.layout.arenaX + 70;
+    const dropY = uiState.layout.arenaY + 90;
+
+    onCombatMousePressed(uiState, encounter.state, die.x, die.y, 1);
+    onCombatMouseReleased(uiState, encounter.state, dropX, dropY, 1);
+
+    expect(uiState.queuedPlayerThrow?.dieId).toBe(die.id);
+
+    encounter.state.phase = "player-turn";
+    uiState.pendingRound = undefined;
+
+    updateCombatUiState(uiState, encounter.state, 1 / 60);
+
+    expect(uiState.queuedPlayerThrow).toBeUndefined();
+    expect(uiState.arenaPlayerDice.find((entry) => entry.id === die.id)).toBeDefined();
+    expect(uiState.rolledPlayerDieIds).toContain(die.combatDieId);
+  });
+
+  it("preserves queued throw through pending-round finalize", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+    const die = uiState.playerDice[0];
+
+    const dropX = uiState.layout.arenaX + 95;
+    const dropY = uiState.layout.arenaY + 110;
+
+    onCombatMousePressed(uiState, encounter.state, die.x, die.y, 1);
+    onCombatMouseReleased(uiState, encounter.state, dropX, dropY, 1);
+
+    expect(uiState.queuedPlayerThrow?.dieId).toBe(die.id);
+    expect(die.state).toBe("parked");
+
+    encounter.state.phase = "player-turn";
+    uiState.pendingRound = encounter.state.round;
+
+    updateCombatUiState(uiState, encounter.state, 1 / 60);
+
+    expect(uiState.queuedPlayerThrow).toBeUndefined();
+    expect(uiState.pendingRound).toBeUndefined();
+    expect(uiState.arenaPlayerDice.find((entry) => entry.id === die.id)).toBeDefined();
+    expect(uiState.rolledPlayerDieIds).toContain(die.combatDieId);
   });
 });
