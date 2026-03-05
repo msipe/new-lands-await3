@@ -26,6 +26,7 @@ type VisualDie = {
   owner: Owner;
   combatDieId?: string;
   label: string;
+  displayLabel?: string;
   rollingLabel?: string;
   rollingFaceTimer?: number;
   faceLocked?: boolean;
@@ -210,6 +211,7 @@ function spawnEnemyThrowDice(uiState: CombatUiState, state: CombatEncounterState
       owner: "enemy",
       combatDieId: dieId,
       label: getEnemyRolledSideLabel(state, dieId),
+      displayLabel: undefined,
       rollingLabel: undefined,
       rollingFaceTimer: 0,
       faceLocked: false,
@@ -244,6 +246,7 @@ function ensurePlayerDice(uiState: CombatUiState, state: CombatEncounterState): 
       owner: "player",
       combatDieId: die.id,
       label: die.name,
+      displayLabel: undefined,
       rollingLabel: undefined,
       rollingFaceTimer: 0,
       faceLocked: false,
@@ -404,9 +407,13 @@ function updateRollingFaceLabels(uiState: CombatUiState, state: CombatEncounterS
   const activeDice = [...uiState.enemyArenaDice, ...uiState.arenaPlayerDice];
 
   for (const die of activeDice) {
-    if (die.faceLocked || die.state !== "arena" || isDieSettled(die)) {
+    if (die.faceLocked || die.state !== "arena") {
       die.rollingLabel = undefined;
       die.rollingFaceTimer = 0;
+      continue;
+    }
+
+    if (isDieSettled(die)) {
       continue;
     }
 
@@ -507,6 +514,17 @@ function updateFloatingPopups(uiState: CombatUiState, dt: number): void {
   uiState.floatingPopups = next;
 }
 
+function enqueueLocalPlayerPopup(uiState: CombatUiState, die: VisualDie, popupText?: string): void {
+  const resolvedText = popupText ?? die.rollingLabel ?? die.displayLabel ?? die.label;
+  uiState.floatingPopups.push({
+    x: die.x,
+    y: die.y - die.size * 0.72,
+    text: resolvedText,
+    source: "player",
+    timer: POPUP_DURATION,
+  });
+}
+
 function queueSettledEnemyDieId(uiState: CombatUiState, dieId: string): void {
   if (uiState.settledEnemyDieIds.includes(dieId)) {
     return;
@@ -584,13 +602,15 @@ function parkEnemyDice(uiState: CombatUiState): void {
   uiState.enemyPendingDice = [];
 }
 
-function parkPlayerArenaDice(uiState: CombatUiState): void {
+function parkPlayerArenaDice(uiState: CombatUiState, state: CombatEncounterState): void {
   for (const die of uiState.arenaPlayerDice) {
     die.state = "parked";
     die.vx = 0;
     die.vy = 0;
     die.spin = 0;
     die.angle = 0;
+    die.label = state.player.dice.find((entry) => entry.id === die.combatDieId)?.name ?? die.label;
+    die.displayLabel = undefined;
     die.rollingLabel = undefined;
     die.rollingFaceTimer = 0;
     die.faceLocked = false;
@@ -661,14 +681,17 @@ function finalizeRoundTransition(uiState: CombatUiState, state: CombatEncounterS
     die.angle = 0;
     die.state = "parked";
     die.label = state.player.dice.find((entry) => entry.id === die.combatDieId)?.name ?? die.label;
+    die.displayLabel = undefined;
     die.rollingLabel = undefined;
     die.rollingFaceTimer = 0;
     die.faceLocked = false;
   }
 
   ensurePlayerDice(uiState, state);
-  uiState.enemyArenaDice = [];
-  uiState.enemyPendingDice = [];
+  if (state.phase !== "enemy-turn") {
+    uiState.enemyArenaDice = [];
+    uiState.enemyPendingDice = [];
+  }
   // Keep last resolved enemy dice visible through the player turn.
 }
 
@@ -706,6 +729,14 @@ function enqueueSettledPlayerDice(uiState: CombatUiState): void {
     visualDie.vy = 0;
     visualDie.spin = 0;
     visualDie.flashTimer = RESOLVE_FLASH_DURATION;
+    const popupText = visualDie.rollingLabel ?? visualDie.label;
+    visualDie.displayLabel = popupText;
+    lockVisualDieFace(visualDie);
+    enqueueLocalPlayerPopup(uiState, visualDie, popupText);
+
+    if (!uiState.settledPlayerDieIds.includes(dieId)) {
+      uiState.settledPlayerDieIds.push(dieId);
+    }
 
     if (!uiState.readyPlayerDieIds.includes(dieId)) {
       uiState.readyPlayerDieIds.push(dieId);
@@ -722,6 +753,14 @@ function settleAllPendingPlayerDice(uiState: CombatUiState): void {
       visualDie.vx = 0;
       visualDie.vy = 0;
       visualDie.spin = 0;
+      const popupText = visualDie.rollingLabel ?? visualDie.label;
+      visualDie.displayLabel = popupText;
+      lockVisualDieFace(visualDie);
+      enqueueLocalPlayerPopup(uiState, visualDie, popupText);
+    }
+
+    if (!uiState.settledPlayerDieIds.includes(dieId)) {
+      uiState.settledPlayerDieIds.push(dieId);
     }
 
     if (!uiState.readyPlayerDieIds.includes(dieId)) {
@@ -760,7 +799,7 @@ function updateEnemyPresentation(uiState: CombatUiState, state: CombatEncounterS
   }
 
   if (uiState.arenaPlayerDice.length > 0) {
-    parkPlayerArenaDice(uiState);
+    parkPlayerArenaDice(uiState, state);
   }
 
   if (
@@ -837,6 +876,7 @@ function executePlayerThrow(
   }
 
   dragged.state = "arena";
+  dragged.displayLabel = undefined;
   dragged.x = x;
   dragged.y = y;
 
@@ -1049,8 +1089,15 @@ export function enqueueCombatResolutionPopups(
     die.flashTimer = RESOLVE_FLASH_DURATION;
     if (popup.sideLabel !== undefined) {
       die.label = popup.sideLabel;
+      die.displayLabel = popup.sideLabel;
     }
     lockVisualDieFace(die);
+
+    if (popup.source === "player") {
+      // Player popup timing is handled locally on settle; only sync authoritative label here.
+      continue;
+    }
+
     uiState.floatingPopups.push({
       x: die.x,
       y: die.y - die.size * 0.72,
@@ -1470,7 +1517,9 @@ export function onCombatMouseReleased(
     return;
   }
 
-  if (drag.skipOnRelease) {
+  const releaseCanThrow = canPlayerThrow(uiState, state);
+
+  if (drag.skipOnRelease && !releaseCanThrow) {
     if (isInsideArena(uiState, x, y) && state.phase === "enemy-turn") {
       dragged.state = "parked";
       if (dragged.parkX !== undefined && dragged.parkY !== undefined) {
@@ -1547,7 +1596,7 @@ function drawDie(die: VisualDie): void {
   const half = die.size / 2;
   const textScale = 0.56;
   const font = love.graphics.getFont();
-  let text = die.rollingLabel ?? die.label;
+  let text = die.rollingLabel ?? die.displayLabel ?? die.label;
   let textX = -half + 4;
   let textY = -6;
 

@@ -1,5 +1,6 @@
 import {
   createCombatUiState,
+  enqueueCombatResolutionPopups,
   onCombatMousePressed,
   onCombatMouseReleased,
   updateCombatUiState,
@@ -118,7 +119,7 @@ describe("combat ui", () => {
     expect(uiState.enemyThrowResolvedForRound).toBe(encounter.state.round);
   });
 
-  it("requires explicit advance to commit settled player dice", () => {
+  it("commits settled player dice immediately", () => {
     const encounter = createCombatEncounter();
     while (encounter.state.phase === "enemy-turn") {
       resolveNextEnemyDie(encounter.state, encounter.eventBus);
@@ -147,10 +148,6 @@ describe("combat ui", () => {
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
     expect(uiState.readyPlayerDieIds).toHaveLength(3);
-    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(0);
-
-    fastForwardCombatUi(uiState, encounter.state);
-
     expect(drainSettledPlayerDieIds(uiState)).toHaveLength(3);
   });
 
@@ -200,5 +197,183 @@ describe("combat ui", () => {
     expect(uiState.pendingRound).toBeUndefined();
     expect(uiState.arenaPlayerDice.find((entry) => entry.id === die.id)).toBeDefined();
     expect(uiState.rolledPlayerDieIds).toContain(die.combatDieId);
+  });
+
+  it("does not respawn enemy throw during pending-round finalize", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+
+    // Simulate entering a new round already in enemy-turn while a throw preview is active.
+    uiState.pendingRound = encounter.state.round;
+    uiState.playerResetTimer = uiState.playerResetDelay + 5;
+    uiState.enemyThrowResolvedForRound = 0;
+    uiState.enemyPendingDice = [];
+    uiState.enemyParkedDice = [];
+    uiState.enemyArenaDice = [
+      {
+        id: "preserve-enemy-preview",
+        owner: "enemy",
+        combatDieId: "enemy-die-1",
+        label: "Shield Bash",
+        x: 300,
+        y: 220,
+        vx: 0,
+        vy: 0,
+        angle: 0,
+        spin: 0,
+        size: 46,
+        state: "arena",
+        parkX: 880,
+        parkY: 90,
+        parkSize: 36,
+      },
+    ];
+
+    updateCombatUiState(uiState, encounter.state, 1 / 60);
+
+    const totalEnemyVisualDice =
+      uiState.enemyArenaDice.length + uiState.enemyPendingDice.length + uiState.enemyParkedDice.length;
+
+    expect(totalEnemyVisualDice).toBe(1);
+    expect(
+      [...uiState.enemyArenaDice, ...uiState.enemyPendingDice, ...uiState.enemyParkedDice].some(
+        (die) => die.id === "preserve-enemy-preview",
+      ),
+    ).toBe(true);
+  });
+
+  it("allows throw when drag started in enemy turn but released in player turn", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+    const die = uiState.playerDice[0];
+
+    onCombatMousePressed(uiState, encounter.state, die.x, die.y, 1);
+
+    // Transition happens while die is still being held.
+    encounter.state.phase = "player-turn";
+    uiState.pendingRound = undefined;
+
+    const dropX = uiState.layout.arenaX + 120;
+    const dropY = uiState.layout.arenaY + 140;
+    onCombatMouseReleased(uiState, encounter.state, dropX, dropY, 1);
+
+    expect(uiState.queuedPlayerThrow).toBeUndefined();
+    expect(uiState.arenaPlayerDice.find((entry) => entry.id === die.id)).toBeDefined();
+    expect(uiState.rolledPlayerDieIds).toContain(die.combatDieId);
+  });
+
+  it("shows rolled face label on settled player dice", () => {
+    const encounter = createCombatEncounter();
+    encounter.state.phase = "player-turn";
+    const uiState = createCombatUiState(encounter.state);
+    const die = uiState.playerDice[0];
+
+    die.state = "arena";
+    die.x = uiState.layout.arenaX + 120;
+    die.y = uiState.layout.arenaY + 120;
+    die.vx = 0;
+    die.vy = 0;
+    die.spin = 0;
+    die.rollingLabel = "Sword Slash";
+
+    uiState.arenaPlayerDice = [die];
+    if (die.combatDieId) {
+      uiState.pendingPlayerDieIds = [die.combatDieId];
+      uiState.rolledPlayerDieIds = [die.combatDieId];
+    }
+
+    updateCombatUiState(uiState, encounter.state, 1 / 60);
+
+    expect(die.label).toBe("Spark Die");
+    expect(die.displayLabel).toBe("Sword Slash");
+    expect(die.faceLocked).toBe(true);
+    expect(uiState.floatingPopups.some((popup) => popup.source === "player" && popup.text === "Sword Slash")).toBe(true);
+
+    enqueueCombatResolutionPopups(uiState, [
+      {
+        source: "player",
+        dieId: die.combatDieId ?? "player-die-1",
+        text: "+2 damage",
+        sideLabel: "Sword Slash",
+      },
+    ]);
+
+    expect(die.label).toBe("Sword Slash");
+    expect(die.displayLabel).toBe("Sword Slash");
+  });
+
+  it("ignores delayed queued player popups to avoid duplicate timing", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+
+    const die = uiState.playerDice[0];
+    die.label = "Sword Slash";
+
+    enqueueCombatResolutionPopups(uiState, [
+      {
+        source: "player",
+        dieId: die.combatDieId ?? "player-die-1",
+        text: "+2 damage",
+        sideLabel: "Sword Slash",
+      },
+    ]);
+
+    expect(uiState.floatingPopups).toHaveLength(0);
+  });
+
+  it("syncs enemy die label from authoritative sideLabel", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+
+    uiState.enemyParkedDice = [
+      {
+        id: "enemy-sync",
+        owner: "enemy",
+        combatDieId: "enemy-die-1",
+        label: "Slime Claw",
+        x: 900,
+        y: 90,
+        vx: 0,
+        vy: 0,
+        angle: 0,
+        spin: 0,
+        size: 36,
+        state: "parked",
+        faceLocked: true,
+      },
+    ];
+
+    enqueueCombatResolutionPopups(uiState, [
+      {
+        source: "enemy",
+        dieId: "enemy-die-1",
+        text: "+1 block",
+        sideLabel: "Shield Bash",
+      },
+    ]);
+
+    expect(uiState.enemyParkedDice[0].label).toBe("Shield Bash");
+    expect(uiState.floatingPopups.some((popup) => popup.source === "enemy" && popup.text === "+1 block")).toBe(true);
+  });
+
+  it("resets player die labels to die names when enemy turn auto-parks player dice", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+    const die = uiState.playerDice[0];
+
+    die.state = "arena";
+    die.label = "Sword Slash";
+    die.displayLabel = "Sword Slash";
+    die.x = uiState.layout.arenaX + 80;
+    die.y = uiState.layout.arenaY + 80;
+
+    uiState.arenaPlayerDice = [die];
+    encounter.state.phase = "enemy-turn";
+
+    updateCombatUiState(uiState, encounter.state, 1 / 60);
+
+    expect(die.state).toBe("parked");
+    expect(die.label).toBe("Spark Die");
+    expect(die.displayLabel).toBeUndefined();
   });
 });
