@@ -37,6 +37,10 @@ export abstract class Face implements DieSide {
     return this.rollCount;
   }
 
+  describe(): string {
+    return this.label;
+  }
+
   abstract applyUpgrade(upgrade: FaceUpgrade): boolean;
 
   protected beforeResolve(_context: FaceResolveContext): void {}

@@ -2,6 +2,7 @@ import { CombatEventBus } from "../../src/game/combat-event-bus";
 import {
   createCombatEncounter,
   createStubEnemies,
+  rollPlayerDie,
   rollNextPlayerDie,
 } from "../../src/game/combat-encounter";
 import { EffectType } from "../../src/game/dice";
@@ -19,6 +20,21 @@ describe("combat encounter", () => {
     expect(enemies.length).toBeGreaterThanOrEqual(2);
     expect(enemies[0].dice).toHaveLength(3);
     expect(enemies[1].dice).toHaveLength(3);
+
+    for (const enemy of enemies) {
+      for (const die of enemy.dice) {
+        expect(die.sides).toHaveLength(6);
+      }
+    }
+  });
+
+  it("creates six-sided player starter dice", () => {
+    const { state } = createCombatEncounter({ randomSource: fixedRandomSource() });
+
+    expect(state.player.dice).toHaveLength(3);
+    for (const die of state.player.dice) {
+      expect(die.sides).toHaveLength(6);
+    }
   });
 
   it("rolls enemy dice first and exposes pending intent", () => {
@@ -63,6 +79,23 @@ describe("combat encounter", () => {
     expect(safety).toBeLessThan(50);
     expect(encounter.state.phase).toBe("resolved");
     expect(encounter.state.enemy.hp === 0 || encounter.state.player.hp === 0).toBe(true);
+  });
+
+  it("supports rolling player dice in any order once per round", () => {
+    const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
+
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-3", fixedRandomSource());
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-2", fixedRandomSource());
+
+    expect(encounter.state.round).toBe(2);
+    expect(encounter.state.playerRollIndex).toBe(0);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    const snapshotRound = encounter.state.round;
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-2", fixedRandomSource());
+    expect(encounter.state.round).toBe(snapshotRound);
+    expect(encounter.state.playerRollIndex).toBe(1);
   });
 
   it("supports pub-sub triggers when damage events are published", () => {

@@ -25,6 +25,10 @@ export class HealSelf extends Face {
     return false;
   }
 
+  describe(): string {
+    return `Heal ${this.heal} HP.`;
+  }
+
   protected onResolve(context: FaceResolveContext): CombatEvent[] {
     const effect = new HealEffectScript(`${this.id}-heal`, this.heal, "self");
 

@@ -21,6 +21,10 @@ export class ScalingStrike extends DealDamage {
     return super.applyUpgrade(upgrade);
   }
 
+  describe(): string {
+    return `${super.describe()} Every ${this.rollThreshold} rolls, gain +${this.scalingStep} damage permanently.`;
+  }
+
   protected beforeResolve(context: FaceResolveContext): void {
     if (context.rollCount % this.rollThreshold === 0) {
       this.applyUpgrade({ type: "damage-plus", amount: this.scalingStep });

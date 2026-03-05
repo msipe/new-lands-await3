@@ -16,6 +16,7 @@ export type SideResolveContext = {
 export interface DieSide {
   id: string;
   label: string;
+  describe?: () => string;
   resolve(context: SideResolveContext): import("./combat-event-bus").CombatEvent[];
 }
 

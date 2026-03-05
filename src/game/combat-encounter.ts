@@ -6,13 +6,15 @@ import {
   defaultRandomSource,
   rollDie,
 } from "./dice";
-import { MinorMend, ShieldBash, SwordSlash } from "./faces";
+import { getDieConstructById } from "./dice-constructs";
+import { assertDieSideCount, createDieFromConstruct } from "./dice-factory";
 
 type CombatActor = {
   id: string;
   name: string;
   hp: number;
   maxHp: number;
+  armor: number;
   dice: Die[];
 };
 
@@ -35,6 +37,7 @@ export type CombatEncounterState = {
   round: number;
   phase: "player-turn" | "resolved";
   playerRollIndex: number;
+  rolledPlayerDieIds: string[];
   enemyIntent: PendingEnemyIntent;
   combatLog: string[];
 };
@@ -48,8 +51,18 @@ function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void
   const recipientLabel = appliesToPlayer ? "Player" : "Enemy";
 
   if (event.effect === EffectType.Damage) {
-    recipient.hp = Math.max(0, recipient.hp - event.value);
-    state.combatLog.push(`${recipientLabel} takes ${event.value} damage.`);
+    let remainingDamage = event.value;
+    if (recipient.armor > 0) {
+      const absorbed = Math.min(recipient.armor, remainingDamage);
+      recipient.armor -= absorbed;
+      remainingDamage -= absorbed;
+      state.combatLog.push(`${recipientLabel} blocks ${absorbed} damage.`);
+    }
+
+    if (remainingDamage > 0) {
+      recipient.hp = Math.max(0, recipient.hp - remainingDamage);
+      state.combatLog.push(`${recipientLabel} takes ${remainingDamage} damage.`);
+    }
     return;
   }
 
@@ -82,47 +95,45 @@ function resolveImmediateEvents(
 }
 
 function createPlayerDice(): Die[] {
+  const sparkConstruct = getDieConstructById("spark-die");
+  const wardConstruct = getDieConstructById("ward-die");
+  const mendConstruct = getDieConstructById("mend-die");
+
+  assertDieSideCount(sparkConstruct, 6);
+  assertDieSideCount(wardConstruct, 6);
+  assertDieSideCount(mendConstruct, 6);
+
   return [
-    {
-      id: "player-die-1",
-      name: "Spark Die",
-      sides: [new ShieldBash("player-die-1-side-1")],
-    },
-    {
-      id: "player-die-2",
-      name: "Ward Die",
-      sides: [new SwordSlash("player-die-2-side-1")],
-    },
-    {
-      id: "player-die-3",
-      name: "Mend Die",
-      sides: [new MinorMend("player-die-3-side-1")],
-    },
+    createDieFromConstruct({ construct: sparkConstruct, dieId: "player-die-1" }),
+    createDieFromConstruct({ construct: wardConstruct, dieId: "player-die-2" }),
+    createDieFromConstruct({ construct: mendConstruct, dieId: "player-die-3" }),
   ];
 }
 
 export function createStubEnemies(): EnemyStub[] {
+  const slimeClaw = getDieConstructById("slime-claw");
+  const slimeJab = getDieConstructById("slime-jab");
+  const slimeOoze = getDieConstructById("slime-ooze");
+  const hexBolt = getDieConstructById("hex-bolt");
+  const knifeToss = getDieConstructById("knife-toss");
+  const brewSip = getDieConstructById("brew-sip");
+
+  assertDieSideCount(slimeClaw, 6);
+  assertDieSideCount(slimeJab, 6);
+  assertDieSideCount(slimeOoze, 6);
+  assertDieSideCount(hexBolt, 6);
+  assertDieSideCount(knifeToss, 6);
+  assertDieSideCount(brewSip, 6);
+
   return [
     {
       id: "slime-raider",
       name: "Slime Raider",
       maxHp: 14,
       dice: [
-        {
-          id: "enemy-die-1",
-          name: "Slime Claw",
-          sides: [new ShieldBash("enemy-die-1-side-1")],
-        },
-        {
-          id: "enemy-die-2",
-          name: "Slime Jab",
-          sides: [new SwordSlash("enemy-die-2-side-1")],
-        },
-        {
-          id: "enemy-die-3",
-          name: "Slime Ooze",
-          sides: [new MinorMend("enemy-die-3-side-1")],
-        },
+        createDieFromConstruct({ construct: slimeClaw, dieId: "enemy-die-1" }),
+        createDieFromConstruct({ construct: slimeJab, dieId: "enemy-die-2" }),
+        createDieFromConstruct({ construct: slimeOoze, dieId: "enemy-die-3" }),
       ],
     },
     {
@@ -130,21 +141,9 @@ export function createStubEnemies(): EnemyStub[] {
       name: "Goblin Hexer",
       maxHp: 12,
       dice: [
-        {
-          id: "goblin-die-1",
-          name: "Hex Bolt",
-          sides: [new ShieldBash("goblin-die-1-side-1")],
-        },
-        {
-          id: "goblin-die-2",
-          name: "Knife Toss",
-          sides: [new SwordSlash("goblin-die-2-side-1")],
-        },
-        {
-          id: "goblin-die-3",
-          name: "Brew Sip",
-          sides: [new MinorMend("goblin-die-3-side-1")],
-        },
+        createDieFromConstruct({ construct: hexBolt, dieId: "goblin-die-1" }),
+        createDieFromConstruct({ construct: knifeToss, dieId: "goblin-die-2" }),
+        createDieFromConstruct({ construct: brewSip, dieId: "goblin-die-3" }),
       ],
     },
   ];
@@ -203,6 +202,7 @@ export function createCombatEncounter(
     name: "Arcanist",
     hp: 20,
     maxHp: 20,
+    armor: 0,
     dice: createPlayerDice(),
   };
 
@@ -211,6 +211,7 @@ export function createCombatEncounter(
     name: enemyTemplate.name,
     hp: enemyTemplate.maxHp,
     maxHp: enemyTemplate.maxHp,
+    armor: 0,
     dice: enemyTemplate.dice,
   };
 
@@ -221,6 +222,7 @@ export function createCombatEncounter(
     round: 1,
     phase: "player-turn",
     playerRollIndex: 0,
+    rolledPlayerDieIds: [],
     enemyIntent,
     combatLog: [
       `Round 1 begins.`,
@@ -234,6 +236,9 @@ export function createCombatEncounter(
 function startNextRound(state: CombatEncounterState, randomSource: RandomSource): void {
   state.round += 1;
   state.playerRollIndex = 0;
+  state.rolledPlayerDieIds = [];
+  state.player.armor = 0;
+  state.enemy.armor = 0;
   state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
 
   state.combatLog.push(`Round ${state.round} begins.`);
@@ -247,7 +252,7 @@ function resolveEnemyIntentIfNeeded(
   eventBus: CombatEventBus,
   randomSource: RandomSource,
 ): CombatEncounterState {
-  if (state.playerRollIndex < state.player.dice.length) {
+  if (state.rolledPlayerDieIds.length < state.player.dice.length) {
     return state;
   }
 
@@ -270,6 +275,46 @@ function resolveEnemyIntentIfNeeded(
   return state;
 }
 
+export function rollPlayerDie(
+  state: CombatEncounterState,
+  eventBus: CombatEventBus,
+  dieId: string,
+  randomSource: RandomSource = defaultRandomSource,
+): CombatEncounterState {
+  if (state.phase !== "player-turn") {
+    return state;
+  }
+
+  if (state.rolledPlayerDieIds.includes(dieId)) {
+    return state;
+  }
+
+  const die = state.player.dice.find((entry) => entry.id === dieId);
+  if (!die) {
+    return state;
+  }
+
+  const side = rollDie(die, randomSource);
+  const events = side.resolve({
+    source: "player",
+    cause: "player-roll",
+    dieId: die.id,
+  });
+
+  state.combatLog.push(`Player rolls ${die.name}: ${side.label}.`);
+  resolveImmediateEvents(state, eventBus, events);
+  state.rolledPlayerDieIds.push(die.id);
+  state.playerRollIndex = state.rolledPlayerDieIds.length;
+
+  if (state.enemy.hp <= 0) {
+    state.phase = "resolved";
+    state.combatLog.push("Enemy defeated.");
+    return state;
+  }
+
+  return resolveEnemyIntentIfNeeded(state, eventBus, randomSource);
+}
+
 export function rollNextPlayerDie(
   state: CombatEncounterState,
   eventBus: CombatEventBus,
@@ -279,29 +324,12 @@ export function rollNextPlayerDie(
     return state;
   }
 
-  const nextDie = state.player.dice[state.playerRollIndex];
+  const nextDie = state.player.dice.find((die) => !state.rolledPlayerDieIds.includes(die.id));
   if (!nextDie) {
     return resolveEnemyIntentIfNeeded(state, eventBus, randomSource);
   }
 
-  const side = rollDie(nextDie, randomSource);
-  const events = side.resolve({
-    source: "player",
-    cause: "player-roll",
-    dieId: nextDie.id,
-  });
-
-  state.combatLog.push(`Player rolls ${nextDie.name}: ${side.label}.`);
-  resolveImmediateEvents(state, eventBus, events);
-  state.playerRollIndex += 1;
-
-  if (state.enemy.hp <= 0) {
-    state.phase = "resolved";
-    state.combatLog.push("Enemy defeated.");
-    return state;
-  }
-
-  return resolveEnemyIntentIfNeeded(state, eventBus, randomSource);
+  return rollPlayerDie(state, eventBus, nextDie.id, randomSource);
 }
 
 export function getEnemyIntentSummary(state: CombatEncounterState): string {

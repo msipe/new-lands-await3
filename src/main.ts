@@ -1,8 +1,19 @@
 import {
+    closeCombatInspector,
+    createCombatUiState,
+    drainSettledPlayerDieIds,
+    drawCombatUi,
+    fastForwardCombatUi,
+    isCombatInspectorOpen,
+    onCombatMouseMoved,
+    onCombatMousePressed,
+    onCombatMouseReleased,
+    type CombatUiState,
+    updateCombatUiState,
+} from "./combat-ui";
+import {
     createCombatEncounter,
-    getEnemyIntentSummary,
-    getRecentCombatLog,
-    rollNextPlayerDie,
+    rollPlayerDie,
     type CombatEncounterState,
 } from "./game/combat-encounter";
 import { CombatEventBus } from "./game/combat-event-bus";
@@ -16,24 +27,36 @@ import {
 let sceneState = createInitialSceneState();
 let previousScene = sceneState.current;
 let activeCombat: { state: CombatEncounterState; eventBus: CombatEventBus } | undefined;
+let activeCombatUi: CombatUiState | undefined;
 
 love.load = () => {
     love.window.setTitle("new-lands-await3");
-    love.window.setMode(960, 540);
-    love.graphics.setBackgroundColor(0.08, 0.1, 0.16);
+    love.window.setMode(1120, 620);
+    love.graphics.setBackgroundColor(0.16, 0.16, 0.16);
 };
 
 love.update = (dt: number) => {
     if (sceneState.current !== previousScene) {
         if (sceneState.current === "combat") {
             activeCombat = createCombatEncounter();
+            activeCombatUi = createCombatUiState(activeCombat.state);
         }
 
         if (previousScene === "combat" && sceneState.current !== "combat") {
             activeCombat = undefined;
+            activeCombatUi = undefined;
         }
 
         previousScene = sceneState.current;
+    }
+
+    if (sceneState.current === "combat" && activeCombat && activeCombatUi) {
+        updateCombatUiState(activeCombatUi, activeCombat.state, dt);
+
+        const settledDieIds = drainSettledPlayerDieIds(activeCombatUi);
+        for (const dieId of settledDieIds) {
+            rollPlayerDie(activeCombat.state, activeCombat.eventBus, dieId);
+        }
     }
 };
 
@@ -41,15 +64,21 @@ love.keypressed = (key) => {
     if (sceneState.current === "combat") {
         if (!activeCombat) {
             activeCombat = createCombatEncounter();
-        }
-
-        if (key === "r") {
-            rollNextPlayerDie(activeCombat.state, activeCombat.eventBus);
-            return;
+            activeCombatUi = createCombatUiState(activeCombat.state);
         }
 
         if (key === "space" && activeCombat.state.phase === "resolved") {
             sceneState = advanceScene(sceneState);
+            return;
+        }
+
+        if (key === "escape" && activeCombatUi && isCombatInspectorOpen(activeCombatUi)) {
+            closeCombatInspector(activeCombatUi);
+            return;
+        }
+
+        if (key === "space" && activeCombatUi) {
+            fastForwardCombatUi(activeCombatUi, activeCombat.state);
         }
         return;
     }
@@ -69,32 +98,38 @@ love.keypressed = (key) => {
     }
 };
 
-love.draw = () => {
-    love.graphics.setColor(1, 1, 1);
-    love.graphics.print(getScenePrompt(sceneState.current), 40, 30);
-
-    if (sceneState.current === "combat" && activeCombat) {
-        const encounter = activeCombat.state;
-
-        love.graphics.print(`Player HP: ${encounter.player.hp}/${encounter.player.maxHp}`, 40, 80);
-        love.graphics.print(`Enemy HP: ${encounter.enemy.hp}/${encounter.enemy.maxHp}`, 40, 104);
-        love.graphics.print(getEnemyIntentSummary(encounter), 40, 128);
-        love.graphics.print(
-            `Player rolls used: ${encounter.playerRollIndex}/${encounter.player.dice.length}`,
-            40,
-            152,
-        );
-        love.graphics.print(`Combat phase: ${encounter.phase}`, 40, 176);
-
-        const recentLog = getRecentCombatLog(encounter, 6);
-        love.graphics.print("Combat log:", 40, 208);
-        for (let index = 0; index < recentLog.length; index += 1) {
-            love.graphics.print(recentLog[index], 40, 232 + index * 22);
-        }
-
+love.mousepressed = (x, y, button) => {
+    if (sceneState.current !== "combat" || !activeCombat || !activeCombatUi) {
         return;
     }
 
+    onCombatMousePressed(activeCombatUi, activeCombat.state, x, y, button);
+};
+
+love.mousemoved = (x, y, dx, dy) => {
+    if (sceneState.current !== "combat" || !activeCombatUi || !activeCombat) {
+        return;
+    }
+
+    onCombatMouseMoved(activeCombatUi, activeCombat.state, x, y, dx, dy);
+};
+
+love.mousereleased = (x, y, button) => {
+    if (sceneState.current !== "combat" || !activeCombat || !activeCombatUi) {
+        return;
+    }
+
+    onCombatMouseReleased(activeCombatUi, activeCombat.state, x, y, button);
+};
+
+love.draw = () => {
+    if (sceneState.current === "combat" && activeCombat && activeCombatUi) {
+        drawCombatUi(activeCombatUi, activeCombat.state);
+        return;
+    }
+
+    love.graphics.setColor(1, 1, 1);
+    love.graphics.print(getScenePrompt(sceneState.current), 40, 30);
     love.graphics.print("Visit counts:", 40, 80);
     love.graphics.print(`Main Menu: ${sceneState.visitCounts["main-menu"]}`, 40, 110);
     love.graphics.print(`Explore: ${sceneState.visitCounts.explore}`, 40, 134);
