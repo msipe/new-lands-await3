@@ -2,6 +2,7 @@ import { CombatEventBus } from "../../src/game/combat-event-bus";
 import {
   createCombatEncounter,
   createStubEnemies,
+  resolveNextEnemyDie,
   rollPlayerDie,
   rollNextPlayerDie,
 } from "../../src/game/combat-encounter";
@@ -14,6 +15,14 @@ function fixedRandomSource() {
 }
 
 describe("combat encounter", () => {
+  function resolveAllEnemyDice(encounter: ReturnType<typeof createCombatEncounter>): void {
+    let guard = 0;
+    while (encounter.state.phase === "enemy-turn" && guard < 20) {
+      resolveNextEnemyDie(encounter.state, encounter.eventBus, fixedRandomSource());
+      guard += 1;
+    }
+  }
+
   it("provides stubbed enemies", () => {
     const enemies = createStubEnemies();
 
@@ -50,6 +59,10 @@ describe("combat encounter", () => {
   it("rolls player dice one at a time and starts next round when both survive", () => {
     const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
 
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+    expect(encounter.state.round).toBe(2);
+
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
     expect(encounter.state.playerRollIndex).toBe(1);
     expect(encounter.state.enemy.hp).toBe(12);
@@ -60,10 +73,13 @@ describe("combat encounter", () => {
     expect(encounter.state.enemy.hp).toBe(11);
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+    expect(encounter.state.phase).toBe("enemy-turn");
+
+    resolveAllEnemyDice(encounter);
     expect(encounter.state.phase).toBe("player-turn");
-    expect(encounter.state.round).toBe(2);
+    expect(encounter.state.round).toBe(3);
     expect(encounter.state.playerRollIndex).toBe(0);
-    expect(encounter.state.player.hp).toBe(17);
+    expect(encounter.state.player.hp).toBe(15);
     expect(encounter.state.enemy.hp).toBe(12);
   });
 
@@ -72,7 +88,12 @@ describe("combat encounter", () => {
 
     let safety = 0;
     while (encounter.state.phase !== "resolved" && safety < 50) {
-      rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+      if (encounter.state.phase === "player-turn") {
+        rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+      } else {
+        resolveNextEnemyDie(encounter.state, encounter.eventBus, fixedRandomSource());
+      }
+
       safety += 1;
     }
 
@@ -84,11 +105,17 @@ describe("combat encounter", () => {
   it("supports rolling player dice in any order once per round", () => {
     const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
 
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-3", fixedRandomSource());
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-2", fixedRandomSource());
 
-    expect(encounter.state.round).toBe(2);
+    expect(encounter.state.phase).toBe("enemy-turn");
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.round).toBe(3);
     expect(encounter.state.playerRollIndex).toBe(0);
     expect(encounter.state.phase).toBe("player-turn");
 
@@ -123,6 +150,9 @@ describe("combat encounter", () => {
       randomSource: fixedRandomSource(),
       eventBus,
     });
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
 
     encounter.state.player.hp = 15;
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());

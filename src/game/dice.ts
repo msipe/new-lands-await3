@@ -17,6 +17,7 @@ export interface DieSide {
   id: string;
   label: string;
   describe?: () => string;
+  getResolvePopupText?: () => string;
   resolve(context: SideResolveContext): import("./combat-event-bus").CombatEvent[];
 }
 

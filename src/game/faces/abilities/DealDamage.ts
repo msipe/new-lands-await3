@@ -29,6 +29,10 @@ export class DealDamage extends Face {
     return `Deal ${this.damage} damage to opponent.`;
   }
 
+  getResolvePopupText(): string {
+    return `+${this.damage} damage`;
+  }
+
   protected onResolve(context: FaceResolveContext): CombatEvent[] {
     const effect = new DamageEffectScript(`${this.id}-damage`, this.damage, "opponent");
 

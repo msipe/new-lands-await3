@@ -1,4 +1,4 @@
-import type { CombatEncounterState } from "./game/combat-encounter";
+import type { CombatEncounterState, CombatResolutionPopup } from "./game/combat-encounter";
 
 type Owner = "player" | "enemy";
 
@@ -13,6 +13,8 @@ type Layout = {
   arenaY: number;
   arenaWidth: number;
   arenaHeight: number;
+  arenaLogWidth: number;
+  arenaGapToLog: number;
   poolX: number;
   poolY: number;
   poolWidth: number;
@@ -62,6 +64,14 @@ type Rect = {
   height: number;
 };
 
+type FloatingResolutionPopup = {
+  x: number;
+  y: number;
+  text: string;
+  source: Owner;
+  timer: number;
+};
+
 type InspectorTile = {
   sideIndex: number;
   rect: Rect;
@@ -96,6 +106,8 @@ export type CombatUiState = {
   rolledPlayerDieIds: string[];
   pendingPlayerDieIds: string[];
   settledPlayerDieIds: string[];
+  settledEnemyDieIds: string[];
+  floatingPopups: FloatingResolutionPopup[];
   inspector?: DiceInspectorState;
 };
 
@@ -104,6 +116,7 @@ const WHITE = { r: 1, g: 1, b: 1 };
 const GREEN = { r: 0.2, g: 0.72, b: 0.33 };
 const BLACK = { r: 0, g: 0, b: 0 };
 const RESOLVE_FLASH_DURATION = 0.26;
+const POPUP_DURATION = 0.9;
 
 function createLayout(): Layout {
   const width = love.graphics.getWidth();
@@ -119,6 +132,8 @@ function createLayout(): Layout {
     arenaY: 125,
     arenaWidth: width - 70,
     arenaHeight: 230,
+    arenaLogWidth: 210,
+    arenaGapToLog: 10,
     poolX: 40,
     poolY: 420,
     poolWidth: width - 80,
@@ -134,14 +149,9 @@ function makePoolPosition(layout: Layout, slotIndex: number): { x: number; y: nu
   };
 }
 
-function getSideLabel(state: CombatEncounterState, dieId: string, sideId: string): string {
-  const die = state.enemy.dice.find((entry) => entry.id === dieId);
-  if (!die) {
-    return "?";
-  }
-
-  const side = die.sides.find((entry) => entry.id === sideId);
-  return side ? side.label : "?";
+function getEnemyRolledSideLabel(state: CombatEncounterState, dieId: string): string {
+  const side = state.enemyIntent.sideByDieId[dieId];
+  return side !== undefined ? side.label : "?";
 }
 
 function spawnEnemyThrowDice(uiState: CombatUiState, state: CombatEncounterState): void {
@@ -149,25 +159,24 @@ function spawnEnemyThrowDice(uiState: CombatUiState, state: CombatEncounterState
   uiState.enemyParkedDice = [];
   uiState.enemyPendingDice = [];
 
-  const uniqueByDieId: Record<string, { dieId: string; sideId: string }> = {};
-  for (const event of state.enemyIntent.events) {
-    if (!uniqueByDieId[event.dieId]) {
-      uniqueByDieId[event.dieId] = { dieId: event.dieId, sideId: event.sideId };
-    }
-  }
+  const dieIds =
+    state.pendingEnemyDieIds.length > 0
+      ? [...state.pendingEnemyDieIds]
+      : state.enemyIntent.dieOrder.length > 0
+        ? [...state.enemyIntent.dieOrder]
+        : state.enemy.dice.map((die) => die.id);
 
-  const entries = Object.values(uniqueByDieId);
   const laneWidth = uiState.layout.hpBarWidth;
   const minGap = 4;
   const maxPreviewSize = 46;
-  const availablePerDie = entries.length > 0 ? (laneWidth - minGap * (entries.length - 1)) / entries.length : maxPreviewSize;
+  const availablePerDie = dieIds.length > 0 ? (laneWidth - minGap * (dieIds.length - 1)) / dieIds.length : maxPreviewSize;
   const parkedSize = Math.max(18, Math.min(maxPreviewSize, availablePerDie));
-  const totalWidth = parkedSize * entries.length + minGap * Math.max(0, entries.length - 1);
+  const totalWidth = parkedSize * dieIds.length + minGap * Math.max(0, dieIds.length - 1);
   const parkStartX = uiState.layout.enemyNameX + (laneWidth - totalWidth) * 0.5 + parkedSize * 0.5;
   const parkY = uiState.layout.enemyNameY + 26 + uiState.layout.hpBarHeight + 24;
 
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index];
+  for (let index = 0; index < dieIds.length; index += 1) {
+    const dieId = dieIds[index];
     const spawnX =
       uiState.layout.arenaX +
       uiState.layout.arenaWidth * 0.5 +
@@ -175,10 +184,10 @@ function spawnEnemyThrowDice(uiState: CombatUiState, state: CombatEncounterState
     const spawnY = uiState.layout.arenaY + 30 + Math.random() * 18;
 
     uiState.enemyPendingDice.push({
-      id: `enemy-preview-${state.round}-${entry.dieId}`,
+      id: `enemy-preview-${state.round}-${dieId}`,
       owner: "enemy",
-      combatDieId: entry.dieId,
-      label: getSideLabel(state, entry.dieId, entry.sideId),
+      combatDieId: dieId,
+      label: getEnemyRolledSideLabel(state, dieId),
       x: spawnX,
       y: spawnY,
       vx: (Math.random() - 0.5) * 360,
@@ -227,15 +236,18 @@ function ensurePlayerDice(uiState: CombatUiState, state: CombatEncounterState): 
 
 function isInsideArena(uiState: CombatUiState, x: number, y: number): boolean {
   const l = uiState.layout;
-  return x >= l.arenaX && x <= l.arenaX + l.arenaWidth && y >= l.arenaY && y <= l.arenaY + l.arenaHeight;
+  const playableRight = l.arenaX + l.arenaWidth - l.arenaLogWidth - l.arenaGapToLog;
+  return x >= l.arenaX && x <= playableRight && y >= l.arenaY && y <= l.arenaY + l.arenaHeight;
 }
 
 function applyWallBounce(layout: Layout, die: VisualDie): void {
-  const half = die.size / 2;
-  const minX = layout.arenaX + half;
-  const maxX = layout.arenaX + layout.arenaWidth - half;
-  const minY = layout.arenaY + half;
-  const maxY = layout.arenaY + layout.arenaHeight - half;
+  // Use diagonal half-extent so rotated square corners stay inside the arena.
+  const collisionHalfExtent = (die.size / 2) * Math.SQRT2;
+  const playableRight = layout.arenaX + layout.arenaWidth - layout.arenaLogWidth - layout.arenaGapToLog;
+  const minX = layout.arenaX + collisionHalfExtent;
+  const maxX = playableRight - collisionHalfExtent;
+  const minY = layout.arenaY + collisionHalfExtent;
+  const maxY = layout.arenaY + layout.arenaHeight - collisionHalfExtent;
 
   if (die.x < minX) {
     die.x = minX;
@@ -336,6 +348,63 @@ function updateDieFlashes(uiState: CombatUiState, dt: number): void {
   }
 }
 
+function updateFloatingPopups(uiState: CombatUiState, dt: number): void {
+  const next: FloatingResolutionPopup[] = [];
+  for (const popup of uiState.floatingPopups) {
+    const remaining = popup.timer - dt;
+    if (remaining <= 0) {
+      continue;
+    }
+
+    next.push({
+      ...popup,
+      timer: remaining,
+      y: popup.y - 24 * dt,
+    });
+  }
+
+  uiState.floatingPopups = next;
+}
+
+function queueSettledEnemyDieId(uiState: CombatUiState, dieId: string): void {
+  if (uiState.settledEnemyDieIds.includes(dieId)) {
+    return;
+  }
+
+  uiState.settledEnemyDieIds.push(dieId);
+}
+
+function settleEnemyArenaDice(uiState: CombatUiState): void {
+  const stillRolling: VisualDie[] = [];
+
+  for (const die of uiState.enemyArenaDice) {
+    if (!isDieSettled(die)) {
+      stillRolling.push(die);
+      continue;
+    }
+
+    die.state = "parked";
+    die.vx = 0;
+    die.vy = 0;
+    die.spin = 0;
+    die.angle = 0;
+    die.flashTimer = RESOLVE_FLASH_DURATION;
+
+    if (die.parkX !== undefined && die.parkY !== undefined) {
+      die.x = die.parkX;
+      die.y = die.parkY;
+      die.size = die.parkSize ?? die.size;
+    }
+
+    uiState.enemyParkedDice.push(die);
+    if (die.combatDieId) {
+      queueSettledEnemyDieId(uiState, die.combatDieId);
+    }
+  }
+
+  uiState.enemyArenaDice = stillRolling;
+}
+
 function parkEnemyDice(uiState: CombatUiState): void {
   for (const die of uiState.enemyArenaDice) {
     if (die.parkX === undefined || die.parkY === undefined) {
@@ -350,7 +419,11 @@ function parkEnemyDice(uiState: CombatUiState): void {
     die.size = die.parkSize ?? die.size;
     die.x = die.parkX;
     die.y = die.parkY;
+    die.flashTimer = RESOLVE_FLASH_DURATION;
     uiState.enemyParkedDice.push(die);
+    if (die.combatDieId) {
+      queueSettledEnemyDieId(uiState, die.combatDieId);
+    }
   }
 
   for (const die of uiState.enemyPendingDice) {
@@ -366,11 +439,33 @@ function parkEnemyDice(uiState: CombatUiState): void {
     die.size = die.parkSize ?? die.size;
     die.x = die.parkX;
     die.y = die.parkY;
+    die.flashTimer = RESOLVE_FLASH_DURATION;
     uiState.enemyParkedDice.push(die);
+    if (die.combatDieId) {
+      queueSettledEnemyDieId(uiState, die.combatDieId);
+    }
   }
 
   uiState.enemyArenaDice = [];
   uiState.enemyPendingDice = [];
+}
+
+function parkPlayerArenaDice(uiState: CombatUiState): void {
+  for (const die of uiState.arenaPlayerDice) {
+    die.state = "parked";
+    die.vx = 0;
+    die.vy = 0;
+    die.spin = 0;
+    die.angle = 0;
+
+    if (die.parkX !== undefined && die.parkY !== undefined) {
+      die.x = die.parkX;
+      die.y = die.parkY;
+    }
+  }
+
+  uiState.arenaPlayerDice = [];
+  uiState.pendingPlayerDieIds = [];
 }
 
 export function createCombatUiState(state: CombatEncounterState): CombatUiState {
@@ -393,11 +488,12 @@ export function createCombatUiState(state: CombatEncounterState): CombatUiState 
     rolledPlayerDieIds: [],
     pendingPlayerDieIds: [],
     settledPlayerDieIds: [],
+    settledEnemyDieIds: [],
+    floatingPopups: [],
     inspector: undefined,
   };
 
   ensurePlayerDice(uiState, state);
-  spawnEnemyThrowDice(uiState, state);
 
   return uiState;
 }
@@ -412,6 +508,7 @@ function finalizeRoundTransition(uiState: CombatUiState, state: CombatEncounterS
   uiState.rolledPlayerDieIds = [];
   uiState.pendingPlayerDieIds = [];
   uiState.settledPlayerDieIds = [];
+  uiState.settledEnemyDieIds = [];
 
   for (const die of uiState.playerDice) {
     if (die.parkX !== undefined && die.parkY !== undefined) {
@@ -426,7 +523,9 @@ function finalizeRoundTransition(uiState: CombatUiState, state: CombatEncounterS
   }
 
   ensurePlayerDice(uiState, state);
-  spawnEnemyThrowDice(uiState, state);
+  uiState.enemyArenaDice = [];
+  uiState.enemyPendingDice = [];
+  // Keep last resolved enemy dice visible through the player turn.
 }
 
 function areDiceSettled(dice: VisualDie[]): boolean {
@@ -490,11 +589,38 @@ function settleAllPendingPlayerDice(uiState: CombatUiState): void {
 }
 
 function updateEnemyPresentation(uiState: CombatUiState, state: CombatEncounterState, dt: number): void {
+  if (state.phase !== "enemy-turn") {
+    return;
+  }
+
+  if (uiState.arenaPlayerDice.length > 0) {
+    parkPlayerArenaDice(uiState);
+  }
+
+  if (
+    uiState.enemyThrowResolvedForRound !== state.round &&
+    uiState.enemyPendingDice.length === 0 &&
+    uiState.enemyArenaDice.length === 0
+  ) {
+    if (uiState.enemyParkedDice.length > 0) {
+      uiState.enemyParkedDice = [];
+    }
+
+    spawnEnemyThrowDice(uiState, state);
+  }
+
   if (uiState.enemyThrowResolvedForRound === state.round) {
     return;
   }
 
   uiState.enemySpawnTimer += dt;
+  if (uiState.enemyArenaDice.length === 0 && uiState.enemyPendingDice.length > 0) {
+    const immediate = uiState.enemyPendingDice.shift();
+    if (immediate) {
+      uiState.enemyArenaDice.push(immediate);
+    }
+  }
+
   while (uiState.enemyPendingDice.length > 0 && uiState.enemySpawnTimer >= uiState.enemySpawnInterval) {
     uiState.enemySpawnTimer -= uiState.enemySpawnInterval;
     const next = uiState.enemyPendingDice.shift();
@@ -503,15 +629,10 @@ function updateEnemyPresentation(uiState: CombatUiState, state: CombatEncounterS
     }
   }
 
-  if (uiState.enemyPendingDice.length === 0) {
-    uiState.enemySettleTimer += dt;
-    if (
-      (uiState.enemySettleTimer >= uiState.enemySettleDelay && areDiceSettled(uiState.enemyArenaDice)) ||
-      uiState.enemySettleTimer >= uiState.enemySettleDelay + 1.5
-    ) {
-      parkEnemyDice(uiState);
-      uiState.enemyThrowResolvedForRound = state.round;
-    }
+  settleEnemyArenaDice(uiState);
+
+  if (uiState.enemyPendingDice.length === 0 && uiState.enemyArenaDice.length === 0) {
+    uiState.enemyThrowResolvedForRound = state.round;
   }
 }
 
@@ -524,6 +645,21 @@ export function fastForwardCombatUi(uiState: CombatUiState, state: CombatEncount
   if (uiState.pendingRound === state.round) {
     finalizeRoundTransition(uiState, state);
     return;
+  }
+
+  if (state.phase !== "enemy-turn") {
+    return;
+  }
+
+  if (
+    uiState.enemyPendingDice.length === 0 &&
+    uiState.enemyArenaDice.length === 0
+  ) {
+    if (uiState.enemyParkedDice.length > 0) {
+      uiState.enemyParkedDice = [];
+    }
+
+    spawnEnemyThrowDice(uiState, state);
   }
 
   if (uiState.enemyThrowResolvedForRound !== state.round) {
@@ -553,6 +689,7 @@ export function updateCombatUiState(uiState: CombatUiState, state: CombatEncount
 
   updateArenaDice(uiState, dt);
   updateDieFlashes(uiState, dt);
+  updateFloatingPopups(uiState, dt);
   enqueueSettledPlayerDice(uiState);
 }
 
@@ -566,13 +703,49 @@ export function drainSettledPlayerDieIds(uiState: CombatUiState): string[] {
   return settled;
 }
 
+export function drainSettledEnemyDieIds(uiState: CombatUiState): string[] {
+  if (uiState.settledEnemyDieIds.length === 0) {
+    return [];
+  }
+
+  const settled = [...uiState.settledEnemyDieIds];
+  uiState.settledEnemyDieIds = [];
+  return settled;
+}
+
+function findVisualDieByCombatId(uiState: CombatUiState, dieId: string): VisualDie | undefined {
+  return [
+    ...uiState.playerDice,
+    ...uiState.arenaPlayerDice,
+    ...uiState.enemyArenaDice,
+    ...uiState.enemyParkedDice,
+    ...uiState.enemyPendingDice,
+  ].find((die) => die.combatDieId === dieId);
+}
+
+export function enqueueCombatResolutionPopups(
+  uiState: CombatUiState,
+  popups: CombatResolutionPopup[],
+): void {
+  for (const popup of popups) {
+    const die = findVisualDieByCombatId(uiState, popup.dieId);
+    if (!die) {
+      continue;
+    }
+
+    die.flashTimer = RESOLVE_FLASH_DURATION;
+    uiState.floatingPopups.push({
+      x: die.x,
+      y: die.y - die.size * 0.72,
+      text: popup.text,
+      source: popup.source,
+      timer: POPUP_DURATION,
+    });
+  }
+}
+
 export function canPlayerThrow(uiState: CombatUiState, state: CombatEncounterState): boolean {
-  return (
-    state.phase === "player-turn" &&
-    uiState.pendingRound === undefined &&
-    uiState.enemyThrowResolvedForRound === state.round &&
-    uiState.enemyArenaDice.length === 0
-  );
+  return state.phase === "player-turn" && uiState.pendingRound === undefined;
 }
 
 function isPointInsideRect(x: number, y: number, rect: Rect): boolean {
@@ -1090,6 +1263,44 @@ function drawDie(die: VisualDie): void {
   love.graphics.pop();
 }
 
+function drawCombatLogPanel(uiState: CombatUiState, state: CombatEncounterState): void {
+  const layout = uiState.layout;
+  const panelX = layout.arenaX + layout.arenaWidth - layout.arenaLogWidth;
+  const panelY = layout.arenaY;
+  const panelWidth = layout.arenaLogWidth;
+  const panelHeight = layout.arenaHeight;
+
+  love.graphics.setColor(0.13, 0.14, 0.16, 0.94);
+  love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight);
+  love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b, 0.7);
+  love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight);
+
+  love.graphics.setColor(0.84, 0.89, 0.96, 0.98);
+  love.graphics.printf("Combat Log", panelX + 10, panelY + 12, panelWidth - 20, "left", 0, 0.86, 0.86);
+
+  const recent = state.combatLog.slice(Math.max(0, state.combatLog.length - 9));
+  let lineY = panelY + 38;
+  for (let index = 0; index < recent.length; index += 1) {
+    love.graphics.setColor(0.9, 0.93, 0.98, 0.94);
+    love.graphics.printf(recent[index], panelX + 10, lineY, panelWidth - 16, "left", 0, 0.62, 0.62);
+    lineY += 20;
+  }
+}
+
+function drawFloatingResolutionPopups(uiState: CombatUiState): void {
+  for (const popup of uiState.floatingPopups) {
+    const alpha = Math.max(0, Math.min(1, popup.timer / POPUP_DURATION));
+
+    if (popup.source === "player") {
+      love.graphics.setColor(0.72, 0.96, 0.78, alpha);
+    } else {
+      love.graphics.setColor(0.96, 0.84, 0.72, alpha);
+    }
+
+    love.graphics.printf(popup.text, popup.x - 70, popup.y, 140, "center", 0, 0.72, 0.72);
+  }
+}
+
 export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState): void {
   const layout = uiState.layout;
   const playerHpRatio = state.player.maxHp <= 0 ? 0 : state.player.hp / state.player.maxHp;
@@ -1114,6 +1325,7 @@ export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState
 
   love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b);
   love.graphics.rectangle("line", layout.arenaX, layout.arenaY, layout.arenaWidth, layout.arenaHeight);
+  drawCombatLogPanel(uiState, state);
 
   love.graphics.rectangle("line", layout.poolX, layout.poolY, layout.poolWidth, layout.poolHeight);
   love.graphics.print("Dice Pool", layout.poolX + layout.poolWidth * 0.5 - 40, layout.poolY - 34);
@@ -1137,6 +1349,8 @@ export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState
       drawDie(die);
     }
   }
+
+  drawFloatingResolutionPopups(uiState);
 
   love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b);
   love.graphics.print(`Round ${state.round}`, layout.arenaX + 12, layout.arenaY + 10);

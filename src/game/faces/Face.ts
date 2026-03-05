@@ -41,6 +41,10 @@ export abstract class Face implements DieSide {
     return this.label;
   }
 
+  getResolvePopupText(): string {
+    return this.label;
+  }
+
   abstract applyUpgrade(upgrade: FaceUpgrade): boolean;
 
   protected beforeResolve(_context: FaceResolveContext): void {}

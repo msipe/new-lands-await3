@@ -1,6 +1,7 @@
 import { CombatEvent, CombatEventBus } from "./combat-event-bus";
 import {
   type Die,
+  type DieSide,
   EffectType,
   type RandomSource,
   defaultRandomSource,
@@ -26,20 +27,58 @@ export type EnemyStub = {
 
 export type PendingEnemyIntent = {
   events: CombatEvent[];
+  eventsByDieId: Record<string, CombatEvent[]>;
+  sideByDieId: Record<string, DieSide>;
+  dieOrder: string[];
   pendingPlayerDamage: number;
   pendingEnemyHealing: number;
+};
+
+export type CombatResolutionPopup = {
+  source: "player" | "enemy";
+  dieId: string;
+  text: string;
 };
 
 export type CombatEncounterState = {
   player: CombatActor;
   enemy: CombatActor;
   round: number;
-  phase: "player-turn" | "resolved";
+  phase: "player-turn" | "enemy-turn" | "resolved";
   playerRollIndex: number;
   rolledPlayerDieIds: string[];
+  pendingEnemyDieIds: string[];
+  resolvedEnemyDieIds: string[];
   enemyIntent: PendingEnemyIntent;
   combatLog: string[];
+  pendingResolutionPopups: CombatResolutionPopup[];
 };
+
+function enterEnemyTurn(state: CombatEncounterState): void {
+  state.phase = "enemy-turn";
+  state.pendingEnemyDieIds =
+    state.enemyIntent.dieOrder.length > 0
+      ? [...state.enemyIntent.dieOrder]
+      : state.enemy.dice.map((die) => die.id);
+  state.resolvedEnemyDieIds = [];
+  state.combatLog.push("Enemy dice begin resolving.");
+}
+
+function queueResolutionPopup(
+  state: CombatEncounterState,
+  source: "player" | "enemy",
+  dieId: string,
+  side: DieSide,
+): void {
+  const popupText =
+    typeof side.getResolvePopupText === "function" ? side.getResolvePopupText() : side.label;
+
+  state.pendingResolutionPopups.push({
+    source,
+    dieId,
+    text: popupText,
+  });
+}
 
 function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void {
   const appliesToPlayer =
@@ -142,20 +181,29 @@ function buildEnemyIntent(
   randomSource: RandomSource,
 ): PendingEnemyIntent {
   const events: CombatEvent[] = [];
+  const eventsByDieId: Record<string, CombatEvent[]> = {};
+  const sideByDieId: Record<string, DieSide> = {};
+  const dieOrder: string[] = [];
 
   for (const die of enemy.dice) {
     const side = die.roll(randomSource);
-    events.push(
-      ...side.resolve({
-        source: "enemy",
-        cause: "enemy-intent",
-        dieId: die.id,
-      }),
-    );
+    const dieEvents = side.resolve({
+      source: "enemy",
+      cause: "enemy-intent",
+      dieId: die.id,
+    });
+
+    eventsByDieId[die.id] = dieEvents;
+    sideByDieId[die.id] = side;
+    dieOrder.push(die.id);
+    events.push(...dieEvents);
   }
 
   return {
     events,
+    eventsByDieId,
+    sideByDieId,
+    dieOrder,
     pendingPlayerDamage: events
       .filter(
         (event) =>
@@ -208,23 +256,31 @@ export function createCombatEncounter(
     player,
     enemy,
     round: 1,
-    phase: "player-turn",
+    phase: "enemy-turn",
     playerRollIndex: 0,
     rolledPlayerDieIds: [],
+    pendingEnemyDieIds: [],
+    resolvedEnemyDieIds: [],
     enemyIntent,
     combatLog: [
       `Round 1 begins.`,
       `${enemy.name} prepares ${enemyIntent.pendingPlayerDamage} damage and ${enemyIntent.pendingEnemyHealing} healing.`,
     ],
+    pendingResolutionPopups: [],
   };
+
+  enterEnemyTurn(state);
 
   return { state, eventBus };
 }
 
 function startNextRound(state: CombatEncounterState, randomSource: RandomSource): void {
   state.round += 1;
+  state.phase = "player-turn";
   state.playerRollIndex = 0;
   state.rolledPlayerDieIds = [];
+  state.pendingEnemyDieIds = [];
+  state.resolvedEnemyDieIds = [];
   state.player.armor = 0;
   state.enemy.armor = 0;
   state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
@@ -235,10 +291,8 @@ function startNextRound(state: CombatEncounterState, randomSource: RandomSource)
   );
 }
 
-function resolveEnemyIntentIfNeeded(
+function beginEnemyResolutionIfNeeded(
   state: CombatEncounterState,
-  eventBus: CombatEventBus,
-  randomSource: RandomSource,
 ): CombatEncounterState {
   if (state.rolledPlayerDieIds.length < state.player.dice.length) {
     return state;
@@ -250,16 +304,7 @@ function resolveEnemyIntentIfNeeded(
     return state;
   }
 
-  resolveImmediateEvents(state, eventBus, state.enemyIntent.events);
-  state.combatLog.push("Enemy intent resolves.");
-
-  if (state.player.hp <= 0) {
-    state.phase = "resolved";
-    state.combatLog.push("Player defeated.");
-    return state;
-  }
-
-  startNextRound(state, randomSource);
+  enterEnemyTurn(state);
   return state;
 }
 
@@ -291,6 +336,7 @@ export function rollPlayerDie(
 
   state.combatLog.push(`Player rolls ${die.name}: ${side.label}.`);
   resolveImmediateEvents(state, eventBus, events);
+  queueResolutionPopup(state, "player", die.id, side);
   state.rolledPlayerDieIds.push(die.id);
   state.playerRollIndex = state.rolledPlayerDieIds.length;
 
@@ -300,7 +346,7 @@ export function rollPlayerDie(
     return state;
   }
 
-  return resolveEnemyIntentIfNeeded(state, eventBus, randomSource);
+  return beginEnemyResolutionIfNeeded(state);
 }
 
 export function rollNextPlayerDie(
@@ -314,10 +360,85 @@ export function rollNextPlayerDie(
 
   const nextDie = state.player.dice.find((die) => !state.rolledPlayerDieIds.includes(die.id));
   if (!nextDie) {
-    return resolveEnemyIntentIfNeeded(state, eventBus, randomSource);
+    return beginEnemyResolutionIfNeeded(state);
   }
 
   return rollPlayerDie(state, eventBus, nextDie.id, randomSource);
+}
+
+export function resolveEnemyDie(
+  state: CombatEncounterState,
+  eventBus: CombatEventBus,
+  dieId: string,
+  randomSource: RandomSource = defaultRandomSource,
+): CombatEncounterState {
+  if (state.phase !== "enemy-turn") {
+    return state;
+  }
+
+  if (!state.pendingEnemyDieIds.includes(dieId)) {
+    return state;
+  }
+
+  const die = state.enemy.dice.find((entry) => entry.id === dieId);
+  if (!die) {
+    return state;
+  }
+
+  const events = state.enemyIntent.eventsByDieId[dieId] ?? [];
+  const side = state.enemyIntent.sideByDieId[dieId];
+  const sideLabel = side?.label ?? "No Effect";
+
+  state.combatLog.push(`Enemy rolls ${die.name}: ${sideLabel}.`);
+  resolveImmediateEvents(state, eventBus, events);
+  if (side !== undefined) {
+    queueResolutionPopup(state, "enemy", die.id, side);
+  }
+
+  state.pendingEnemyDieIds = state.pendingEnemyDieIds.filter((entry) => entry !== dieId);
+  if (!state.resolvedEnemyDieIds.includes(dieId)) {
+    state.resolvedEnemyDieIds.push(dieId);
+  }
+
+  if (state.player.hp <= 0) {
+    state.phase = "resolved";
+    state.combatLog.push("Player defeated.");
+    return state;
+  }
+
+  if (state.pendingEnemyDieIds.length > 0) {
+    return state;
+  }
+
+  startNextRound(state, randomSource);
+  return state;
+}
+
+export function resolveNextEnemyDie(
+  state: CombatEncounterState,
+  eventBus: CombatEventBus,
+  randomSource: RandomSource = defaultRandomSource,
+): CombatEncounterState {
+  if (state.phase !== "enemy-turn") {
+    return state;
+  }
+
+  const nextEnemyDieId = state.pendingEnemyDieIds[0];
+  if (!nextEnemyDieId) {
+    return state;
+  }
+
+  return resolveEnemyDie(state, eventBus, nextEnemyDieId, randomSource);
+}
+
+export function drainResolutionPopups(state: CombatEncounterState): CombatResolutionPopup[] {
+  if (state.pendingResolutionPopups.length === 0) {
+    return [];
+  }
+
+  const popups = [...state.pendingResolutionPopups];
+  state.pendingResolutionPopups = [];
+  return popups;
 }
 
 export function getEnemyIntentSummary(state: CombatEncounterState): string {

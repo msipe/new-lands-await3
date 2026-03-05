@@ -1,8 +1,10 @@
 import {
     closeCombatInspector,
     createCombatUiState,
+    drainSettledEnemyDieIds,
     drainSettledPlayerDieIds,
     drawCombatUi,
+    enqueueCombatResolutionPopups,
     fastForwardCombatUi,
     isCombatInspectorOpen,
     onCombatMouseMoved,
@@ -13,6 +15,8 @@ import {
 } from "./combat-ui";
 import {
     createCombatEncounter,
+    drainResolutionPopups,
+    resolveEnemyDie,
     rollPlayerDie,
     type CombatEncounterState,
 } from "./game/combat-encounter";
@@ -66,6 +70,16 @@ love.update = (dt: number) => {
         const settledDieIds = drainSettledPlayerDieIds(activeCombatUi);
         for (const dieId of settledDieIds) {
             rollPlayerDie(activeCombat.state, activeCombat.eventBus, dieId);
+        }
+
+        const settledEnemyDieIds = drainSettledEnemyDieIds(activeCombatUi);
+        for (const dieId of settledEnemyDieIds) {
+            resolveEnemyDie(activeCombat.state, activeCombat.eventBus, dieId);
+        }
+
+        const resolutionPopups = drainResolutionPopups(activeCombat.state);
+        if (resolutionPopups.length > 0) {
+            enqueueCombatResolutionPopups(activeCombatUi, resolutionPopups);
         }
     }
 
