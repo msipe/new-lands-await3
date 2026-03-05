@@ -1,14 +1,42 @@
-import { cpSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
 
-const filesToSync = ["main.lua", "conf.lua", "lualib_bundle.lua"];
 const buildDir = resolve(process.cwd(), "build");
+const outputDir = resolve(process.cwd());
 
-for (const fileName of filesToSync) {
-  const source = resolve(buildDir, fileName);
-  const destination = resolve(process.cwd(), fileName);
+function collectLuaFilesRecursively(directoryPath) {
+  const entries = readdirSync(directoryPath);
+  const luaFiles = [];
 
-  if (existsSync(source)) {
-    cpSync(source, destination);
+  for (const entryName of entries) {
+    const entryPath = resolve(directoryPath, entryName);
+    const stats = statSync(entryPath);
+
+    if (stats.isDirectory()) {
+      luaFiles.push(...collectLuaFilesRecursively(entryPath));
+      continue;
+    }
+
+    if (entryName.endsWith(".lua")) {
+      luaFiles.push(entryPath);
+    }
   }
+
+  return luaFiles;
+}
+
+if (!existsSync(buildDir)) {
+  process.exit(0);
+}
+
+for (const sourceFilePath of collectLuaFilesRecursively(buildDir)) {
+  const relativeFilePath = relative(buildDir, sourceFilePath);
+  const destinationFilePath = resolve(outputDir, relativeFilePath);
+
+  mkdirSync(dirname(destinationFilePath), { recursive: true });
+
+  cpSync(sourceFilePath, destinationFilePath, {
+    recursive: false,
+    force: true,
+  });
 }
