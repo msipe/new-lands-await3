@@ -26,6 +26,9 @@ type VisualDie = {
   owner: Owner;
   combatDieId?: string;
   label: string;
+  rollingLabel?: string;
+  rollingFaceTimer?: number;
+  faceLocked?: boolean;
   x: number;
   y: number;
   vx: number;
@@ -48,6 +51,7 @@ type DragState = {
   lastX: number;
   lastY: number;
   lastDt: number;
+  skipOnRelease: boolean;
 };
 
 type DiceInspectorState = {
@@ -117,6 +121,9 @@ const GREEN = { r: 0.2, g: 0.72, b: 0.33 };
 const BLACK = { r: 0, g: 0, b: 0 };
 const RESOLVE_FLASH_DURATION = 0.26;
 const POPUP_DURATION = 0.9;
+const FACE_ROLL_MIN_INTERVAL = 0.04;
+const FACE_ROLL_MAX_INTERVAL = 0.24;
+const FACE_ROLL_MOTION_REFERENCE = 520;
 
 function createLayout(): Layout {
   const width = love.graphics.getWidth();
@@ -188,6 +195,9 @@ function spawnEnemyThrowDice(uiState: CombatUiState, state: CombatEncounterState
       owner: "enemy",
       combatDieId: dieId,
       label: getEnemyRolledSideLabel(state, dieId),
+      rollingLabel: undefined,
+      rollingFaceTimer: 0,
+      faceLocked: false,
       x: spawnX,
       y: spawnY,
       vx: (Math.random() - 0.5) * 360,
@@ -219,6 +229,9 @@ function ensurePlayerDice(uiState: CombatUiState, state: CombatEncounterState): 
       owner: "player",
       combatDieId: die.id,
       label: die.name,
+      rollingLabel: undefined,
+      rollingFaceTimer: 0,
+      faceLocked: false,
       x: position.x,
       y: position.y,
       vx: 0,
@@ -323,9 +336,24 @@ function updateArenaDice(uiState: CombatUiState, dt: number): void {
     die.y += die.vy * dt;
     die.angle += die.spin * dt;
 
-    die.vx *= 0.993;
-    die.vy *= 0.993;
-    die.spin *= 0.99;
+    const speed = Math.sqrt(die.vx * die.vx + die.vy * die.vy);
+    const speedRatio = Math.max(0, Math.min(1, speed / 460));
+    const frameLinearDamping = 0.962 + speedRatio * 0.034;
+    const frameSpinDamping = 0.9 + speedRatio * 0.095;
+    const linearDamping = Math.pow(frameLinearDamping, dt * 60);
+    const spinDamping = Math.pow(frameSpinDamping, dt * 60);
+
+    die.vx *= linearDamping;
+    die.vy *= linearDamping;
+    die.spin *= spinDamping;
+
+    // Add extra drag near rest so low-energy throws settle quickly.
+    if (speed < 70) {
+      const lowSpeedDamping = Math.pow(0.86, dt * 60);
+      die.vx *= lowSpeedDamping;
+      die.vy *= lowSpeedDamping;
+      die.spin *= Math.pow(0.78, dt * 60);
+    }
 
     applyWallBounce(uiState.layout, die);
   }
@@ -334,6 +362,62 @@ function updateArenaDice(uiState: CombatUiState, dt: number): void {
     for (let right = left + 1; right < dynamicDice.length; right += 1) {
       resolvePairCollision(dynamicDice[left], dynamicDice[right]);
     }
+  }
+}
+
+function getDieSideLabels(state: CombatEncounterState, die: VisualDie): string[] {
+  if (!die.combatDieId) {
+    return [];
+  }
+
+  const ownerDice = die.owner === "player" ? state.player.dice : state.enemy.dice;
+  const match = ownerDice.find((entry) => entry.id === die.combatDieId);
+  if (!match) {
+    return [];
+  }
+
+  return match.sides.map((side) => side.label);
+}
+
+function lockVisualDieFace(die: VisualDie): void {
+  die.faceLocked = true;
+  die.rollingLabel = undefined;
+  die.rollingFaceTimer = 0;
+}
+
+function updateRollingFaceLabels(uiState: CombatUiState, state: CombatEncounterState, dt: number): void {
+  const activeDice = [...uiState.enemyArenaDice, ...uiState.arenaPlayerDice];
+
+  for (const die of activeDice) {
+    if (die.faceLocked || die.state !== "arena" || isDieSettled(die)) {
+      die.rollingLabel = undefined;
+      die.rollingFaceTimer = 0;
+      continue;
+    }
+
+    const labels = getDieSideLabels(state, die);
+    if (labels.length === 0) {
+      continue;
+    }
+
+    const speed = Math.sqrt(die.vx * die.vx + die.vy * die.vy);
+    const motion = speed + Math.abs(die.spin) * 45;
+    const normalizedMotion = Math.max(0, Math.min(1, motion / FACE_ROLL_MOTION_REFERENCE));
+    const interval = FACE_ROLL_MAX_INTERVAL - (FACE_ROLL_MAX_INTERVAL - FACE_ROLL_MIN_INTERVAL) * normalizedMotion;
+
+    die.rollingFaceTimer = (die.rollingFaceTimer ?? 0) - dt;
+    if (die.rollingLabel !== undefined && die.rollingFaceTimer > 0) {
+      continue;
+    }
+
+    const randomIndex = Math.floor(Math.random() * labels.length);
+    let nextLabel = labels[randomIndex];
+    if (labels.length > 1 && nextLabel === die.rollingLabel) {
+      nextLabel = labels[(randomIndex + 1) % labels.length];
+    }
+
+    die.rollingLabel = nextLabel;
+    die.rollingFaceTimer = interval;
   }
 }
 
@@ -375,34 +459,25 @@ function queueSettledEnemyDieId(uiState: CombatUiState, dieId: string): void {
 }
 
 function settleEnemyArenaDice(uiState: CombatUiState): void {
-  const stillRolling: VisualDie[] = [];
-
   for (const die of uiState.enemyArenaDice) {
     if (!isDieSettled(die)) {
-      stillRolling.push(die);
       continue;
     }
 
-    die.state = "parked";
+    die.state = "arena";
     die.vx = 0;
     die.vy = 0;
     die.spin = 0;
     die.angle = 0;
-    die.flashTimer = RESOLVE_FLASH_DURATION;
-
-    if (die.parkX !== undefined && die.parkY !== undefined) {
-      die.x = die.parkX;
-      die.y = die.parkY;
-      die.size = die.parkSize ?? die.size;
+    if (!die.faceLocked) {
+      die.flashTimer = RESOLVE_FLASH_DURATION;
     }
+    lockVisualDieFace(die);
 
-    uiState.enemyParkedDice.push(die);
     if (die.combatDieId) {
       queueSettledEnemyDieId(uiState, die.combatDieId);
     }
   }
-
-  uiState.enemyArenaDice = stillRolling;
 }
 
 function parkEnemyDice(uiState: CombatUiState): void {
@@ -420,6 +495,7 @@ function parkEnemyDice(uiState: CombatUiState): void {
     die.x = die.parkX;
     die.y = die.parkY;
     die.flashTimer = RESOLVE_FLASH_DURATION;
+    lockVisualDieFace(die);
     uiState.enemyParkedDice.push(die);
     if (die.combatDieId) {
       queueSettledEnemyDieId(uiState, die.combatDieId);
@@ -440,6 +516,7 @@ function parkEnemyDice(uiState: CombatUiState): void {
     die.x = die.parkX;
     die.y = die.parkY;
     die.flashTimer = RESOLVE_FLASH_DURATION;
+    lockVisualDieFace(die);
     uiState.enemyParkedDice.push(die);
     if (die.combatDieId) {
       queueSettledEnemyDieId(uiState, die.combatDieId);
@@ -457,6 +534,9 @@ function parkPlayerArenaDice(uiState: CombatUiState): void {
     die.vy = 0;
     die.spin = 0;
     die.angle = 0;
+    die.rollingLabel = undefined;
+    die.rollingFaceTimer = 0;
+    die.faceLocked = false;
 
     if (die.parkX !== undefined && die.parkY !== undefined) {
       die.x = die.parkX;
@@ -520,6 +600,10 @@ function finalizeRoundTransition(uiState: CombatUiState, state: CombatEncounterS
     die.spin = 0;
     die.angle = 0;
     die.state = "parked";
+    die.label = state.player.dice.find((entry) => entry.id === die.combatDieId)?.name ?? die.label;
+    die.rollingLabel = undefined;
+    die.rollingFaceTimer = 0;
+    die.faceLocked = false;
   }
 
   ensurePlayerDice(uiState, state);
@@ -631,7 +715,8 @@ function updateEnemyPresentation(uiState: CombatUiState, state: CombatEncounterS
 
   settleEnemyArenaDice(uiState);
 
-  if (uiState.enemyPendingDice.length === 0 && uiState.enemyArenaDice.length === 0) {
+  if (uiState.enemyPendingDice.length === 0 && areDiceSettled(uiState.enemyArenaDice)) {
+    parkEnemyDice(uiState);
     uiState.enemyThrowResolvedForRound = state.round;
   }
 }
@@ -688,6 +773,7 @@ export function updateCombatUiState(uiState: CombatUiState, state: CombatEncount
   updateEnemyPresentation(uiState, state, dt);
 
   updateArenaDice(uiState, dt);
+  updateRollingFaceLabels(uiState, state, dt);
   updateDieFlashes(uiState, dt);
   updateFloatingPopups(uiState, dt);
   enqueueSettledPlayerDice(uiState);
@@ -734,6 +820,10 @@ export function enqueueCombatResolutionPopups(
     }
 
     die.flashTimer = RESOLVE_FLASH_DURATION;
+    if (popup.sideLabel !== undefined) {
+      die.label = popup.sideLabel;
+    }
+    lockVisualDieFace(die);
     uiState.floatingPopups.push({
       x: die.x,
       y: die.y - die.size * 0.72,
@@ -1063,11 +1153,6 @@ export function onCombatMousePressed(
     return;
   }
 
-  if (!canPlayerThrow(uiState, state)) {
-    return;
-  }
-
-
   for (const die of uiState.playerDice) {
     if (die.state === "arena") {
       continue;
@@ -1089,6 +1174,7 @@ export function onCombatMousePressed(
       lastX: x,
       lastY: y,
       lastDt: 1 / 60,
+      skipOnRelease: !canPlayerThrow(uiState, state),
     };
     return;
   }
@@ -1148,6 +1234,20 @@ export function onCombatMouseReleased(
     return;
   }
 
+  if (drag.skipOnRelease) {
+    dragged.state = "parked";
+    if (dragged.parkX !== undefined && dragged.parkY !== undefined) {
+      dragged.x = dragged.parkX;
+      dragged.y = dragged.parkY;
+    }
+
+    if (isInsideArena(uiState, x, y)) {
+      fastForwardCombatUi(uiState, state);
+    }
+
+    return;
+  }
+
   if (
     uiState.rolledPlayerDieIds.includes(dragged.combatDieId) ||
     !canPlayerThrow(uiState, state) ||
@@ -1165,11 +1265,28 @@ export function onCombatMouseReleased(
   dragged.x = x;
   dragged.y = y;
 
-  const vx = (x - drag.startX) * 4.3;
-  const vy = (y - drag.startY) * 4.3;
+  const dragDx = x - drag.startX;
+  const dragDy = y - drag.startY;
+  const dragDistance = Math.sqrt(dragDx * dragDx + dragDy * dragDy);
+  const baseScale = 3.6;
+  const minHorizontal = 26 + Math.min(42, dragDistance * 0.18);
+  const minVerticalLift = 90 + Math.min(120, dragDistance * 0.42);
 
-  dragged.vx = Math.abs(vx) < 20 ? 40 : vx;
-  dragged.vy = Math.abs(vy) < 20 ? -220 : vy;
+  let launchVx = dragDx * baseScale;
+  let launchVy = dragDy * baseScale;
+
+  if (Math.abs(launchVx) < minHorizontal) {
+    const horizontalDirection = dragDx === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(dragDx);
+    launchVx = horizontalDirection * minHorizontal;
+  }
+
+  // Keep an upward impulse even for short drags, but scale by drag distance.
+  if (launchVy > -minVerticalLift) {
+    launchVy = -minVerticalLift;
+  }
+
+  dragged.vx = launchVx;
+  dragged.vy = launchVy;
   dragged.spin = (dragged.vx - dragged.vy) * 0.01;
   dragged.angle = 0;
 
@@ -1225,7 +1342,7 @@ function drawDie(die: VisualDie): void {
   const half = die.size / 2;
   const textScale = 0.56;
   const font = love.graphics.getFont();
-  let text = die.label;
+  let text = die.rollingLabel ?? die.label;
   let textX = -half + 4;
   let textY = -6;
 

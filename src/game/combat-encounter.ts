@@ -38,6 +38,7 @@ export type CombatResolutionPopup = {
   source: "player" | "enemy";
   dieId: string;
   text: string;
+  sideLabel?: string;
 };
 
 export type CombatEncounterState = {
@@ -77,6 +78,7 @@ function queueResolutionPopup(
     source,
     dieId,
     text: popupText,
+    sideLabel: side.label,
   });
 }
 
