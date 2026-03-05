@@ -137,7 +137,7 @@ export const SCENE_CONTRACTS: SceneContracts = {
   combat: {
     id: "combat",
     title: "Combat",
-    prompt: "Press Space to continue.",
+    prompt: "Press R to roll a die. Press Space after combat resolves.",
     defaultNext: "post-combat",
     createInitialContext: () => ({ enemyGroupId: "stub-slimes", turnCount: 1 }),
     reduce: () => ({ nextScene: "post-combat" }),

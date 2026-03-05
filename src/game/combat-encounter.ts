@@ -331,5 +331,19 @@ export function rollNextPlayerDie(
   resolveImmediateEvents(state, eventBus, events);
   state.playerRollIndex += 1;
 
+  if (state.enemy.hp <= 0) {
+    state.phase = "resolved";
+    state.combatLog.push("Enemy defeated.");
+    return state;
+  }
+
   return resolveEnemyIntentIfNeeded(state, eventBus);
+}
+
+export function getEnemyIntentSummary(state: CombatEncounterState): string {
+  return `Enemy intent: ${state.enemyIntent.pendingPlayerDamage} incoming damage, ${state.enemyIntent.pendingEnemyHealing} enemy healing.`;
+}
+
+export function getRecentCombatLog(state: CombatEncounterState, count: number): string[] {
+  return state.combatLog.slice(Math.max(0, state.combatLog.length - count));
 }

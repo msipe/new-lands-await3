@@ -1,5 +1,13 @@
 import { computeWobbleY } from "./game/wobble";
 import {
+    createCombatEncounter,
+    getEnemyIntentSummary,
+    getRecentCombatLog,
+    rollNextPlayerDie,
+    type CombatEncounterState,
+} from "./game/combat-encounter";
+import { CombatEventBus } from "./game/combat-event-bus";
+import {
     advanceScene,
     chooseExploreBranch,
     createInitialSceneState,
@@ -9,6 +17,8 @@ import {
 
 let elapsed = 0;
 let sceneState = createInitialSceneState();
+let previousScene = sceneState.current;
+let activeCombat: { state: CombatEncounterState; eventBus: CombatEventBus } | undefined;
 
 love.load = () => {
     love.window.setTitle("new-lands-await3");
@@ -18,9 +28,37 @@ love.load = () => {
 
 love.update = (dt: number) => {
     elapsed += dt;
+
+    if (sceneState.current !== previousScene) {
+        if (sceneState.current === "combat") {
+            activeCombat = createCombatEncounter();
+        }
+
+        if (previousScene === "combat" && sceneState.current !== "combat") {
+            activeCombat = undefined;
+        }
+
+        previousScene = sceneState.current;
+    }
 };
 
 love.keypressed = (key) => {
+    if (sceneState.current === "combat") {
+        if (!activeCombat) {
+            activeCombat = createCombatEncounter();
+        }
+
+        if (key === "r") {
+            rollNextPlayerDie(activeCombat.state, activeCombat.eventBus);
+            return;
+        }
+
+        if (key === "space" && activeCombat.state.phase === "resolved") {
+            sceneState = advanceScene(sceneState);
+        }
+        return;
+    }
+
     if (key === "space") {
         sceneState = advanceScene(sceneState);
         return;
@@ -47,6 +85,28 @@ love.draw = () => {
 
     love.graphics.setColor(1, 1, 1);
     love.graphics.print(getScenePrompt(sceneState.current), 40, 170);
+
+    if (sceneState.current === "combat" && activeCombat) {
+        const encounter = activeCombat.state;
+
+        love.graphics.print(`Player HP: ${encounter.player.hp}/${encounter.player.maxHp}`, 40, 220);
+        love.graphics.print(`Enemy HP: ${encounter.enemy.hp}/${encounter.enemy.maxHp}`, 40, 244);
+        love.graphics.print(getEnemyIntentSummary(encounter), 40, 268);
+        love.graphics.print(
+            `Player rolls used: ${encounter.playerRollIndex}/${encounter.player.dice.length}`,
+            40,
+            292,
+        );
+        love.graphics.print(`Combat phase: ${encounter.phase}`, 40, 316);
+
+        const recentLog = getRecentCombatLog(encounter, 6);
+        love.graphics.print("Combat log:", 40, 348);
+        for (let index = 0; index < recentLog.length; index += 1) {
+            love.graphics.print(recentLog[index], 40, 372 + index * 22);
+        }
+
+        return;
+    }
 
     love.graphics.print("Visit counts:", 40, 220);
     love.graphics.print(`Main Menu: ${sceneState.visitCounts["main-menu"]}`, 40, 250);
