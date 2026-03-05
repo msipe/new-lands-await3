@@ -7,8 +7,8 @@ local __TS__ArrayFilter = ____lualib.__TS__ArrayFilter
 local __TS__ArrayFind = ____lualib.__TS__ArrayFind
 local __TS__ObjectAssign = ____lualib.__TS__ObjectAssign
 local __TS__ArrayIncludes = ____lualib.__TS__ArrayIncludes
-local __TS__ArrayPushArray = ____lualib.__TS__ArrayPushArray
 local __TS__MathSign = ____lualib.__TS__MathSign
+local __TS__ArrayPushArray = ____lualib.__TS__ArrayPushArray
 local __TS__StringSlice = ____lualib.__TS__StringSlice
 local __TS__ArraySlice = ____lualib.__TS__ArraySlice
 local ____exports = {}
@@ -16,6 +16,9 @@ local isDieSettled, getDieFromInspector
 function isDieSettled(self, die)
     local speed = math.sqrt(die.vx * die.vx + die.vy * die.vy)
     return speed <= 60 and math.abs(die.spin) <= 1.3
+end
+function ____exports.canPlayerThrow(self, uiState, state)
+    return state.phase == "player-turn" and uiState.pendingRound == nil
 end
 function getDieFromInspector(self, uiState, state)
     if not uiState.inspector then
@@ -25,9 +28,9 @@ function getDieFromInspector(self, uiState, state)
     return __TS__ArrayFind(
         dice,
         function(____, die)
-            local ____die_id_17 = die.id
-            local ____opt_15 = uiState.inspector
-            return ____die_id_17 == (____opt_15 and ____opt_15.combatDieId)
+            local ____die_id_21 = die.id
+            local ____opt_19 = uiState.inspector
+            return ____die_id_21 == (____opt_19 and ____opt_19.combatDieId)
         end
     )
 end
@@ -329,6 +332,41 @@ local function updateRollingFaceLabels(self, uiState, state, dt)
         ::__continue37::
     end
 end
+local function updateEnemyParkingTransitions(self, uiState, dt)
+    for ____, die in ipairs(uiState.enemyParkedDice) do
+        do
+            if die.state ~= "parking" then
+                goto __continue44
+            end
+            if die.parkX == nil or die.parkY == nil or die.parkStartX == nil or die.parkStartY == nil then
+                die.state = "parked"
+                goto __continue44
+            end
+            local duration = math.max(0.05, die.parkDuration or 0.3)
+            local progress = math.min(1, (die.parkProgress or 0) + dt / duration)
+            local eased = 1 - (1 - progress) ^ 3
+            local startSize = die.parkStartSize or die.size
+            local targetSize = die.parkSize or die.size
+            die.parkProgress = progress
+            die.x = die.parkStartX + (die.parkX - die.parkStartX) * eased
+            die.y = die.parkStartY + (die.parkY - die.parkStartY) * eased
+            die.size = startSize + (targetSize - startSize) * eased
+            if progress >= 1 then
+                die.state = "parked"
+                die.x = die.parkX
+                die.y = die.parkY
+                die.size = targetSize
+                die.flashTimer = RESOLVE_FLASH_DURATION
+                die.parkStartX = nil
+                die.parkStartY = nil
+                die.parkStartSize = nil
+                die.parkProgress = nil
+                die.parkDuration = nil
+            end
+        end
+        ::__continue44::
+    end
+end
 local function updateDieFlashes(self, uiState, dt)
     local ____array_3 = __TS__SparseArrayNew(unpack(uiState.playerDice))
     __TS__SparseArrayPush(
@@ -347,11 +385,11 @@ local function updateDieFlashes(self, uiState, dt)
     for ____, die in ipairs(allDice) do
         do
             if die.flashTimer == nil or die.flashTimer <= 0 then
-                goto __continue44
+                goto __continue50
             end
             die.flashTimer = math.max(0, die.flashTimer - dt)
         end
-        ::__continue44::
+        ::__continue50::
     end
 end
 local function updateFloatingPopups(self, uiState, dt)
@@ -360,11 +398,11 @@ local function updateFloatingPopups(self, uiState, dt)
         do
             local remaining = popup.timer - dt
             if remaining <= 0 then
-                goto __continue48
+                goto __continue54
             end
             next[#next + 1] = __TS__ObjectAssign({}, popup, {timer = remaining, y = popup.y - 24 * dt})
         end
-        ::__continue48::
+        ::__continue54::
     end
     uiState.floatingPopups = next
 end
@@ -379,7 +417,7 @@ local function settleEnemyArenaDice(self, uiState)
     for ____, die in ipairs(uiState.enemyArenaDice) do
         do
             if not isDieSettled(nil, die) then
-                goto __continue54
+                goto __continue60
             end
             die.state = "arena"
             die.vx = 0
@@ -390,28 +428,27 @@ local function settleEnemyArenaDice(self, uiState)
                 die.flashTimer = RESOLVE_FLASH_DURATION
             end
             lockVisualDieFace(nil, die)
-            if die.combatDieId then
-                queueSettledEnemyDieId(nil, uiState, die.combatDieId)
-            end
         end
-        ::__continue54::
+        ::__continue60::
     end
 end
 local function parkEnemyDice(self, uiState)
     for ____, die in ipairs(uiState.enemyArenaDice) do
         do
             if die.parkX == nil or die.parkY == nil then
-                goto __continue60
+                goto __continue65
             end
-            die.state = "parked"
+            die.state = "parking"
             die.vx = 0
             die.vy = 0
             die.spin = 0
             die.angle = 0
-            die.size = die.parkSize or die.size
-            die.x = die.parkX
-            die.y = die.parkY
-            die.flashTimer = RESOLVE_FLASH_DURATION
+            die.parkStartX = die.x
+            die.parkStartY = die.y
+            die.parkStartSize = die.size
+            die.parkProgress = 0
+            die.parkDuration = 0.32 + math.random() * 0.16
+            die.flashTimer = nil
             lockVisualDieFace(nil, die)
             local ____uiState_enemyParkedDice_5 = uiState.enemyParkedDice
             ____uiState_enemyParkedDice_5[#____uiState_enemyParkedDice_5 + 1] = die
@@ -419,22 +456,24 @@ local function parkEnemyDice(self, uiState)
                 queueSettledEnemyDieId(nil, uiState, die.combatDieId)
             end
         end
-        ::__continue60::
+        ::__continue65::
     end
     for ____, die in ipairs(uiState.enemyPendingDice) do
         do
             if die.parkX == nil or die.parkY == nil then
-                goto __continue64
+                goto __continue69
             end
-            die.state = "parked"
+            die.state = "parking"
             die.vx = 0
             die.vy = 0
             die.spin = 0
             die.angle = 0
-            die.size = die.parkSize or die.size
-            die.x = die.parkX
-            die.y = die.parkY
-            die.flashTimer = RESOLVE_FLASH_DURATION
+            die.parkStartX = die.x
+            die.parkStartY = die.y
+            die.parkStartSize = die.size
+            die.parkProgress = 0
+            die.parkDuration = 0.32 + math.random() * 0.16
+            die.flashTimer = nil
             lockVisualDieFace(nil, die)
             local ____uiState_enemyParkedDice_6 = uiState.enemyParkedDice
             ____uiState_enemyParkedDice_6[#____uiState_enemyParkedDice_6 + 1] = die
@@ -442,7 +481,7 @@ local function parkEnemyDice(self, uiState)
                 queueSettledEnemyDieId(nil, uiState, die.combatDieId)
             end
         end
-        ::__continue64::
+        ::__continue69::
     end
     uiState.enemyArenaDice = {}
     uiState.enemyPendingDice = {}
@@ -484,9 +523,11 @@ function ____exports.createCombatUiState(self, state)
         enemyThrowResolvedForRound = 0,
         rolledPlayerDieIds = {},
         pendingPlayerDieIds = {},
+        readyPlayerDieIds = {},
         settledPlayerDieIds = {},
         settledEnemyDieIds = {},
         floatingPopups = {},
+        queuedPlayerThrow = nil,
         inspector = nil
     }
     ensurePlayerDice(nil, uiState, state)
@@ -500,6 +541,7 @@ local function finalizeRoundTransition(self, uiState, state)
     uiState.arenaPlayerDice = {}
     uiState.rolledPlayerDieIds = {}
     uiState.pendingPlayerDieIds = {}
+    uiState.readyPlayerDieIds = {}
     uiState.settledPlayerDieIds = {}
     uiState.settledEnemyDieIds = {}
     for ____, die in ipairs(uiState.playerDice) do
@@ -543,22 +585,22 @@ local function enqueueSettledPlayerDice(self, uiState)
                 function(____, entry) return entry.combatDieId == dieId end
             )
             if not visualDie then
-                goto __continue84
+                goto __continue89
             end
             if not isDieSettled(nil, visualDie) then
                 remaining[#remaining + 1] = dieId
-                goto __continue84
+                goto __continue89
             end
             visualDie.vx = 0
             visualDie.vy = 0
             visualDie.spin = 0
             visualDie.flashTimer = RESOLVE_FLASH_DURATION
-            if not __TS__ArrayIncludes(uiState.settledPlayerDieIds, dieId) then
-                local ____uiState_settledPlayerDieIds_9 = uiState.settledPlayerDieIds
-                ____uiState_settledPlayerDieIds_9[#____uiState_settledPlayerDieIds_9 + 1] = dieId
+            if not __TS__ArrayIncludes(uiState.readyPlayerDieIds, dieId) then
+                local ____uiState_readyPlayerDieIds_9 = uiState.readyPlayerDieIds
+                ____uiState_readyPlayerDieIds_9[#____uiState_readyPlayerDieIds_9 + 1] = dieId
             end
         end
-        ::__continue84::
+        ::__continue89::
     end
     uiState.pendingPlayerDieIds = remaining
 end
@@ -573,12 +615,27 @@ local function settleAllPendingPlayerDice(self, uiState)
             visualDie.vy = 0
             visualDie.spin = 0
         end
-        if not __TS__ArrayIncludes(uiState.settledPlayerDieIds, dieId) then
-            local ____uiState_settledPlayerDieIds_10 = uiState.settledPlayerDieIds
-            ____uiState_settledPlayerDieIds_10[#____uiState_settledPlayerDieIds_10 + 1] = dieId
+        if not __TS__ArrayIncludes(uiState.readyPlayerDieIds, dieId) then
+            local ____uiState_readyPlayerDieIds_10 = uiState.readyPlayerDieIds
+            ____uiState_readyPlayerDieIds_10[#____uiState_readyPlayerDieIds_10 + 1] = dieId
         end
     end
     uiState.pendingPlayerDieIds = {}
+end
+local function commitReadyPlayerDice(self, uiState)
+    for ____, dieId in ipairs(uiState.readyPlayerDieIds) do
+        if not __TS__ArrayIncludes(uiState.settledPlayerDieIds, dieId) then
+            local ____uiState_settledPlayerDieIds_11 = uiState.settledPlayerDieIds
+            ____uiState_settledPlayerDieIds_11[#____uiState_settledPlayerDieIds_11 + 1] = dieId
+        end
+    end
+    uiState.readyPlayerDieIds = {}
+end
+local function canAdvancePlayerTurn(self, uiState, state)
+    if state.phase ~= "player-turn" or uiState.pendingRound ~= nil then
+        return false
+    end
+    return #uiState.rolledPlayerDieIds == #state.player.dice and #uiState.pendingPlayerDieIds == 0 and #uiState.readyPlayerDieIds > 0
 end
 local function updateEnemyPresentation(self, uiState, state, dt)
     if state.phase ~= "enemy-turn" then
@@ -600,31 +657,96 @@ local function updateEnemyPresentation(self, uiState, state, dt)
     if #uiState.enemyArenaDice == 0 and #uiState.enemyPendingDice > 0 then
         local immediate = table.remove(uiState.enemyPendingDice, 1)
         if immediate then
-            local ____uiState_enemyArenaDice_11 = uiState.enemyArenaDice
-            ____uiState_enemyArenaDice_11[#____uiState_enemyArenaDice_11 + 1] = immediate
+            local ____uiState_enemyArenaDice_12 = uiState.enemyArenaDice
+            ____uiState_enemyArenaDice_12[#____uiState_enemyArenaDice_12 + 1] = immediate
         end
     end
     while #uiState.enemyPendingDice > 0 and uiState.enemySpawnTimer >= uiState.enemySpawnInterval do
         uiState.enemySpawnTimer = uiState.enemySpawnTimer - uiState.enemySpawnInterval
         local next = table.remove(uiState.enemyPendingDice, 1)
         if next then
-            local ____uiState_enemyArenaDice_12 = uiState.enemyArenaDice
-            ____uiState_enemyArenaDice_12[#____uiState_enemyArenaDice_12 + 1] = next
+            local ____uiState_enemyArenaDice_13 = uiState.enemyArenaDice
+            ____uiState_enemyArenaDice_13[#____uiState_enemyArenaDice_13 + 1] = next
         end
     end
     settleEnemyArenaDice(nil, uiState)
-    if #uiState.enemyPendingDice == 0 and areDiceSettled(nil, uiState.enemyArenaDice) then
-        parkEnemyDice(nil, uiState)
-        uiState.enemyThrowResolvedForRound = state.round
+    if #uiState.enemyPendingDice == 0 then
+        if areDiceSettled(nil, uiState.enemyArenaDice) then
+            uiState.enemySettleTimer = uiState.enemySettleTimer + dt
+            if uiState.enemySettleTimer >= uiState.enemySettleDelay then
+                parkEnemyDice(nil, uiState)
+                uiState.enemyThrowResolvedForRound = state.round
+            end
+        else
+            uiState.enemySettleTimer = 0
+        end
     end
 end
-function ____exports.fastForwardCombatUi(self, uiState, state)
-    if #uiState.pendingPlayerDieIds > 0 then
-        settleAllPendingPlayerDice(nil, uiState)
-        return
+local function executePlayerThrow(self, uiState, state, dragged, startX, startY, x, y)
+    if not dragged.combatDieId then
+        return false
     end
+    if __TS__ArrayIncludes(uiState.rolledPlayerDieIds, dragged.combatDieId) or not ____exports.canPlayerThrow(nil, uiState, state) or not isInsideArena(nil, uiState, x, y) then
+        dragged.state = "parked"
+        if dragged.parkX ~= nil and dragged.parkY ~= nil then
+            dragged.x = dragged.parkX
+            dragged.y = dragged.parkY
+        end
+        return false
+    end
+    dragged.state = "arena"
+    dragged.x = x
+    dragged.y = y
+    local dragDx = x - startX
+    local dragDy = y - startY
+    local dragDistance = math.sqrt(dragDx * dragDx + dragDy * dragDy)
+    local baseScale = 3.6
+    local minHorizontal = 26 + math.min(42, dragDistance * 0.18)
+    local minVerticalLift = 90 + math.min(120, dragDistance * 0.42)
+    local launchVx = dragDx * baseScale
+    local launchVy = dragDy * baseScale
+    if math.abs(launchVx) < minHorizontal then
+        local horizontalDirection = dragDx == 0 and (math.random() < 0.5 and -1 or 1) or __TS__MathSign(dragDx)
+        launchVx = horizontalDirection * minHorizontal
+    end
+    if launchVy > -minVerticalLift then
+        launchVy = -minVerticalLift
+    end
+    dragged.vx = launchVx
+    dragged.vy = launchVy
+    dragged.spin = (dragged.vx - dragged.vy) * 0.01
+    dragged.angle = 0
+    if not __TS__ArrayFind(
+        uiState.arenaPlayerDice,
+        function(____, entry) return entry.id == dragged.id end
+    ) then
+        local ____uiState_arenaPlayerDice_14 = uiState.arenaPlayerDice
+        ____uiState_arenaPlayerDice_14[#____uiState_arenaPlayerDice_14 + 1] = dragged
+    end
+    local ____uiState_rolledPlayerDieIds_15 = uiState.rolledPlayerDieIds
+    ____uiState_rolledPlayerDieIds_15[#____uiState_rolledPlayerDieIds_15 + 1] = dragged.combatDieId
+    if not __TS__ArrayIncludes(uiState.pendingPlayerDieIds, dragged.combatDieId) then
+        local ____uiState_pendingPlayerDieIds_16 = uiState.pendingPlayerDieIds
+        ____uiState_pendingPlayerDieIds_16[#____uiState_pendingPlayerDieIds_16 + 1] = dragged.combatDieId
+    end
+    return true
+end
+function ____exports.fastForwardCombatUi(self, uiState, state)
     if uiState.pendingRound == state.round then
         finalizeRoundTransition(nil, uiState, state)
+        return
+    end
+    if state.phase == "player-turn" then
+        if #uiState.pendingPlayerDieIds > 0 then
+            settleAllPendingPlayerDice(nil, uiState)
+        end
+        if canAdvancePlayerTurn(nil, uiState, state) then
+            commitReadyPlayerDice(nil, uiState)
+        end
+        return
+    end
+    if #uiState.pendingPlayerDieIds > 0 then
+        settleAllPendingPlayerDice(nil, uiState)
         return
     end
     if state.phase ~= "enemy-turn" then
@@ -653,7 +775,31 @@ function ____exports.updateCombatUiState(self, uiState, state, dt)
         end
     end
     updateEnemyPresentation(nil, uiState, state, dt)
+    if uiState.queuedPlayerThrow and uiState.pendingRound == state.round then
+        ____exports.fastForwardCombatUi(nil, uiState, state)
+    end
+    if uiState.queuedPlayerThrow and state.phase == "player-turn" and uiState.pendingRound == nil then
+        local queued = uiState.queuedPlayerThrow
+        local queuedDie = __TS__ArrayFind(
+            uiState.playerDice,
+            function(____, die) return die.id == queued.dieId end
+        )
+        if queuedDie then
+            executePlayerThrow(
+                nil,
+                uiState,
+                state,
+                queuedDie,
+                queued.startX,
+                queued.startY,
+                queued.dropX,
+                queued.dropY
+            )
+        end
+        uiState.queuedPlayerThrow = nil
+    end
     updateArenaDice(nil, uiState, dt)
+    updateEnemyParkingTransitions(nil, uiState, dt)
     updateRollingFaceLabels(nil, uiState, state, dt)
     updateDieFlashes(nil, uiState, dt)
     updateFloatingPopups(nil, uiState, dt)
@@ -667,6 +813,30 @@ function ____exports.drainSettledPlayerDieIds(self, uiState)
     uiState.settledPlayerDieIds = {}
     return settled
 end
+local function getTurnButtonRect(self, layout)
+    local width = 148
+    local height = 36
+    return {x = layout.poolX + layout.poolWidth - width - 14, y = layout.poolY - height - 12, width = width, height = height}
+end
+local function getTurnButtonState(self, uiState, state)
+    if state.phase == "resolved" then
+        return {visible = false, enabled = false, label = ""}
+    end
+    if uiState.pendingRound ~= nil then
+        return {visible = true, enabled = true, label = "Continue"}
+    end
+    if state.phase == "enemy-turn" then
+        return {visible = true, enabled = true, label = "Skip Enemy"}
+    end
+    if state.phase == "player-turn" then
+        return {
+            visible = true,
+            enabled = canAdvancePlayerTurn(nil, uiState, state),
+            label = "Next Turn"
+        }
+    end
+    return {visible = false, enabled = false, label = ""}
+end
 function ____exports.drainSettledEnemyDieIds(self, uiState)
     if #uiState.settledEnemyDieIds == 0 then
         return {}
@@ -676,25 +846,25 @@ function ____exports.drainSettledEnemyDieIds(self, uiState)
     return settled
 end
 local function findVisualDieByCombatId(self, uiState, dieId)
-    local ____array_13 = __TS__SparseArrayNew(unpack(uiState.playerDice))
+    local ____array_17 = __TS__SparseArrayNew(unpack(uiState.playerDice))
     __TS__SparseArrayPush(
-        ____array_13,
+        ____array_17,
         unpack(uiState.arenaPlayerDice)
     )
     __TS__SparseArrayPush(
-        ____array_13,
+        ____array_17,
         unpack(uiState.enemyArenaDice)
     )
     __TS__SparseArrayPush(
-        ____array_13,
+        ____array_17,
         unpack(uiState.enemyParkedDice)
     )
     __TS__SparseArrayPush(
-        ____array_13,
+        ____array_17,
         unpack(uiState.enemyPendingDice)
     )
     return __TS__ArrayFind(
-        {__TS__SparseArraySpread(____array_13)},
+        {__TS__SparseArraySpread(____array_17)},
         function(____, die) return die.combatDieId == dieId end
     )
 end
@@ -703,15 +873,15 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
         do
             local die = findVisualDieByCombatId(nil, uiState, popup.dieId)
             if not die then
-                goto __continue125
+                goto __continue161
             end
             die.flashTimer = RESOLVE_FLASH_DURATION
             if popup.sideLabel ~= nil then
                 die.label = popup.sideLabel
             end
             lockVisualDieFace(nil, die)
-            local ____uiState_floatingPopups_14 = uiState.floatingPopups
-            ____uiState_floatingPopups_14[#____uiState_floatingPopups_14 + 1] = {
+            local ____uiState_floatingPopups_18 = uiState.floatingPopups
+            ____uiState_floatingPopups_18[#____uiState_floatingPopups_18 + 1] = {
                 x = die.x,
                 y = die.y - die.size * 0.72,
                 text = popup.text,
@@ -719,11 +889,8 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                 timer = POPUP_DURATION
             }
         end
-        ::__continue125::
+        ::__continue161::
     end
-end
-function ____exports.canPlayerThrow(self, uiState, state)
-    return state.phase == "player-turn" and uiState.pendingRound == nil
 end
 local function isPointInsideRect(self, x, y, rect)
     return x >= rect.x and x <= rect.x + rect.width and y >= rect.y and y <= rect.y + rect.height
@@ -895,8 +1062,8 @@ local function drawDieInspector(self, uiState, state)
         8,
         8
     )
-    local ____opt_18 = uiState.inspector
-    local ownerLabel = (____opt_18 and ____opt_18.owner) == "player" and "Ally" or "Enemy"
+    local ____opt_22 = uiState.inspector
+    local ownerLabel = (____opt_22 and ____opt_22.owner) == "player" and "Ally" or "Enemy"
     love.graphics.setColor(1, 1, 1)
     love.graphics.print((ownerLabel .. " Die: ") .. die.name, panel.x + 20, panel.y + 14)
     love.graphics.setColor(0.78, 0.83, 0.9)
@@ -956,13 +1123,13 @@ local function drawDieInspector(self, uiState, state)
         6,
         6
     )
-    local ____opt_20 = uiState.inspector
-    local ____temp_24 = ____opt_20 and ____opt_20.hoveredSideIndex
-    if ____temp_24 == nil then
-        local ____opt_22 = uiState.inspector
-        ____temp_24 = ____opt_22 and ____opt_22.selectedSideIndex
+    local ____opt_24 = uiState.inspector
+    local ____temp_28 = ____opt_24 and ____opt_24.hoveredSideIndex
+    if ____temp_28 == nil then
+        local ____opt_26 = uiState.inspector
+        ____temp_28 = ____opt_26 and ____opt_26.selectedSideIndex
     end
-    local activeSideIndex = ____temp_24
+    local activeSideIndex = ____temp_28
     for ____, tile in ipairs(layout.tiles) do
         local side = die.sides[tile.sideIndex + 1]
         local label = layout.denseMode and tostring(tile.sideIndex + 1) or side.label
@@ -1082,6 +1249,14 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
     if button ~= 1 then
         return
     end
+    local turnButton = getTurnButtonState(nil, uiState, state)
+    if turnButton.visible and turnButton.enabled then
+        local turnButtonRect = getTurnButtonRect(nil, uiState.layout)
+        if isPointInsideRect(nil, x, y, turnButtonRect) then
+            ____exports.fastForwardCombatUi(nil, uiState, state)
+            return
+        end
+    end
     if uiState.inspector then
         local die = getDieFromInspector(nil, uiState, state)
         if not die then
@@ -1115,12 +1290,12 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
     for ____, die in ipairs(uiState.playerDice) do
         do
             if die.state == "arena" then
-                goto __continue175
+                goto __continue213
             end
             local half = die.size / 2
             local inside = x >= die.x - half and x <= die.x + half and y >= die.y - half and y <= die.y + half
             if not inside then
-                goto __continue175
+                goto __continue213
             end
             die.state = "dragging"
             die.x = x
@@ -1136,7 +1311,7 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
             }
             return
         end
-        ::__continue175::
+        ::__continue213::
     end
 end
 function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
@@ -1161,9 +1336,9 @@ function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
     local dragged = __TS__ArrayFind(
         uiState.playerDice,
         function(____, die)
-            local ____die_id_27 = die.id
-            local ____opt_25 = uiState.drag
-            return ____die_id_27 == (____opt_25 and ____opt_25.dieId)
+            local ____die_id_31 = die.id
+            local ____opt_29 = uiState.drag
+            return ____die_id_31 == (____opt_29 and ____opt_29.dieId)
         end
     )
     if not dragged then
@@ -1195,6 +1370,22 @@ function ____exports.onCombatMouseReleased(self, uiState, state, x, y, button)
         return
     end
     if drag.skipOnRelease then
+        if isInsideArena(nil, uiState, x, y) and state.phase == "enemy-turn" then
+            dragged.state = "parked"
+            if dragged.parkX ~= nil and dragged.parkY ~= nil then
+                dragged.x = dragged.parkX
+                dragged.y = dragged.parkY
+            end
+            uiState.queuedPlayerThrow = {
+                dieId = dragged.id,
+                dropX = x,
+                dropY = y,
+                startX = drag.startX,
+                startY = drag.startY
+            }
+            ____exports.fastForwardCombatUi(nil, uiState, state)
+            return
+        end
         dragged.state = "parked"
         if dragged.parkX ~= nil and dragged.parkY ~= nil then
             dragged.x = dragged.parkX
@@ -1205,49 +1396,16 @@ function ____exports.onCombatMouseReleased(self, uiState, state, x, y, button)
         end
         return
     end
-    if __TS__ArrayIncludes(uiState.rolledPlayerDieIds, dragged.combatDieId) or not ____exports.canPlayerThrow(nil, uiState, state) or not isInsideArena(nil, uiState, x, y) then
-        dragged.state = "parked"
-        if dragged.parkX ~= nil and dragged.parkY ~= nil then
-            dragged.x = dragged.parkX
-            dragged.y = dragged.parkY
-        end
-        return
-    end
-    dragged.state = "arena"
-    dragged.x = x
-    dragged.y = y
-    local dragDx = x - drag.startX
-    local dragDy = y - drag.startY
-    local dragDistance = math.sqrt(dragDx * dragDx + dragDy * dragDy)
-    local baseScale = 3.6
-    local minHorizontal = 26 + math.min(42, dragDistance * 0.18)
-    local minVerticalLift = 90 + math.min(120, dragDistance * 0.42)
-    local launchVx = dragDx * baseScale
-    local launchVy = dragDy * baseScale
-    if math.abs(launchVx) < minHorizontal then
-        local horizontalDirection = dragDx == 0 and (math.random() < 0.5 and -1 or 1) or __TS__MathSign(dragDx)
-        launchVx = horizontalDirection * minHorizontal
-    end
-    if launchVy > -minVerticalLift then
-        launchVy = -minVerticalLift
-    end
-    dragged.vx = launchVx
-    dragged.vy = launchVy
-    dragged.spin = (dragged.vx - dragged.vy) * 0.01
-    dragged.angle = 0
-    if not __TS__ArrayFind(
-        uiState.arenaPlayerDice,
-        function(____, entry) return entry.id == dragged.id end
-    ) then
-        local ____uiState_arenaPlayerDice_28 = uiState.arenaPlayerDice
-        ____uiState_arenaPlayerDice_28[#____uiState_arenaPlayerDice_28 + 1] = dragged
-    end
-    local ____uiState_rolledPlayerDieIds_29 = uiState.rolledPlayerDieIds
-    ____uiState_rolledPlayerDieIds_29[#____uiState_rolledPlayerDieIds_29 + 1] = dragged.combatDieId
-    if not __TS__ArrayIncludes(uiState.pendingPlayerDieIds, dragged.combatDieId) then
-        local ____uiState_pendingPlayerDieIds_30 = uiState.pendingPlayerDieIds
-        ____uiState_pendingPlayerDieIds_30[#____uiState_pendingPlayerDieIds_30 + 1] = dragged.combatDieId
-    end
+    executePlayerThrow(
+        nil,
+        uiState,
+        state,
+        dragged,
+        drag.startX,
+        drag.startY,
+        x,
+        y
+    )
 end
 local function drawHpBar(self, x, y, width, height, ratio)
     love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b)
@@ -1506,6 +1664,49 @@ function ____exports.drawCombatUi(self, uiState, state)
         layout.poolHeight
     )
     love.graphics.print("Dice Pool", layout.poolX + layout.poolWidth * 0.5 - 40, layout.poolY - 34)
+    local turnButton = getTurnButtonState(nil, uiState, state)
+    if turnButton.visible then
+        local buttonRect = getTurnButtonRect(nil, layout)
+        if turnButton.enabled then
+            love.graphics.setColor(0.22, 0.5, 0.31, 0.95)
+        else
+            love.graphics.setColor(0.24, 0.24, 0.24, 0.8)
+        end
+        love.graphics.rectangle(
+            "fill",
+            buttonRect.x,
+            buttonRect.y,
+            buttonRect.width,
+            buttonRect.height,
+            5,
+            5
+        )
+        if turnButton.enabled then
+            love.graphics.setColor(0.8, 0.95, 0.86, 1)
+        else
+            love.graphics.setColor(0.72, 0.72, 0.72, 0.92)
+        end
+        love.graphics.rectangle(
+            "line",
+            buttonRect.x,
+            buttonRect.y,
+            buttonRect.width,
+            buttonRect.height,
+            5,
+            5
+        )
+        love.graphics.setColor(1, 1, 1, turnButton.enabled and 0.98 or 0.84)
+        love.graphics.printf(
+            turnButton.label,
+            buttonRect.x,
+            buttonRect.y + 11,
+            buttonRect.width,
+            "center",
+            0,
+            0.78,
+            0.78
+        )
+    end
     for ____, die in ipairs(uiState.enemyArenaDice) do
         drawDie(nil, die)
     end
@@ -1534,6 +1735,14 @@ function ____exports.drawCombatUi(self, uiState, state)
         love.graphics.print("Press Space to continue", layout.poolX + layout.poolWidth - 240, layout.poolY + 14)
     elseif uiState.pendingRound ~= nil then
         love.graphics.print("Gathering dice for next round... (Space to skip)", layout.poolX + layout.poolWidth - 360, layout.poolY + 14)
+    elseif state.phase == "player-turn" and not canAdvancePlayerTurn(nil, uiState, state) then
+        local thrown = #uiState.rolledPlayerDieIds
+        local total = #state.player.dice
+        love.graphics.print(
+            ((("Roll and settle dice (" .. tostring(thrown)) .. "/") .. tostring(total)) .. ") then press Next Turn or Space",
+            layout.poolX + 14,
+            layout.poolY + 14
+        )
     elseif ____exports.canPlayerThrow(nil, uiState, state) then
         love.graphics.print("Right-click die to inspect, left-drag into arena to throw", layout.poolX + layout.poolWidth - 420, layout.poolY + 14)
     else

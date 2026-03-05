@@ -36,11 +36,16 @@ type VisualDie = {
   angle: number;
   spin: number;
   size: number;
-  state: "arena" | "dragging" | "parked";
+  state: "arena" | "dragging" | "parking" | "parked";
   slotIndex?: number;
   parkX?: number;
   parkY?: number;
   parkSize?: number;
+  parkStartX?: number;
+  parkStartY?: number;
+  parkStartSize?: number;
+  parkProgress?: number;
+  parkDuration?: number;
   flashTimer?: number;
 };
 
@@ -52,6 +57,14 @@ type DragState = {
   lastY: number;
   lastDt: number;
   skipOnRelease: boolean;
+};
+
+type QueuedPlayerThrow = {
+  dieId: string;
+  dropX: number;
+  dropY: number;
+  startX: number;
+  startY: number;
 };
 
 type DiceInspectorState = {
@@ -109,9 +122,11 @@ export type CombatUiState = {
   enemyThrowResolvedForRound: number;
   rolledPlayerDieIds: string[];
   pendingPlayerDieIds: string[];
+  readyPlayerDieIds: string[];
   settledPlayerDieIds: string[];
   settledEnemyDieIds: string[];
   floatingPopups: FloatingResolutionPopup[];
+  queuedPlayerThrow?: QueuedPlayerThrow;
   inspector?: DiceInspectorState;
 };
 
@@ -421,6 +436,48 @@ function updateRollingFaceLabels(uiState: CombatUiState, state: CombatEncounterS
   }
 }
 
+function updateEnemyParkingTransitions(uiState: CombatUiState, dt: number): void {
+  for (const die of uiState.enemyParkedDice) {
+    if (die.state !== "parking") {
+      continue;
+    }
+
+    if (
+      die.parkX === undefined ||
+      die.parkY === undefined ||
+      die.parkStartX === undefined ||
+      die.parkStartY === undefined
+    ) {
+      die.state = "parked";
+      continue;
+    }
+
+    const duration = Math.max(0.05, die.parkDuration ?? 0.3);
+    const progress = Math.min(1, (die.parkProgress ?? 0) + dt / duration);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const startSize = die.parkStartSize ?? die.size;
+    const targetSize = die.parkSize ?? die.size;
+
+    die.parkProgress = progress;
+    die.x = die.parkStartX + (die.parkX - die.parkStartX) * eased;
+    die.y = die.parkStartY + (die.parkY - die.parkStartY) * eased;
+    die.size = startSize + (targetSize - startSize) * eased;
+
+    if (progress >= 1) {
+      die.state = "parked";
+      die.x = die.parkX;
+      die.y = die.parkY;
+      die.size = targetSize;
+      die.flashTimer = RESOLVE_FLASH_DURATION;
+      die.parkStartX = undefined;
+      die.parkStartY = undefined;
+      die.parkStartSize = undefined;
+      die.parkProgress = undefined;
+      die.parkDuration = undefined;
+    }
+  }
+}
+
 function updateDieFlashes(uiState: CombatUiState, dt: number): void {
   const allDice = [...uiState.playerDice, ...uiState.enemyArenaDice, ...uiState.enemyPendingDice, ...uiState.enemyParkedDice];
   for (const die of allDice) {
@@ -473,10 +530,6 @@ function settleEnemyArenaDice(uiState: CombatUiState): void {
       die.flashTimer = RESOLVE_FLASH_DURATION;
     }
     lockVisualDieFace(die);
-
-    if (die.combatDieId) {
-      queueSettledEnemyDieId(uiState, die.combatDieId);
-    }
   }
 }
 
@@ -486,15 +539,17 @@ function parkEnemyDice(uiState: CombatUiState): void {
       continue;
     }
 
-    die.state = "parked";
+    die.state = "parking";
     die.vx = 0;
     die.vy = 0;
     die.spin = 0;
     die.angle = 0;
-    die.size = die.parkSize ?? die.size;
-    die.x = die.parkX;
-    die.y = die.parkY;
-    die.flashTimer = RESOLVE_FLASH_DURATION;
+    die.parkStartX = die.x;
+    die.parkStartY = die.y;
+    die.parkStartSize = die.size;
+    die.parkProgress = 0;
+    die.parkDuration = 0.32 + Math.random() * 0.16;
+    die.flashTimer = undefined;
     lockVisualDieFace(die);
     uiState.enemyParkedDice.push(die);
     if (die.combatDieId) {
@@ -507,15 +562,17 @@ function parkEnemyDice(uiState: CombatUiState): void {
       continue;
     }
 
-    die.state = "parked";
+    die.state = "parking";
     die.vx = 0;
     die.vy = 0;
     die.spin = 0;
     die.angle = 0;
-    die.size = die.parkSize ?? die.size;
-    die.x = die.parkX;
-    die.y = die.parkY;
-    die.flashTimer = RESOLVE_FLASH_DURATION;
+    die.parkStartX = die.x;
+    die.parkStartY = die.y;
+    die.parkStartSize = die.size;
+    die.parkProgress = 0;
+    die.parkDuration = 0.32 + Math.random() * 0.16;
+    die.flashTimer = undefined;
     lockVisualDieFace(die);
     uiState.enemyParkedDice.push(die);
     if (die.combatDieId) {
@@ -567,9 +624,11 @@ export function createCombatUiState(state: CombatEncounterState): CombatUiState 
     enemyThrowResolvedForRound: 0,
     rolledPlayerDieIds: [],
     pendingPlayerDieIds: [],
+    readyPlayerDieIds: [],
     settledPlayerDieIds: [],
     settledEnemyDieIds: [],
     floatingPopups: [],
+    queuedPlayerThrow: undefined,
     inspector: undefined,
   };
 
@@ -587,6 +646,7 @@ function finalizeRoundTransition(uiState: CombatUiState, state: CombatEncounterS
   uiState.arenaPlayerDice = [];
   uiState.rolledPlayerDieIds = [];
   uiState.pendingPlayerDieIds = [];
+  uiState.readyPlayerDieIds = [];
   uiState.settledPlayerDieIds = [];
   uiState.settledEnemyDieIds = [];
 
@@ -647,8 +707,8 @@ function enqueueSettledPlayerDice(uiState: CombatUiState): void {
     visualDie.spin = 0;
     visualDie.flashTimer = RESOLVE_FLASH_DURATION;
 
-    if (!uiState.settledPlayerDieIds.includes(dieId)) {
-      uiState.settledPlayerDieIds.push(dieId);
+    if (!uiState.readyPlayerDieIds.includes(dieId)) {
+      uiState.readyPlayerDieIds.push(dieId);
     }
   }
 
@@ -664,12 +724,34 @@ function settleAllPendingPlayerDice(uiState: CombatUiState): void {
       visualDie.spin = 0;
     }
 
+    if (!uiState.readyPlayerDieIds.includes(dieId)) {
+      uiState.readyPlayerDieIds.push(dieId);
+    }
+  }
+
+  uiState.pendingPlayerDieIds = [];
+}
+
+function commitReadyPlayerDice(uiState: CombatUiState): void {
+  for (const dieId of uiState.readyPlayerDieIds) {
     if (!uiState.settledPlayerDieIds.includes(dieId)) {
       uiState.settledPlayerDieIds.push(dieId);
     }
   }
 
-  uiState.pendingPlayerDieIds = [];
+  uiState.readyPlayerDieIds = [];
+}
+
+function canAdvancePlayerTurn(uiState: CombatUiState, state: CombatEncounterState): boolean {
+  if (state.phase !== "player-turn" || uiState.pendingRound !== undefined) {
+    return false;
+  }
+
+  return (
+    uiState.rolledPlayerDieIds.length === state.player.dice.length &&
+    uiState.pendingPlayerDieIds.length === 0 &&
+    uiState.readyPlayerDieIds.length > 0
+  );
 }
 
 function updateEnemyPresentation(uiState: CombatUiState, state: CombatEncounterState, dt: number): void {
@@ -715,20 +797,106 @@ function updateEnemyPresentation(uiState: CombatUiState, state: CombatEncounterS
 
   settleEnemyArenaDice(uiState);
 
-  if (uiState.enemyPendingDice.length === 0 && areDiceSettled(uiState.enemyArenaDice)) {
-    parkEnemyDice(uiState);
-    uiState.enemyThrowResolvedForRound = state.round;
+  if (uiState.enemyPendingDice.length === 0) {
+    if (areDiceSettled(uiState.enemyArenaDice)) {
+      uiState.enemySettleTimer += dt;
+      if (uiState.enemySettleTimer >= uiState.enemySettleDelay) {
+        parkEnemyDice(uiState);
+        uiState.enemyThrowResolvedForRound = state.round;
+      }
+    } else {
+      uiState.enemySettleTimer = 0;
+    }
   }
 }
 
+function executePlayerThrow(
+  uiState: CombatUiState,
+  state: CombatEncounterState,
+  dragged: VisualDie,
+  startX: number,
+  startY: number,
+  x: number,
+  y: number,
+): boolean {
+  if (!dragged.combatDieId) {
+    return false;
+  }
+
+  if (
+    uiState.rolledPlayerDieIds.includes(dragged.combatDieId) ||
+    !canPlayerThrow(uiState, state) ||
+    !isInsideArena(uiState, x, y)
+  ) {
+    dragged.state = "parked";
+    if (dragged.parkX !== undefined && dragged.parkY !== undefined) {
+      dragged.x = dragged.parkX;
+      dragged.y = dragged.parkY;
+    }
+    return false;
+  }
+
+  dragged.state = "arena";
+  dragged.x = x;
+  dragged.y = y;
+
+  const dragDx = x - startX;
+  const dragDy = y - startY;
+  const dragDistance = Math.sqrt(dragDx * dragDx + dragDy * dragDy);
+  const baseScale = 3.6;
+  const minHorizontal = 26 + Math.min(42, dragDistance * 0.18);
+  const minVerticalLift = 90 + Math.min(120, dragDistance * 0.42);
+
+  let launchVx = dragDx * baseScale;
+  let launchVy = dragDy * baseScale;
+
+  if (Math.abs(launchVx) < minHorizontal) {
+    const horizontalDirection = dragDx === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(dragDx);
+    launchVx = horizontalDirection * minHorizontal;
+  }
+
+  // Keep an upward impulse even for short drags, but scale by drag distance.
+  if (launchVy > -minVerticalLift) {
+    launchVy = -minVerticalLift;
+  }
+
+  dragged.vx = launchVx;
+  dragged.vy = launchVy;
+  dragged.spin = (dragged.vx - dragged.vy) * 0.01;
+  dragged.angle = 0;
+
+  if (!uiState.arenaPlayerDice.find((entry) => entry.id === dragged.id)) {
+    uiState.arenaPlayerDice.push(dragged);
+  }
+
+  uiState.rolledPlayerDieIds.push(dragged.combatDieId);
+  if (!uiState.pendingPlayerDieIds.includes(dragged.combatDieId)) {
+    uiState.pendingPlayerDieIds.push(dragged.combatDieId);
+  }
+
+  return true;
+}
+
 export function fastForwardCombatUi(uiState: CombatUiState, state: CombatEncounterState): void {
-  if (uiState.pendingPlayerDieIds.length > 0) {
-    settleAllPendingPlayerDice(uiState);
+  if (uiState.pendingRound === state.round) {
+    finalizeRoundTransition(uiState, state);
     return;
   }
 
-  if (uiState.pendingRound === state.round) {
-    finalizeRoundTransition(uiState, state);
+  if (state.phase === "player-turn") {
+    if (uiState.pendingPlayerDieIds.length > 0) {
+      settleAllPendingPlayerDice(uiState);
+    }
+
+    if (canAdvancePlayerTurn(uiState, state)) {
+      commitReadyPlayerDice(uiState);
+    }
+
+    return;
+  }
+
+  if (uiState.pendingPlayerDieIds.length > 0) {
+    settleAllPendingPlayerDice(uiState);
     return;
   }
 
@@ -772,7 +940,25 @@ export function updateCombatUiState(uiState: CombatUiState, state: CombatEncount
 
   updateEnemyPresentation(uiState, state, dt);
 
+  if (uiState.queuedPlayerThrow && uiState.pendingRound === state.round) {
+    fastForwardCombatUi(uiState, state);
+  }
+
+  if (
+    uiState.queuedPlayerThrow &&
+    state.phase === "player-turn" &&
+    uiState.pendingRound === undefined
+  ) {
+    const queued = uiState.queuedPlayerThrow;
+    const queuedDie = uiState.playerDice.find((die) => die.id === queued.dieId);
+    if (queuedDie) {
+      executePlayerThrow(uiState, state, queuedDie, queued.startX, queued.startY, queued.dropX, queued.dropY);
+    }
+    uiState.queuedPlayerThrow = undefined;
+  }
+
   updateArenaDice(uiState, dt);
+  updateEnemyParkingTransitions(uiState, dt);
   updateRollingFaceLabels(uiState, state, dt);
   updateDieFlashes(uiState, dt);
   updateFloatingPopups(uiState, dt);
@@ -787,6 +973,47 @@ export function drainSettledPlayerDieIds(uiState: CombatUiState): string[] {
   const settled = [...uiState.settledPlayerDieIds];
   uiState.settledPlayerDieIds = [];
   return settled;
+}
+
+type TurnButtonState = {
+  visible: boolean;
+  enabled: boolean;
+  label: string;
+};
+
+function getTurnButtonRect(layout: Layout): Rect {
+  const width = 148;
+  const height = 36;
+  return {
+    x: layout.poolX + layout.poolWidth - width - 14,
+    y: layout.poolY - height - 12,
+    width,
+    height,
+  };
+}
+
+function getTurnButtonState(uiState: CombatUiState, state: CombatEncounterState): TurnButtonState {
+  if (state.phase === "resolved") {
+    return { visible: false, enabled: false, label: "" };
+  }
+
+  if (uiState.pendingRound !== undefined) {
+    return { visible: true, enabled: true, label: "Continue" };
+  }
+
+  if (state.phase === "enemy-turn") {
+    return { visible: true, enabled: true, label: "Skip Enemy" };
+  }
+
+  if (state.phase === "player-turn") {
+    return {
+      visible: true,
+      enabled: canAdvancePlayerTurn(uiState, state),
+      label: "Next Turn",
+    };
+  }
+
+  return { visible: false, enabled: false, label: "" };
 }
 
 export function drainSettledEnemyDieIds(uiState: CombatUiState): string[] {
@@ -1125,6 +1352,15 @@ export function onCombatMousePressed(
     return;
   }
 
+  const turnButton = getTurnButtonState(uiState, state);
+  if (turnButton.visible && turnButton.enabled) {
+    const turnButtonRect = getTurnButtonRect(uiState.layout);
+    if (isPointInsideRect(x, y, turnButtonRect)) {
+      fastForwardCombatUi(uiState, state);
+      return;
+    }
+  }
+
   if (uiState.inspector) {
     const die = getDieFromInspector(uiState, state);
     if (!die) {
@@ -1235,6 +1471,24 @@ export function onCombatMouseReleased(
   }
 
   if (drag.skipOnRelease) {
+    if (isInsideArena(uiState, x, y) && state.phase === "enemy-turn") {
+      dragged.state = "parked";
+      if (dragged.parkX !== undefined && dragged.parkY !== undefined) {
+        dragged.x = dragged.parkX;
+        dragged.y = dragged.parkY;
+      }
+
+      uiState.queuedPlayerThrow = {
+        dieId: dragged.id,
+        dropX: x,
+        dropY: y,
+        startX: drag.startX,
+        startY: drag.startY,
+      };
+      fastForwardCombatUi(uiState, state);
+      return;
+    }
+
     dragged.state = "parked";
     if (dragged.parkX !== undefined && dragged.parkY !== undefined) {
       dragged.x = dragged.parkX;
@@ -1248,56 +1502,7 @@ export function onCombatMouseReleased(
     return;
   }
 
-  if (
-    uiState.rolledPlayerDieIds.includes(dragged.combatDieId) ||
-    !canPlayerThrow(uiState, state) ||
-    !isInsideArena(uiState, x, y)
-  ) {
-    dragged.state = "parked";
-    if (dragged.parkX !== undefined && dragged.parkY !== undefined) {
-      dragged.x = dragged.parkX;
-      dragged.y = dragged.parkY;
-    }
-    return;
-  }
-
-  dragged.state = "arena";
-  dragged.x = x;
-  dragged.y = y;
-
-  const dragDx = x - drag.startX;
-  const dragDy = y - drag.startY;
-  const dragDistance = Math.sqrt(dragDx * dragDx + dragDy * dragDy);
-  const baseScale = 3.6;
-  const minHorizontal = 26 + Math.min(42, dragDistance * 0.18);
-  const minVerticalLift = 90 + Math.min(120, dragDistance * 0.42);
-
-  let launchVx = dragDx * baseScale;
-  let launchVy = dragDy * baseScale;
-
-  if (Math.abs(launchVx) < minHorizontal) {
-    const horizontalDirection = dragDx === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(dragDx);
-    launchVx = horizontalDirection * minHorizontal;
-  }
-
-  // Keep an upward impulse even for short drags, but scale by drag distance.
-  if (launchVy > -minVerticalLift) {
-    launchVy = -minVerticalLift;
-  }
-
-  dragged.vx = launchVx;
-  dragged.vy = launchVy;
-  dragged.spin = (dragged.vx - dragged.vy) * 0.01;
-  dragged.angle = 0;
-
-  if (!uiState.arenaPlayerDice.find((entry) => entry.id === dragged.id)) {
-    uiState.arenaPlayerDice.push(dragged);
-  }
-
-  uiState.rolledPlayerDieIds.push(dragged.combatDieId);
-  if (!uiState.pendingPlayerDieIds.includes(dragged.combatDieId)) {
-    uiState.pendingPlayerDieIds.push(dragged.combatDieId);
-  }
+  executePlayerThrow(uiState, state, dragged, drag.startX, drag.startY, x, y);
 }
 
 function drawHpBar(x: number, y: number, width: number, height: number, ratio: number): void {
@@ -1447,6 +1652,27 @@ export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState
   love.graphics.rectangle("line", layout.poolX, layout.poolY, layout.poolWidth, layout.poolHeight);
   love.graphics.print("Dice Pool", layout.poolX + layout.poolWidth * 0.5 - 40, layout.poolY - 34);
 
+  const turnButton = getTurnButtonState(uiState, state);
+  if (turnButton.visible) {
+    const buttonRect = getTurnButtonRect(layout);
+    if (turnButton.enabled) {
+      love.graphics.setColor(0.22, 0.5, 0.31, 0.95);
+    } else {
+      love.graphics.setColor(0.24, 0.24, 0.24, 0.8);
+    }
+    love.graphics.rectangle("fill", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height, 5, 5);
+
+    if (turnButton.enabled) {
+      love.graphics.setColor(0.8, 0.95, 0.86, 1);
+    } else {
+      love.graphics.setColor(0.72, 0.72, 0.72, 0.92);
+    }
+    love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height, 5, 5);
+
+    love.graphics.setColor(1, 1, 1, turnButton.enabled ? 0.98 : 0.84);
+    love.graphics.printf(turnButton.label, buttonRect.x, buttonRect.y + 11, buttonRect.width, "center", 0, 0.78, 0.78);
+  }
+
   for (const die of uiState.enemyArenaDice) {
     drawDie(die);
   }
@@ -1477,6 +1703,10 @@ export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState
     love.graphics.print("Press Space to continue", layout.poolX + layout.poolWidth - 240, layout.poolY + 14);
   } else if (uiState.pendingRound !== undefined) {
     love.graphics.print("Gathering dice for next round... (Space to skip)", layout.poolX + layout.poolWidth - 360, layout.poolY + 14);
+  } else if (state.phase === "player-turn" && !canAdvancePlayerTurn(uiState, state)) {
+    const thrown = uiState.rolledPlayerDieIds.length;
+    const total = state.player.dice.length;
+    love.graphics.print(`Roll and settle dice (${thrown}/${total}) then press Next Turn or Space`, layout.poolX + 14, layout.poolY + 14);
   } else if (canPlayerThrow(uiState, state)) {
     love.graphics.print("Right-click die to inspect, left-drag into arena to throw", layout.poolX + layout.poolWidth - 420, layout.poolY + 14);
   } else {

@@ -278,11 +278,8 @@ export function createCombatEncounter(
 
 function startNextRound(state: CombatEncounterState, randomSource: RandomSource): void {
   state.round += 1;
-  state.phase = "player-turn";
   state.playerRollIndex = 0;
   state.rolledPlayerDieIds = [];
-  state.pendingEnemyDieIds = [];
-  state.resolvedEnemyDieIds = [];
   state.player.armor = 0;
   state.enemy.armor = 0;
   state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
@@ -291,10 +288,14 @@ function startNextRound(state: CombatEncounterState, randomSource: RandomSource)
   state.combatLog.push(
     `${state.enemy.name} prepares ${state.enemyIntent.pendingPlayerDamage} damage and ${state.enemyIntent.pendingEnemyHealing} healing.`,
   );
+
+  enterEnemyTurn(state);
 }
 
 function beginEnemyResolutionIfNeeded(
   state: CombatEncounterState,
+  eventBus: CombatEventBus,
+  randomSource: RandomSource,
 ): CombatEncounterState {
   if (state.rolledPlayerDieIds.length < state.player.dice.length) {
     return state;
@@ -306,7 +307,24 @@ function beginEnemyResolutionIfNeeded(
     return state;
   }
 
-  enterEnemyTurn(state);
+  for (const dieId of state.enemyIntent.dieOrder) {
+    if (!state.resolvedEnemyDieIds.includes(dieId)) {
+      continue;
+    }
+
+    const events = state.enemyIntent.eventsByDieId[dieId] ?? [];
+    resolveImmediateEvents(state, eventBus, events);
+  }
+
+  state.combatLog.push("Enemy intent resolves.");
+
+  if (state.player.hp <= 0) {
+    state.phase = "resolved";
+    state.combatLog.push("Player defeated.");
+    return state;
+  }
+
+  startNextRound(state, randomSource);
   return state;
 }
 
@@ -348,7 +366,7 @@ export function rollPlayerDie(
     return state;
   }
 
-  return beginEnemyResolutionIfNeeded(state);
+  return beginEnemyResolutionIfNeeded(state, eventBus, randomSource);
 }
 
 export function rollNextPlayerDie(
@@ -362,7 +380,7 @@ export function rollNextPlayerDie(
 
   const nextDie = state.player.dice.find((die) => !state.rolledPlayerDieIds.includes(die.id));
   if (!nextDie) {
-    return beginEnemyResolutionIfNeeded(state);
+    return beginEnemyResolutionIfNeeded(state, eventBus, randomSource);
   }
 
   return rollPlayerDie(state, eventBus, nextDie.id, randomSource);
@@ -387,12 +405,10 @@ export function resolveEnemyDie(
     return state;
   }
 
-  const events = state.enemyIntent.eventsByDieId[dieId] ?? [];
   const side = state.enemyIntent.sideByDieId[dieId];
   const sideLabel = side?.label ?? "No Effect";
 
   state.combatLog.push(`Enemy rolls ${die.name}: ${sideLabel}.`);
-  resolveImmediateEvents(state, eventBus, events);
   if (side !== undefined) {
     queueResolutionPopup(state, "enemy", die.id, side);
   }
@@ -402,17 +418,14 @@ export function resolveEnemyDie(
     state.resolvedEnemyDieIds.push(dieId);
   }
 
-  if (state.player.hp <= 0) {
-    state.phase = "resolved";
-    state.combatLog.push("Player defeated.");
-    return state;
-  }
-
   if (state.pendingEnemyDieIds.length > 0) {
     return state;
   }
 
-  startNextRound(state, randomSource);
+  state.phase = "player-turn";
+  state.playerRollIndex = 0;
+  state.rolledPlayerDieIds = [];
+  state.combatLog.push("Enemy intent revealed. Player turn begins.");
   return state;
 }
 

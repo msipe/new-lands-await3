@@ -61,7 +61,8 @@ describe("combat encounter", () => {
 
     resolveAllEnemyDice(encounter);
     expect(encounter.state.phase).toBe("player-turn");
-    expect(encounter.state.round).toBe(2);
+    expect(encounter.state.round).toBe(1);
+    expect(encounter.state.player.hp).toBe(20);
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
     expect(encounter.state.playerRollIndex).toBe(1);
@@ -74,12 +75,9 @@ describe("combat encounter", () => {
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
     expect(encounter.state.phase).toBe("enemy-turn");
-
-    resolveAllEnemyDice(encounter);
-    expect(encounter.state.phase).toBe("player-turn");
-    expect(encounter.state.round).toBe(3);
+    expect(encounter.state.round).toBe(2);
     expect(encounter.state.playerRollIndex).toBe(0);
-    expect(encounter.state.player.hp).toBe(15);
+    expect(encounter.state.player.hp).toBe(17);
     expect(encounter.state.enemy.hp).toBe(12);
   });
 
@@ -115,7 +113,7 @@ describe("combat encounter", () => {
     expect(encounter.state.phase).toBe("enemy-turn");
 
     resolveAllEnemyDice(encounter);
-    expect(encounter.state.round).toBe(3);
+    expect(encounter.state.round).toBe(2);
     expect(encounter.state.playerRollIndex).toBe(0);
     expect(encounter.state.phase).toBe("player-turn");
 
@@ -158,5 +156,25 @@ describe("combat encounter", () => {
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
 
     expect(encounter.state.player.hp).toBe(16);
+  });
+
+  it("reveals enemy intent first and applies it after player finishes rolling", () => {
+    const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+    expect(encounter.state.player.hp).toBe(20);
+
+    rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+    rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+
+    // Enemy intent should still be deferred while player is mid-turn.
+    expect(encounter.state.player.hp).toBe(20);
+
+    rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+
+    // Enemy intent resolves only after player finishes all rolls.
+    expect(encounter.state.player.hp).toBe(17);
+    expect(encounter.state.phase).toBe("enemy-turn");
   });
 });
