@@ -4,10 +4,9 @@ import {
   EffectType,
   type RandomSource,
   defaultRandomSource,
-  rollDie,
 } from "./dice";
 import { getDieConstructById } from "./dice-constructs";
-import { assertDieSideCount, createDieFromConstruct } from "./dice-factory";
+import { createDieFromConstruct } from "./dice-factory";
 
 type CombatActor = {
   id: string;
@@ -99,10 +98,6 @@ function createPlayerDice(): Die[] {
   const wardConstruct = getDieConstructById("ward-die");
   const mendConstruct = getDieConstructById("mend-die");
 
-  assertDieSideCount(sparkConstruct, 6);
-  assertDieSideCount(wardConstruct, 6);
-  assertDieSideCount(mendConstruct, 6);
-
   return [
     createDieFromConstruct({ construct: sparkConstruct, dieId: "player-die-1" }),
     createDieFromConstruct({ construct: wardConstruct, dieId: "player-die-2" }),
@@ -117,13 +112,6 @@ export function createStubEnemies(): EnemyStub[] {
   const hexBolt = getDieConstructById("hex-bolt");
   const knifeToss = getDieConstructById("knife-toss");
   const brewSip = getDieConstructById("brew-sip");
-
-  assertDieSideCount(slimeClaw, 6);
-  assertDieSideCount(slimeJab, 6);
-  assertDieSideCount(slimeOoze, 6);
-  assertDieSideCount(hexBolt, 6);
-  assertDieSideCount(knifeToss, 6);
-  assertDieSideCount(brewSip, 6);
 
   return [
     {
@@ -156,7 +144,7 @@ function buildEnemyIntent(
   const events: CombatEvent[] = [];
 
   for (const die of enemy.dice) {
-    const side = rollDie(die, randomSource);
+    const side = die.roll(randomSource);
     events.push(
       ...side.resolve({
         source: "enemy",
@@ -294,7 +282,7 @@ export function rollPlayerDie(
     return state;
   }
 
-  const side = rollDie(die, randomSource);
+  const side = die.roll(randomSource);
   const events = side.resolve({
     source: "player",
     cause: "player-roll",
