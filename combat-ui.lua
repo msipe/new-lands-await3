@@ -83,6 +83,7 @@ end
 local BACKGROUND = {r = 0.16, g = 0.16, b = 0.16}
 local WHITE = {r = 1, g = 1, b = 1}
 local GREEN = {r = 0.2, g = 0.72, b = 0.33}
+local GRAY = {r = 0.62, g = 0.64, b = 0.67}
 local BLACK = {r = 0, g = 0, b = 0}
 local RESOLVE_FLASH_DURATION = 0.26
 local POPUP_DURATION = 0.9
@@ -110,9 +111,40 @@ local function createLayout(self)
         poolHeight = 165
     }
 end
-local function makePoolPosition(self, layout, slotIndex)
-    local spacing = 140
-    return {x = layout.poolX + 70 + slotIndex * spacing, y = layout.poolY + 105}
+local function computePoolSlotLayout(self, layout, diceCount)
+    local count = math.max(1, diceCount)
+    local defaultSize = 54
+    local minSize = 38
+    local maxGap = 28
+    local minGap = 8
+    local horizontalPadding = 24
+    local availableWidth = math.max(120, layout.poolWidth - horizontalPadding * 2)
+    local size = defaultSize
+    local gap = maxGap
+    local totalWidth = size * count + gap * math.max(0, count - 1)
+    if totalWidth > availableWidth then
+        gap = minGap
+        totalWidth = size * count + gap * math.max(0, count - 1)
+    end
+    if totalWidth > availableWidth then
+        size = math.max(
+            minSize,
+            math.floor((availableWidth - gap * math.max(0, count - 1)) / count)
+        )
+        totalWidth = size * count + gap * math.max(0, count - 1)
+    end
+    if totalWidth > availableWidth and count > 1 then
+        gap = math.max(
+            2,
+            math.floor((availableWidth - size * count) / (count - 1))
+        )
+        totalWidth = size * count + gap * (count - 1)
+    end
+    return {size = size, gap = gap, startX = layout.poolX + (layout.poolWidth - totalWidth) * 0.5 + size * 0.5, y = layout.poolY + 105}
+end
+local function makePoolPosition(self, layout, slotIndex, diceCount)
+    local slotLayout = computePoolSlotLayout(nil, layout, diceCount)
+    return {x = slotLayout.startX + slotIndex * (slotLayout.size + slotLayout.gap), y = slotLayout.y}
 end
 local function getEnemyRolledSideLabel(self, state, dieId)
     local side = state.enemyIntent.sideByDieId[dieId]
@@ -176,10 +208,11 @@ local function ensurePlayerDice(self, uiState, state)
     if #uiState.playerDice > 0 and uiState.roundSeen == state.round then
         return
     end
+    local poolSlotLayout = computePoolSlotLayout(nil, uiState.layout, #state.player.dice)
     uiState.playerDice = __TS__ArrayMap(
         state.player.dice,
         function(____, die, index)
-            local position = makePoolPosition(nil, uiState.layout, index)
+            local position = makePoolPosition(nil, uiState.layout, index, #state.player.dice)
             return {
                 id = "player-pool-" .. die.id,
                 owner = "player",
@@ -196,7 +229,7 @@ local function ensurePlayerDice(self, uiState, state)
                 vy = 0,
                 angle = 0,
                 spin = 0,
-                size = 54,
+                size = poolSlotLayout.size,
                 state = "parked",
                 slotIndex = index,
                 parkX = position.x,
@@ -353,14 +386,14 @@ local function updateRollingFaceLabels(self, uiState, state, dt)
             if die.faceLocked or die.state ~= "arena" then
                 die.rollingLabel = nil
                 die.rollingFaceTimer = 0
-                goto __continue37
+                goto __continue41
             end
             if isDieSettled(nil, die) then
-                goto __continue37
+                goto __continue41
             end
             local labels = getDieSideLabels(nil, state, die)
             if #labels == 0 then
-                goto __continue37
+                goto __continue41
             end
             local speed = math.sqrt(die.vx * die.vx + die.vy * die.vy)
             local motion = speed + math.abs(die.spin) * 45
@@ -371,7 +404,7 @@ local function updateRollingFaceLabels(self, uiState, state, dt)
             local interval = FACE_ROLL_MAX_INTERVAL - (FACE_ROLL_MAX_INTERVAL - FACE_ROLL_MIN_INTERVAL) * normalizedMotion
             die.rollingFaceTimer = (die.rollingFaceTimer or 0) - dt
             if die.rollingLabel ~= nil and die.rollingFaceTimer > 0 then
-                goto __continue37
+                goto __continue41
             end
             local randomIndex = math.floor(math.random() * #labels)
             local nextLabel = labels[randomIndex + 1]
@@ -381,18 +414,18 @@ local function updateRollingFaceLabels(self, uiState, state, dt)
             die.rollingLabel = nextLabel
             die.rollingFaceTimer = interval
         end
-        ::__continue37::
+        ::__continue41::
     end
 end
 local function updateEnemyParkingTransitions(self, uiState, dt)
     for ____, die in ipairs(uiState.enemyParkedDice) do
         do
             if die.state ~= "parking" then
-                goto __continue45
+                goto __continue49
             end
             if die.parkX == nil or die.parkY == nil or die.parkStartX == nil or die.parkStartY == nil then
                 die.state = "parked"
-                goto __continue45
+                goto __continue49
             end
             local duration = math.max(0.05, die.parkDuration or 0.3)
             local progress = math.min(1, (die.parkProgress or 0) + dt / duration)
@@ -416,7 +449,7 @@ local function updateEnemyParkingTransitions(self, uiState, dt)
                 die.parkDuration = nil
             end
         end
-        ::__continue45::
+        ::__continue49::
     end
 end
 local function updateDieFlashes(self, uiState, dt)
@@ -437,11 +470,11 @@ local function updateDieFlashes(self, uiState, dt)
     for ____, die in ipairs(allDice) do
         do
             if die.flashTimer == nil or die.flashTimer <= 0 then
-                goto __continue51
+                goto __continue55
             end
             die.flashTimer = math.max(0, die.flashTimer - dt)
         end
-        ::__continue51::
+        ::__continue55::
     end
 end
 local function updateFloatingPopups(self, uiState, dt)
@@ -450,11 +483,11 @@ local function updateFloatingPopups(self, uiState, dt)
         do
             local remaining = popup.timer - dt
             if remaining <= 0 then
-                goto __continue55
+                goto __continue59
             end
             next[#next + 1] = __TS__ObjectAssign({}, popup, {timer = remaining, y = popup.y - 24 * dt})
         end
-        ::__continue55::
+        ::__continue59::
     end
     uiState.floatingPopups = next
 end
@@ -469,7 +502,7 @@ local function settleEnemyArenaDice(self, uiState)
     for ____, die in ipairs(uiState.enemyArenaDice) do
         do
             if not isDieSettled(nil, die) then
-                goto __continue61
+                goto __continue65
             end
             die.state = "arena"
             die.vx = 0
@@ -481,14 +514,14 @@ local function settleEnemyArenaDice(self, uiState)
             end
             lockVisualDieFace(nil, die)
         end
-        ::__continue61::
+        ::__continue65::
     end
 end
 local function parkEnemyDice(self, uiState)
     for ____, die in ipairs(uiState.enemyArenaDice) do
         do
             if die.parkX == nil or die.parkY == nil then
-                goto __continue66
+                goto __continue70
             end
             die.state = "parking"
             die.vx = 0
@@ -508,12 +541,12 @@ local function parkEnemyDice(self, uiState)
                 queueSettledEnemyDieId(nil, uiState, die.combatDieId)
             end
         end
-        ::__continue66::
+        ::__continue70::
     end
     for ____, die in ipairs(uiState.enemyPendingDice) do
         do
             if die.parkX == nil or die.parkY == nil then
-                goto __continue70
+                goto __continue74
             end
             die.state = "parking"
             die.vx = 0
@@ -533,7 +566,7 @@ local function parkEnemyDice(self, uiState)
                 queueSettledEnemyDieId(nil, uiState, die.combatDieId)
             end
         end
-        ::__continue70::
+        ::__continue74::
     end
     uiState.enemyArenaDice = {}
     uiState.enemyPendingDice = {}
@@ -648,11 +681,11 @@ local function enqueueSettledPlayerDice(self, uiState)
                 function(____, entry) return entry.combatDieId == dieId end
             )
             if not visualDie then
-                goto __continue92
+                goto __continue96
             end
             if not isDieSettled(nil, visualDie) then
                 remaining[#remaining + 1] = dieId
-                goto __continue92
+                goto __continue96
             end
             visualDie.vx = 0
             visualDie.vy = 0
@@ -669,7 +702,7 @@ local function enqueueSettledPlayerDice(self, uiState)
                 ____uiState_readyPlayerDieIds_12[#____uiState_readyPlayerDieIds_12 + 1] = dieId
             end
         end
-        ::__continue92::
+        ::__continue96::
     end
     uiState.pendingPlayerDieIds = remaining
 end
@@ -1010,11 +1043,11 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                     source = popup.source,
                     timer = POPUP_DURATION
                 }
-                goto __continue171
+                goto __continue175
             end
             local die = findVisualDieByCombatId(nil, uiState, popup.dieId)
             if not die then
-                goto __continue171
+                goto __continue175
             end
             die.flashTimer = RESOLVE_FLASH_DURATION
             if popup.sideLabel ~= nil then
@@ -1031,8 +1064,21 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                 timer = POPUP_DURATION
             }
         end
-        ::__continue171::
+        ::__continue175::
     end
+end
+local function canDragPlayerDie(self, uiState, state, die)
+    local dieId = die.combatDieId
+    if not dieId then
+        return false
+    end
+    if uiState.pendingRound ~= nil then
+        return false
+    end
+    if __TS__ArrayIncludes(uiState.rolledPlayerDieIds, dieId) or __TS__ArrayIncludes(uiState.pendingPlayerDieIds, dieId) or __TS__ArrayIncludes(uiState.readyPlayerDieIds, dieId) or __TS__ArrayIncludes(uiState.settledPlayerDieIds, dieId) or __TS__ArrayIncludes(state.rolledPlayerDieIds, dieId) then
+        return false
+    end
+    return true
 end
 local function isPointInsideRect(self, x, y, rect)
     return x >= rect.x and x <= rect.x + rect.width and y >= rect.y and y <= rect.y + rect.height
@@ -1442,12 +1488,15 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
     for ____, die in ipairs(uiState.playerDice) do
         do
             if die.state == "arena" then
-                goto __continue231
+                goto __continue239
+            end
+            if not canDragPlayerDie(nil, uiState, state, die) then
+                goto __continue239
             end
             local half = die.size / 2
             local inside = x >= die.x - half and x <= die.x + half and y >= die.y - half and y <= die.y + half
             if not inside then
-                goto __continue231
+                goto __continue239
             end
             die.state = "dragging"
             die.x = x
@@ -1463,7 +1512,7 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
             }
             return
         end
-        ::__continue231::
+        ::__continue239::
     end
 end
 function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
@@ -1560,7 +1609,19 @@ function ____exports.onCombatMouseReleased(self, uiState, state, x, y, button)
         y
     )
 end
-local function drawHpBar(self, x, y, width, height, ratio)
+local function drawHpBar(self, x, y, width, height, ratio, armorRatio)
+    if armorRatio == nil then
+        armorRatio = 0
+    end
+    local clampedHpRatio = math.max(
+        0,
+        math.min(1, ratio)
+    )
+    local clampedArmorRatio = math.max(0, armorRatio)
+    local armorWidth = math.max(
+        0,
+        math.floor(width * clampedArmorRatio)
+    )
     love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b)
     love.graphics.rectangle(
         "line",
@@ -1569,12 +1630,39 @@ local function drawHpBar(self, x, y, width, height, ratio)
         width,
         height
     )
+    if armorWidth > 0 then
+        local armorX = x + width
+        love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b, 0.9)
+        love.graphics.rectangle(
+            "line",
+            armorX,
+            y,
+            armorWidth,
+            height
+        )
+        love.graphics.setColor(0.2, 0.22, 0.24, 0.88)
+        love.graphics.rectangle(
+            "fill",
+            armorX + 2,
+            y + 2,
+            math.max(0, armorWidth - 4),
+            height - 4
+        )
+        love.graphics.setColor(GRAY.r, GRAY.g, GRAY.b)
+        love.graphics.rectangle(
+            "fill",
+            armorX + 2,
+            y + 2,
+            math.max(0, armorWidth - 4),
+            height - 4
+        )
+    end
     love.graphics.setColor(GREEN.r, GREEN.g, GREEN.b)
     love.graphics.rectangle(
         "fill",
         x + 2,
         y + 2,
-        math.max(0, (width - 4) * ratio),
+        math.max(0, (width - 4) * clampedHpRatio),
         height - 4
     )
 end
@@ -1829,7 +1917,9 @@ end
 function ____exports.drawCombatUi(self, uiState, state)
     local layout = uiState.layout
     local playerHpRatio = state.player.maxHp <= 0 and 0 or state.player.hp / state.player.maxHp
+    local playerArmorRatio = state.player.maxHp <= 0 and 0 or state.player.armor / state.player.maxHp
     local enemyHpRatio = state.enemy.maxHp <= 0 and 0 or state.enemy.hp / state.enemy.maxHp
+    local enemyArmorRatio = state.enemy.maxHp <= 0 and 0 or state.enemy.armor / state.enemy.maxHp
     love.graphics.setColor(BACKGROUND.r, BACKGROUND.g, BACKGROUND.b)
     love.graphics.rectangle(
         "fill",
@@ -1846,7 +1936,8 @@ function ____exports.drawCombatUi(self, uiState, state)
         layout.playerNameY + 26,
         layout.hpBarWidth,
         layout.hpBarHeight,
-        playerHpRatio
+        playerHpRatio,
+        playerArmorRatio
     )
     drawPlayerIncomingDamagePreview(
         nil,
@@ -1863,7 +1954,8 @@ function ____exports.drawCombatUi(self, uiState, state)
         layout.enemyNameY + 26,
         layout.hpBarWidth,
         layout.hpBarHeight,
-        enemyHpRatio
+        enemyHpRatio,
+        enemyArmorRatio
     )
     love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b)
     love.graphics.rectangle(

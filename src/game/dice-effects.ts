@@ -53,3 +53,9 @@ export class HealEffectScript extends BaseEffectScript {
     super(id, EffectType.Heal, value, target);
   }
 }
+
+export class ArmorEffectScript extends BaseEffectScript {
+  constructor(id: string, value: number, target: EffectTarget = "self") {
+    super(id, EffectType.Armor, value, target);
+  }
+}

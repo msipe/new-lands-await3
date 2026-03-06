@@ -1,6 +1,7 @@
 export enum EffectType {
   Damage = "damage",
   Heal = "heal",
+  Armor = "armor",
 }
 
 export type DiceEventSource = "player" | "enemy";

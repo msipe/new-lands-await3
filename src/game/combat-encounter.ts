@@ -12,7 +12,7 @@ import { getEnemyById, listEnemies } from "../planning/content-registry";
 import type { ContentEnemy } from "../planning/content-types";
 import type { PlayerProgressionState } from "./player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "./player-items";
-import { Miss, Warcry, WildStrike } from "./faces";
+import { Ironhide, Miss, Warcry, WildStrike } from "./faces";
 
 type CombatActor = {
   id: string;
@@ -193,6 +193,12 @@ function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void
       recipient.hp = Math.max(0, recipient.hp - remainingDamage);
       state.combatLog.push(`${recipientLabel} takes ${remainingDamage} damage.`);
     }
+    return;
+  }
+
+  if (event.effect === EffectType.Armor) {
+    recipient.armor = Math.max(0, recipient.armor + Math.max(0, Math.floor(event.value)));
+    state.combatLog.push(`${recipientLabel} gains ${Math.max(0, Math.floor(event.value))} armor.`);
     return;
   }
 
@@ -426,6 +432,21 @@ function createWildStrikeDie(mainhandWeaponDiceId?: string): Die {
   });
 }
 
+function createIronhideDie(): Die {
+  return new Die({
+    id: "player-die-5",
+    name: "Ironhide Die",
+    sides: [
+      new Ironhide("player-die-5-side-1", 5),
+      new Ironhide("player-die-5-side-2", 4),
+      new Ironhide("player-die-5-side-3", 3),
+      new Ironhide("player-die-5-side-4", 2),
+      new Ironhide("player-die-5-side-5", 0),
+      new Ironhide("player-die-5-side-6", 0),
+    ],
+  });
+}
+
 function registerWildStrikeBonusSubscriber(eventBus: CombatEventBus): void {
   eventBus.subscribe(EffectType.Damage, (event) => {
     const bonusRaw = event.meta?.wildStrikeBonus;
@@ -476,6 +497,7 @@ function createPlayerDice(progression?: PlayerProgressionState): Die[] {
     createDieFromConstruct({ construct: wardConstruct, dieId: "player-die-2" }),
     createDieFromConstruct({ construct: mendConstruct, dieId: "player-die-3" }),
     createWildStrikeDie(mainhandWeaponDiceId),
+    createIronhideDie(),
   ];
 
   if (!progression) {
@@ -618,8 +640,6 @@ function startNextRound(state: CombatEncounterState, randomSource: RandomSource)
   state.round += 1;
   state.playerRollIndex = 0;
   state.rolledPlayerDieIds = [];
-  state.player.armor = 0;
-  state.enemy.armor = 0;
   state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
   state.playerAttackModifier = 0;
 

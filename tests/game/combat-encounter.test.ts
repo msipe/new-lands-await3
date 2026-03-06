@@ -52,7 +52,7 @@ describe("combat encounter", () => {
   it("creates six-sided player starter dice", () => {
     const { state } = createCombatEncounter({ randomSource: fixedRandomSource() });
 
-    expect(state.player.dice).toHaveLength(4);
+    expect(state.player.dice).toHaveLength(5);
     for (const die of state.player.dice) {
       expect(die.sides).toHaveLength(6);
     }
@@ -79,7 +79,7 @@ describe("combat encounter", () => {
       playerProgression: progression,
     });
 
-    expect(state.player.dice).toHaveLength(5);
+    expect(state.player.dice).toHaveLength(6);
     expect(state.player.dice.some((die) => die.id.includes("equipped-weapon-1"))).toBe(true);
   });
 
@@ -120,10 +120,15 @@ describe("combat encounter", () => {
     expect(encounter.state.phase).toBe("player-turn");
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+    expect(encounter.state.playerRollIndex).toBe(4);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
     expect(encounter.state.phase).toBe("enemy-turn");
     expect(encounter.state.round).toBe(2);
     expect(encounter.state.playerRollIndex).toBe(0);
-    expect(encounter.state.player.hp).toBe(17);
+    expect(encounter.state.player.hp).toBe(20);
+    expect(encounter.state.player.armor).toBe(2);
     expect(encounter.state.enemy.hp).toBeLessThanOrEqual(enemyHpAtTurnStart);
   });
 
@@ -156,6 +161,7 @@ describe("combat encounter", () => {
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-2", fixedRandomSource());
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-4", fixedRandomSource());
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-5", fixedRandomSource());
 
     expect(encounter.state.phase).toBe("enemy-turn");
 
@@ -222,9 +228,13 @@ describe("combat encounter", () => {
     expect(encounter.state.phase).toBe("player-turn");
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+    expect(encounter.state.phase).toBe("player-turn");
+
+    rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
 
     // Enemy intent resolves only after player finishes all rolls.
-    expect(encounter.state.player.hp).toBe(17);
+    expect(encounter.state.player.hp).toBe(20);
+    expect(encounter.state.player.armor).toBe(2);
     expect(encounter.state.phase).toBe("enemy-turn");
   });
 
@@ -244,6 +254,9 @@ describe("combat encounter", () => {
 
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-4", fixedRandomSource());
     expect(encounter.state.combatLog).toContain("Player rolls Wild Strike.");
+
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-5", fixedRandomSource());
+    expect(encounter.state.player.armor).toBe(5);
   });
 
   it("expires Warcry modifier at end of player turn", () => {
@@ -258,6 +271,7 @@ describe("combat encounter", () => {
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-2", fixedRandomSource());
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-3", fixedRandomSource());
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-4", fixedRandomSource());
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-5", fixedRandomSource());
 
     expect(encounter.state.phase).toBe("enemy-turn");
     expect(encounter.state.playerAttackModifier).toBe(0);
@@ -283,5 +297,25 @@ describe("combat encounter", () => {
 
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-2", randomSource);
     expect(encounter.state.enemy.hp).toBe(enemyHpBefore);
+  });
+
+  it("grants armor from Ironhide and applies armor before hp damage", () => {
+    const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-5", fixedRandomSource());
+    expect(encounter.state.player.armor).toBe(5);
+
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-2", fixedRandomSource());
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-3", fixedRandomSource());
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-4", fixedRandomSource());
+
+    expect(encounter.state.phase).toBe("enemy-turn");
+    expect(encounter.state.player.hp).toBe(20);
+    expect(encounter.state.player.armor).toBe(2);
+    expect(encounter.state.combatLog).toContain("Player gains 5 armor.");
   });
 });

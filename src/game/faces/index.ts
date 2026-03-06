@@ -2,6 +2,7 @@ export { Face, type FaceCategory, type FaceResolveContext } from "./Face";
 export type { FaceUpgrade } from "./FaceUpgrade";
 
 export { DealDamage } from "./abilities/DealDamage";
+export { ArmorGain } from "./abilities/ArmorGain";
 export { DealSelfDamage } from "./abilities/DealSelfDamage";
 export { Miss } from "./abilities/Miss";
 export { SwordSlash } from "./abilities/SwordSlash";
@@ -11,6 +12,7 @@ export { HealSelf } from "./abilities/HealSelf";
 export { MinorMend } from "./abilities/MinorMend";
 export { WildStrike } from "./abilities/WildStrike";
 export { Warcry } from "./abilities/Warcry";
+export { Ironhide } from "./abilities/Ironhide";
 
 export { RestorationCharm } from "./items/RestorationCharm";
 

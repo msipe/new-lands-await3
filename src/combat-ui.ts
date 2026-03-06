@@ -143,6 +143,7 @@ export type CombatUiState = {
 const BACKGROUND = { r: 0.16, g: 0.16, b: 0.16 };
 const WHITE = { r: 1, g: 1, b: 1 };
 const GREEN = { r: 0.2, g: 0.72, b: 0.33 };
+const GRAY = { r: 0.62, g: 0.64, b: 0.67 };
 const BLACK = { r: 0, g: 0, b: 0 };
 const RESOLVE_FLASH_DURATION = 0.26;
 const POPUP_DURATION = 0.9;
@@ -173,11 +174,58 @@ function createLayout(): Layout {
   };
 }
 
-function makePoolPosition(layout: Layout, slotIndex: number): { x: number; y: number } {
-  const spacing = 140;
+type PoolSlotLayout = {
+  size: number;
+  gap: number;
+  startX: number;
+  y: number;
+};
+
+function computePoolSlotLayout(layout: Layout, diceCount: number): PoolSlotLayout {
+  const count = Math.max(1, diceCount);
+  const defaultSize = 54;
+  const minSize = 38;
+  const maxGap = 28;
+  const minGap = 8;
+  const horizontalPadding = 24;
+
+  const availableWidth = Math.max(120, layout.poolWidth - horizontalPadding * 2);
+
+  let size = defaultSize;
+  let gap = maxGap;
+  let totalWidth = size * count + gap * Math.max(0, count - 1);
+
+  if (totalWidth > availableWidth) {
+    gap = minGap;
+    totalWidth = size * count + gap * Math.max(0, count - 1);
+  }
+
+  if (totalWidth > availableWidth) {
+    size = Math.max(
+      minSize,
+      Math.floor((availableWidth - gap * Math.max(0, count - 1)) / count),
+    );
+    totalWidth = size * count + gap * Math.max(0, count - 1);
+  }
+
+  if (totalWidth > availableWidth && count > 1) {
+    gap = Math.max(2, Math.floor((availableWidth - size * count) / (count - 1)));
+    totalWidth = size * count + gap * (count - 1);
+  }
+
   return {
-    x: layout.poolX + 70 + slotIndex * spacing,
+    size,
+    gap,
+    startX: layout.poolX + (layout.poolWidth - totalWidth) * 0.5 + size * 0.5,
     y: layout.poolY + 105,
+  };
+}
+
+function makePoolPosition(layout: Layout, slotIndex: number, diceCount: number): { x: number; y: number } {
+  const slotLayout = computePoolSlotLayout(layout, diceCount);
+  return {
+    x: slotLayout.startX + slotIndex * (slotLayout.size + slotLayout.gap),
+    y: slotLayout.y,
   };
 }
 
@@ -248,8 +296,10 @@ function ensurePlayerDice(uiState: CombatUiState, state: CombatEncounterState): 
     return;
   }
 
+  const poolSlotLayout = computePoolSlotLayout(uiState.layout, state.player.dice.length);
+
   uiState.playerDice = state.player.dice.map((die, index) => {
-    const position = makePoolPosition(uiState.layout, index);
+    const position = makePoolPosition(uiState.layout, index, state.player.dice.length);
     return {
       id: `player-pool-${die.id}`,
       owner: "player",
@@ -266,7 +316,7 @@ function ensurePlayerDice(uiState: CombatUiState, state: CombatEncounterState): 
       vy: 0,
       angle: 0,
       spin: 0,
-      size: 54,
+      size: poolSlotLayout.size,
       state: "parked",
       slotIndex: index,
       parkX: position.x,
@@ -1179,6 +1229,33 @@ export function canPlayerThrow(uiState: CombatUiState, state: CombatEncounterSta
   return state.phase === "player-turn" && uiState.pendingRound === undefined;
 }
 
+function canDragPlayerDie(
+  uiState: CombatUiState,
+  state: CombatEncounterState,
+  die: VisualDie,
+): boolean {
+  const dieId = die.combatDieId;
+  if (!dieId) {
+    return false;
+  }
+
+  if (uiState.pendingRound !== undefined) {
+    return false;
+  }
+
+  if (
+    uiState.rolledPlayerDieIds.includes(dieId) ||
+    uiState.pendingPlayerDieIds.includes(dieId) ||
+    uiState.readyPlayerDieIds.includes(dieId) ||
+    uiState.settledPlayerDieIds.includes(dieId) ||
+    state.rolledPlayerDieIds.includes(dieId)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function isPointInsideRect(x: number, y: number, rect: Rect): boolean {
   return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
 }
@@ -1535,6 +1612,10 @@ export function onCombatMousePressed(
       continue;
     }
 
+    if (!canDragPlayerDie(uiState, state, die)) {
+      continue;
+    }
+
     const half = die.size / 2;
     const inside = x >= die.x - half && x <= die.x + half && y >= die.y - half && y <= die.y + half;
     if (!inside) {
@@ -1648,11 +1729,35 @@ export function onCombatMouseReleased(
   executePlayerThrow(uiState, state, dragged, drag.startX, drag.startY, x, y);
 }
 
-function drawHpBar(x: number, y: number, width: number, height: number, ratio: number): void {
+function drawHpBar(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  ratio: number,
+  armorRatio = 0,
+): void {
+  const clampedHpRatio = Math.max(0, Math.min(1, ratio));
+  const clampedArmorRatio = Math.max(0, armorRatio);
+
+  const armorWidth = Math.max(0, Math.floor(width * clampedArmorRatio));
   love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b);
   love.graphics.rectangle("line", x, y, width, height);
+
+  if (armorWidth > 0) {
+    const armorX = x + width;
+    love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b, 0.9);
+    love.graphics.rectangle("line", armorX, y, armorWidth, height);
+
+    love.graphics.setColor(0.2, 0.22, 0.24, 0.88);
+    love.graphics.rectangle("fill", armorX + 2, y + 2, Math.max(0, armorWidth - 4), height - 4);
+
+    love.graphics.setColor(GRAY.r, GRAY.g, GRAY.b);
+    love.graphics.rectangle("fill", armorX + 2, y + 2, Math.max(0, armorWidth - 4), height - 4);
+  }
+
   love.graphics.setColor(GREEN.r, GREEN.g, GREEN.b);
-  love.graphics.rectangle("fill", x + 2, y + 2, Math.max(0, (width - 4) * ratio), height - 4);
+  love.graphics.rectangle("fill", x + 2, y + 2, Math.max(0, (width - 4) * clampedHpRatio), height - 4);
 }
 
 function drawPlayerIncomingDamagePreview(
@@ -1811,14 +1916,23 @@ function drawCombatResolutionBanner(state: CombatEncounterState): void {
 export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState): void {
   const layout = uiState.layout;
   const playerHpRatio = state.player.maxHp <= 0 ? 0 : state.player.hp / state.player.maxHp;
+  const playerArmorRatio = state.player.maxHp <= 0 ? 0 : state.player.armor / state.player.maxHp;
   const enemyHpRatio = state.enemy.maxHp <= 0 ? 0 : state.enemy.hp / state.enemy.maxHp;
+  const enemyArmorRatio = state.enemy.maxHp <= 0 ? 0 : state.enemy.armor / state.enemy.maxHp;
 
   love.graphics.setColor(BACKGROUND.r, BACKGROUND.g, BACKGROUND.b);
   love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight());
 
   love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b);
   love.graphics.print(state.player.name, layout.playerNameX, layout.playerNameY);
-  drawHpBar(layout.playerNameX, layout.playerNameY + 26, layout.hpBarWidth, layout.hpBarHeight, playerHpRatio);
+  drawHpBar(
+    layout.playerNameX,
+    layout.playerNameY + 26,
+    layout.hpBarWidth,
+    layout.hpBarHeight,
+    playerHpRatio,
+    playerArmorRatio,
+  );
   drawPlayerIncomingDamagePreview(
     layout.playerNameX,
     layout.playerNameY + 26,
@@ -1828,7 +1942,14 @@ export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState
   );
 
   love.graphics.print(state.enemy.name, layout.enemyNameX, layout.enemyNameY);
-  drawHpBar(layout.enemyNameX, layout.enemyNameY + 26, layout.hpBarWidth, layout.hpBarHeight, enemyHpRatio);
+  drawHpBar(
+    layout.enemyNameX,
+    layout.enemyNameY + 26,
+    layout.hpBarWidth,
+    layout.hpBarHeight,
+    enemyHpRatio,
+    enemyArmorRatio,
+  );
 
   love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b);
   love.graphics.rectangle("line", layout.arenaX, layout.arenaY, layout.arenaWidth, layout.arenaHeight);

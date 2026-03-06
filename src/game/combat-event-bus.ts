@@ -17,6 +17,7 @@ export class CombatEventBus {
   private readonly subscribers: Record<EffectType, CombatEventSubscriber[]> = {
     [EffectType.Damage]: [],
     [EffectType.Heal]: [],
+    [EffectType.Armor]: [],
   };
 
   subscribe(effectType: EffectType, subscriber: CombatEventSubscriber): () => void {

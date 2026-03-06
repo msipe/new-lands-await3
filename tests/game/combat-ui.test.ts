@@ -148,8 +148,8 @@ describe("combat ui", () => {
 
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
-    expect(uiState.readyPlayerDieIds).toHaveLength(4);
-    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(4);
+    expect(uiState.readyPlayerDieIds).toHaveLength(5);
+    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(5);
   });
 
   it("queues throw during enemy turn and executes it when player turn is available", () => {
@@ -422,5 +422,36 @@ describe("combat ui", () => {
     expect(die.state).toBe("parked");
     expect(die.label).toBe("Warcry Die");
     expect(die.displayLabel).toBeUndefined();
+  });
+
+  it("does not start dragging a die that is already rolled", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+    const die = uiState.playerDice[0];
+    const combatDieId = die.combatDieId;
+
+    encounter.state.phase = "enemy-turn";
+    if (combatDieId) {
+      encounter.state.rolledPlayerDieIds = [combatDieId];
+      uiState.rolledPlayerDieIds = [combatDieId];
+      uiState.settledPlayerDieIds = [combatDieId];
+    }
+
+    onCombatMousePressed(uiState, encounter.state, die.x, die.y, 1);
+
+    expect(uiState.drag).toBeUndefined();
+    expect(die.state).toBe("parked");
+  });
+
+  it("does not start dragging while pending round transition is active", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+    const die = uiState.playerDice[0];
+
+    uiState.pendingRound = encounter.state.round;
+    onCombatMousePressed(uiState, encounter.state, die.x, die.y, 1);
+
+    expect(uiState.drag).toBeUndefined();
+    expect(die.state).toBe("parked");
   });
 });
