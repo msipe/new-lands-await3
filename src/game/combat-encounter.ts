@@ -199,6 +199,61 @@ function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void
   state.combatLog.push(`${recipientLabel} heals ${event.value}.`);
 }
 
+function bundleWildStrikeDamage(
+  event: CombatEvent,
+  triggeredEvents: CombatEvent[],
+): { eventToApply: CombatEvent; remainingTriggeredEvents: CombatEvent[] } {
+  const isWildStrikeBaseDamage =
+    event.effect === EffectType.Damage &&
+    event.source === "player" &&
+    event.target === "opponent" &&
+    event.meta?.wildStrike === true &&
+    event.meta?.wildStrikeBonusApplied !== true;
+
+  if (!isWildStrikeBaseDamage) {
+    return {
+      eventToApply: event,
+      remainingTriggeredEvents: triggeredEvents,
+    };
+  }
+
+  let bonusDamage = 0;
+  const remainingTriggeredEvents: CombatEvent[] = [];
+
+  for (const triggeredEvent of triggeredEvents) {
+    const isWildStrikeBonusEvent =
+      triggeredEvent.effect === EffectType.Damage &&
+      triggeredEvent.meta?.wildStrikeBonusApplied === true &&
+      triggeredEvent.dieId === event.dieId;
+
+    if (isWildStrikeBonusEvent) {
+      bonusDamage += Math.max(0, Math.floor(triggeredEvent.value));
+      continue;
+    }
+
+    remainingTriggeredEvents.push(triggeredEvent);
+  }
+
+  if (bonusDamage <= 0) {
+    return {
+      eventToApply: event,
+      remainingTriggeredEvents,
+    };
+  }
+
+  return {
+    eventToApply: {
+      ...event,
+      value: event.value + bonusDamage,
+      meta: {
+        ...(event.meta ?? {}),
+        wildStrikeBundledBonus: bonusDamage,
+      },
+    },
+    remainingTriggeredEvents,
+  };
+}
+
 function resolveImmediateEvents(
   state: CombatEncounterState,
   eventBus: CombatEventBus,
@@ -212,24 +267,65 @@ function resolveImmediateEvents(
       break;
     }
 
-    if (
-      event.effect === EffectType.Damage &&
-      event.meta?.wildStrikeBonusApplied === true &&
-      typeof event.value === "number" &&
-      event.value > 0
-    ) {
-      state.combatLog.push(`Wild Strike bonus triggers for +${event.value} damage.`);
-    }
-
-    applyCombatEvent(state, event);
-
     const triggeredEvents = eventBus.publish(event).map((nextEvent) => ({
       ...nextEvent,
       cause: "triggered" as const,
     }));
 
-    queue.push(...triggeredEvents);
+    const {
+      eventToApply,
+      remainingTriggeredEvents,
+    } = bundleWildStrikeDamage(event, triggeredEvents);
+
+    applyCombatEvent(state, eventToApply);
+
+    queue.push(...remainingTriggeredEvents);
   }
+}
+
+function summarizeWildStrikeGhostDamage(
+  events: CombatEvent[],
+): { weaponLabel: string; combinedDamage: number; popupText?: string } | undefined {
+  const ghostEvent = events.find((event) => event.meta?.ghostDie === true);
+  if (!ghostEvent) {
+    return undefined;
+  }
+
+  const weaponLabel = ghostEvent.meta?.ghostDieLabel;
+  if (typeof weaponLabel !== "string") {
+    return undefined;
+  }
+
+  const baseDamage = events
+    .filter(
+      (event) =>
+        event.effect === EffectType.Damage &&
+        event.source === "player" &&
+        event.target === "opponent" &&
+        event.meta?.ghostDie === true,
+    )
+    .reduce((total, event) => total + Math.max(0, Math.floor(event.value)), 0);
+
+  const bonusRaw = ghostEvent.meta?.wildStrikeBonus;
+  const bonusDamage =
+    baseDamage > 0 && typeof bonusRaw === "number" ? Math.max(0, Math.floor(bonusRaw)) : 0;
+  const popupText =
+    typeof ghostEvent.meta?.ghostPopupText === "string" ? ghostEvent.meta.ghostPopupText : undefined;
+
+  return {
+    weaponLabel,
+    combinedDamage: baseDamage + bonusDamage,
+    popupText,
+  };
+}
+
+function normalizeWildStrikeWeaponLabel(weaponLabel: string): string {
+  return weaponLabel.endsWith(" Die") ? weaponLabel.slice(0, -4) : weaponLabel;
+}
+
+function getWildStrikeVariantBonus(events: CombatEvent[]): number {
+  const rawBonus = events.find((event) => event.meta?.wildStrike === true)?.meta?.wildStrikeBonus;
+  return typeof rawBonus === "number" ? Math.max(0, Math.floor(rawBonus)) : 0;
 }
 
 function createMainhandGhostResolver(mainhandWeaponDiceId?: string) {
@@ -552,20 +648,37 @@ export function rollPlayerDie(
     randomSource,
   });
 
-  state.combatLog.push(`Player rolls ${die.name}: ${side.label}.`);
+  const isWildStrikeRoll = die.name === "Wild Strike Die";
+  if (isWildStrikeRoll) {
+    state.combatLog.push("Player rolls Wild Strike.");
+  } else {
+    state.combatLog.push(`Player rolls ${die.name}: ${side.label}.`);
+  }
+
+  if (isWildStrikeRoll) {
+    const ghostDamageSummary = summarizeWildStrikeGhostDamage(events);
+    const variantBonus = getWildStrikeVariantBonus(events);
+    if (!ghostDamageSummary) {
+      state.combatLog.push(`  > Miss (Wild Strike +${variantBonus})`);
+    } else if (ghostDamageSummary.combinedDamage > 0) {
+      state.combatLog.push(`  > Success (Wild Strike +${variantBonus})`);
+      state.combatLog.push(
+        `${normalizeWildStrikeWeaponLabel(ghostDamageSummary.weaponLabel)} (from Wild Strike):`,
+      );
+      state.combatLog.push(`  > ${ghostDamageSummary.combinedDamage} damage`);
+    } else {
+      state.combatLog.push(`  > Backfire (Wild Strike +${variantBonus})`);
+      state.combatLog.push(
+        `${normalizeWildStrikeWeaponLabel(ghostDamageSummary.weaponLabel)} (from Wild Strike):`,
+      );
+      state.combatLog.push(`  > ${ghostDamageSummary.popupText ?? "No effect"}`);
+    }
+  }
+
   resolveImmediateEvents(state, eventBus, events);
   queueResolutionPopup(state, "player", die.id, side);
   queueGhostResolutionPopupFromEvents(state, "player", die.id, events);
-  const ghostRollSummary = getGhostRollSummaryFromEvents(events);
-  if (ghostRollSummary) {
-    const ghostOutcome =
-      ghostRollSummary.popupText && ghostRollSummary.popupText !== ghostRollSummary.sideLabel
-        ? `${ghostRollSummary.sideLabel} (${ghostRollSummary.popupText})`
-        : ghostRollSummary.sideLabel;
-    state.combatLog.push(
-      `Ghost roll from ${die.name} (${ghostRollSummary.dieLabel}): ${ghostOutcome}.`,
-    );
-  }
+
   state.rolledPlayerDieIds.push(die.id);
   state.playerRollIndex = state.rolledPlayerDieIds.length;
 

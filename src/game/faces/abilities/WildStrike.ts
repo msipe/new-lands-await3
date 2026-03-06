@@ -35,7 +35,7 @@ export class WildStrike extends Face {
   }
 
   describe(): string {
-    return `Trigger a ghost mainhand weapon attack. If it damages the opponent, add +${this.bonusDamage} damage.`;
+    return `Trigger an extra mainhand weapon attack. If it damages the opponent, add +${this.bonusDamage} damage.`;
   }
 
   getResolvePopupText(): string {

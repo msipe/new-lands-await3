@@ -197,7 +197,7 @@ describe("combat encounter", () => {
     encounter.state.player.hp = 15;
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
 
-    expect(encounter.state.player.hp).toBe(17);
+    expect(encounter.state.player.hp).toBe(16);
   });
 
   it("reveals enemy intent first and applies it after player finishes rolling", () => {
@@ -273,21 +273,41 @@ describe("combat encounter", () => {
     resolveAllEnemyDice(encounter);
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
 
-    const ghostLine = encounter.state.combatLog.find((line) =>
-      line.startsWith("Ghost roll from Wild Strike Die (Spark Die):"),
-    );
-    expect(ghostLine).toBeDefined();
-    expect(ghostLine?.includes("(+")).toBe(true);
+    expect(encounter.state.combatLog).toContain("Player rolls Wild Strike.");
+    expect(encounter.state.combatLog).toContain("  > Success (Wild Strike +2)");
+    expect(encounter.state.combatLog).toContain("Spark (from Wild Strike):");
+    expect(encounter.state.combatLog).toContain("  > 4 damage");
   });
 
-  it("logs explicit wild strike bonus trigger on ghost hit", () => {
+  it("applies bundled wild strike damage as one hit", () => {
     const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
 
     resolveAllEnemyDice(encounter);
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
 
+    const enemyDamageLines = encounter.state.combatLog.filter((line) =>
+      line.startsWith("Enemy takes "),
+    );
+    expect(enemyDamageLines).toContain("Enemy takes 4 damage.");
+    expect(enemyDamageLines).not.toContain("Enemy takes 2 damage.");
+    expect(enemyDamageLines).not.toContain("Enemy takes 1 damage.");
+  });
+
+  it("logs backfire instead of miss when wild strike ghost roll self-hits", () => {
+    const progression = createPlayerProgression();
+    const encounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerProgression: progression,
+    });
+
+    resolveAllEnemyDice(encounter);
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
+
+    expect(encounter.state.combatLog).toContain("  > Backfire (Wild Strike +2)");
+    expect(encounter.state.combatLog).toContain("Rusty Sword (from Wild Strike):");
+    expect(encounter.state.combatLog).toContain("  > -1 self damage");
     expect(
-      encounter.state.combatLog.some((line) => line === "Wild Strike bonus triggers for +2 damage."),
-    ).toBe(true);
+      encounter.state.combatLog.some((line) => line.includes("Miss (Wild Strike +2)")),
+    ).toBe(false);
   });
 });
