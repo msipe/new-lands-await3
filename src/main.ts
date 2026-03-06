@@ -10,6 +10,8 @@ import {
     onCombatMouseMoved,
     onCombatMousePressed,
     onCombatMouseReleased,
+    consumeRequestedSceneAdvance,
+    setResolvedContinueEnabled,
     type CombatUiState,
     updateCombatUiState,
 } from "./combat-ui";
@@ -64,6 +66,9 @@ let activeExploreUi: ExploreUiState | undefined;
 let activeEncounterUi: EncounterUiState | undefined;
 let mainMenuUi: MainMenuUiState | undefined;
 let runSeedNonce = 0;
+let combatResolvedHoldTimer = 0;
+
+const COMBAT_RESOLVE_BEAT_SECONDS = 0.5;
 
 function createCombatForCurrentTile(): { state: CombatEncounterState; eventBus: CombatEventBus } {
     const currentTile = activeExploreUi ? getCurrentTile(activeExploreUi.model) : undefined;
@@ -84,6 +89,8 @@ love.update = (dt: number) => {
         if (sceneState.current === "combat") {
             activeCombat = createCombatForCurrentTile();
             activeCombatUi = createCombatUiState(activeCombat.state);
+            combatResolvedHoldTimer = 0;
+            setResolvedContinueEnabled(activeCombatUi, false);
         }
 
         if (sceneState.current === "explore") {
@@ -140,6 +147,20 @@ love.update = (dt: number) => {
         if (resolutionPopups.length > 0) {
             enqueueCombatResolutionPopups(activeCombatUi, resolutionPopups);
         }
+
+        if (activeCombat.state.phase === "resolved") {
+            combatResolvedHoldTimer += dt;
+            const canContinue = combatResolvedHoldTimer >= COMBAT_RESOLVE_BEAT_SECONDS;
+            setResolvedContinueEnabled(activeCombatUi, canContinue);
+
+            if (canContinue && consumeRequestedSceneAdvance(activeCombatUi)) {
+                sceneState = advanceScene(sceneState);
+                return;
+            }
+        } else {
+            combatResolvedHoldTimer = 0;
+            setResolvedContinueEnabled(activeCombatUi, false);
+        }
     }
 
     if (sceneState.current === "explore") {
@@ -175,6 +196,10 @@ love.keypressed = (key) => {
         }
 
         if (key === "space" && activeCombat.state.phase === "resolved") {
+            if (combatResolvedHoldTimer < COMBAT_RESOLVE_BEAT_SECONDS) {
+                return;
+            }
+
             sceneState = advanceScene(sceneState);
             return;
         }

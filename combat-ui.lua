@@ -1655,6 +1655,65 @@ local function drawFloatingResolutionPopups(self, uiState)
         )
     end
 end
+local function drawCombatResolutionBanner(self, state)
+    if state.phase ~= "resolved" then
+        return
+    end
+    local screenWidth = love.graphics.getWidth()
+    local bannerWidth = 460
+    local bannerHeight = 96
+    local x = (screenWidth - bannerWidth) * 0.5
+    local y = 44
+    local playerWon = state.enemy.hp <= 0 and state.player.hp > 0
+    local title = playerWon and "You Win" or "Defeat"
+    local subtitle = playerWon and "Regrouping and returning to exploration..." or "Falling back to exploration..."
+    love.graphics.setColor(0.06, 0.08, 0.1, 0.94)
+    love.graphics.rectangle(
+        "fill",
+        x,
+        y,
+        bannerWidth,
+        bannerHeight,
+        10,
+        10
+    )
+    if playerWon then
+        love.graphics.setColor(0.76, 0.95, 0.82, 0.98)
+    else
+        love.graphics.setColor(0.96, 0.78, 0.78, 0.98)
+    end
+    love.graphics.rectangle(
+        "line",
+        x,
+        y,
+        bannerWidth,
+        bannerHeight,
+        10,
+        10
+    )
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf(
+        title,
+        x,
+        y + 20,
+        bannerWidth,
+        "center",
+        0,
+        1.05,
+        1.05
+    )
+    love.graphics.setColor(0.88, 0.92, 0.97, 0.96)
+    love.graphics.printf(
+        subtitle,
+        x,
+        y + 58,
+        bannerWidth,
+        "center",
+        0,
+        0.72,
+        0.72
+    )
+end
 function ____exports.drawCombatUi(self, uiState, state)
     local layout = uiState.layout
     local playerHpRatio = state.player.maxHp <= 0 and 0 or state.player.hp / state.player.maxHp
@@ -1771,6 +1830,7 @@ function ____exports.drawCombatUi(self, uiState, state)
         end
     end
     drawFloatingResolutionPopups(nil, uiState)
+    drawCombatResolutionBanner(nil, state)
     love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b)
     love.graphics.print(
         "Round " .. tostring(state.round),
@@ -1779,7 +1839,7 @@ function ____exports.drawCombatUi(self, uiState, state)
     )
     love.graphics.print("Combat: " .. state.phase, layout.arenaX + 12, layout.arenaY + 34)
     if state.phase == "resolved" then
-        love.graphics.print("Press Space to continue", layout.poolX + layout.poolWidth - 240, layout.poolY + 14)
+        love.graphics.print("Combat resolved.", layout.poolX + layout.poolWidth - 180, layout.poolY + 14)
     elseif uiState.pendingRound ~= nil then
         love.graphics.print("Gathering dice for next round... (Space to skip)", layout.poolX + layout.poolWidth - 360, layout.poolY + 14)
     elseif state.phase == "player-turn" and not canAdvancePlayerTurn(nil, uiState, state) then

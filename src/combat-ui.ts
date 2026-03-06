@@ -129,6 +129,8 @@ export type CombatUiState = {
   floatingPopups: FloatingResolutionPopup[];
   queuedPlayerThrow?: QueuedPlayerThrow;
   inspector?: DiceInspectorState;
+  resolvedContinueEnabled: boolean;
+  requestedSceneAdvance: boolean;
 };
 
 const BACKGROUND = { r: 0.16, g: 0.16, b: 0.16 };
@@ -650,6 +652,8 @@ export function createCombatUiState(state: CombatEncounterState): CombatUiState 
     floatingPopups: [],
     queuedPlayerThrow: undefined,
     inspector: undefined,
+    resolvedContinueEnabled: false,
+    requestedSceneAdvance: false,
   };
 
   ensurePlayerDice(uiState, state);
@@ -1021,6 +1025,19 @@ type TurnButtonState = {
   label: string;
 };
 
+export function setResolvedContinueEnabled(uiState: CombatUiState, enabled: boolean): void {
+  uiState.resolvedContinueEnabled = enabled;
+}
+
+export function consumeRequestedSceneAdvance(uiState: CombatUiState): boolean {
+  if (!uiState.requestedSceneAdvance) {
+    return false;
+  }
+
+  uiState.requestedSceneAdvance = false;
+  return true;
+}
+
 function getTurnButtonRect(layout: Layout): Rect {
   const width = 148;
   const height = 36;
@@ -1034,7 +1051,11 @@ function getTurnButtonRect(layout: Layout): Rect {
 
 function getTurnButtonState(uiState: CombatUiState, state: CombatEncounterState): TurnButtonState {
   if (state.phase === "resolved") {
-    return { visible: false, enabled: false, label: "" };
+    return {
+      visible: true,
+      enabled: uiState.resolvedContinueEnabled,
+      label: "Return to Explore",
+    };
   }
 
   if (uiState.pendingRound !== undefined) {
@@ -1403,6 +1424,11 @@ export function onCombatMousePressed(
   if (turnButton.visible && turnButton.enabled) {
     const turnButtonRect = getTurnButtonRect(uiState.layout);
     if (isPointInsideRect(x, y, turnButtonRect)) {
+      if (state.phase === "resolved") {
+        uiState.requestedSceneAdvance = true;
+        return;
+      }
+
       fastForwardCombatUi(uiState, state);
       return;
     }
@@ -1672,6 +1698,40 @@ function drawFloatingResolutionPopups(uiState: CombatUiState): void {
   }
 }
 
+function drawCombatResolutionBanner(state: CombatEncounterState): void {
+  if (state.phase !== "resolved") {
+    return;
+  }
+
+  const screenWidth = love.graphics.getWidth();
+  const bannerWidth = 460;
+  const bannerHeight = 96;
+  const x = (screenWidth - bannerWidth) * 0.5;
+  const y = 44;
+
+  const playerWon = state.enemy.hp <= 0 && state.player.hp > 0;
+  const title = playerWon ? "You Win" : "Defeat";
+  const subtitle = playerWon
+    ? "Regrouping and returning to exploration..."
+    : "Falling back to exploration...";
+
+  love.graphics.setColor(0.06, 0.08, 0.1, 0.94);
+  love.graphics.rectangle("fill", x, y, bannerWidth, bannerHeight, 10, 10);
+
+  if (playerWon) {
+    love.graphics.setColor(0.76, 0.95, 0.82, 0.98);
+  } else {
+    love.graphics.setColor(0.96, 0.78, 0.78, 0.98);
+  }
+  love.graphics.rectangle("line", x, y, bannerWidth, bannerHeight, 10, 10);
+
+  love.graphics.setColor(1, 1, 1, 1);
+  love.graphics.printf(title, x, y + 20, bannerWidth, "center", 0, 1.05, 1.05);
+
+  love.graphics.setColor(0.88, 0.92, 0.97, 0.96);
+  love.graphics.printf(subtitle, x, y + 58, bannerWidth, "center", 0, 0.72, 0.72);
+}
+
 export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState): void {
   const layout = uiState.layout;
   const playerHpRatio = state.player.maxHp <= 0 ? 0 : state.player.hp / state.player.maxHp;
@@ -1743,13 +1803,14 @@ export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState
   }
 
   drawFloatingResolutionPopups(uiState);
+  drawCombatResolutionBanner(state);
 
   love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b);
   love.graphics.print(`Round ${state.round}`, layout.arenaX + 12, layout.arenaY + 10);
   love.graphics.print(`Combat: ${state.phase}`, layout.arenaX + 12, layout.arenaY + 34);
 
   if (state.phase === "resolved") {
-    love.graphics.print("Press Space to continue", layout.poolX + layout.poolWidth - 240, layout.poolY + 14);
+    love.graphics.print("Combat resolved.", layout.poolX + layout.poolWidth - 180, layout.poolY + 14);
   } else if (uiState.pendingRound !== undefined) {
     love.graphics.print("Gathering dice for next round... (Space to skip)", layout.poolX + layout.poolWidth - 360, layout.poolY + 14);
   } else if (state.phase === "player-turn" && !canAdvancePlayerTurn(uiState, state)) {
