@@ -8,6 +8,7 @@ export type CombatEvent = {
   cause: "enemy-intent" | "player-roll" | "triggered";
   dieId: string;
   sideId: string;
+  meta?: Record<string, string | number | boolean>;
 };
 
 export type CombatEventSubscriber = (event: CombatEvent) => CombatEvent[];

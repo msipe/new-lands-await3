@@ -1,5 +1,6 @@
 local ____lualib = require("lualib_bundle")
 local __TS__ArrayMap = ____lualib.__TS__ArrayMap
+local __TS__StringStartsWith = ____lualib.__TS__StringStartsWith
 local __TS__SparseArrayNew = ____lualib.__TS__SparseArrayNew
 local __TS__SparseArrayPush = ____lualib.__TS__SparseArrayPush
 local __TS__SparseArraySpread = ____lualib.__TS__SparseArraySpread
@@ -8,30 +9,75 @@ local __TS__ArrayFind = ____lualib.__TS__ArrayFind
 local __TS__ObjectAssign = ____lualib.__TS__ObjectAssign
 local __TS__ArrayIncludes = ____lualib.__TS__ArrayIncludes
 local __TS__MathSign = ____lualib.__TS__MathSign
+local __TS__NumberToString = ____lualib.__TS__NumberToString
 local __TS__ArrayPushArray = ____lualib.__TS__ArrayPushArray
 local __TS__StringSlice = ____lualib.__TS__StringSlice
 local __TS__ArraySlice = ____lualib.__TS__ArraySlice
 local ____exports = {}
-local isDieSettled, getDieFromInspector
+local isDieSettled, findVisualDieById, getDieFromInspector
+local ____dice_2Dfactory = require("game.dice-factory")
+local createDieFromConstruct = ____dice_2Dfactory.createDieFromConstruct
+local ____dice_2Dconstructs = require("game.dice-constructs.index")
+local getDieConstructById = ____dice_2Dconstructs.getDieConstructById
 function isDieSettled(self, die)
     local speed = math.sqrt(die.vx * die.vx + die.vy * die.vy)
     return speed <= 60 and math.abs(die.spin) <= 1.3
+end
+function findVisualDieById(self, uiState, dieId)
+    local ____array_22 = __TS__SparseArrayNew(unpack(uiState.playerDice))
+    __TS__SparseArrayPush(
+        ____array_22,
+        unpack(uiState.arenaPlayerDice)
+    )
+    __TS__SparseArrayPush(
+        ____array_22,
+        unpack(uiState.enemyArenaDice)
+    )
+    __TS__SparseArrayPush(
+        ____array_22,
+        unpack(uiState.enemyParkedDice)
+    )
+    __TS__SparseArrayPush(
+        ____array_22,
+        unpack(uiState.enemyPendingDice)
+    )
+    return __TS__ArrayFind(
+        {__TS__SparseArraySpread(____array_22)},
+        function(____, die) return die.id == dieId end
+    )
 end
 function ____exports.canPlayerThrow(self, uiState, state)
     return state.phase == "player-turn" and uiState.pendingRound == nil
 end
 function getDieFromInspector(self, uiState, state)
-    if not uiState.inspector then
+    local inspector = uiState.inspector
+    if not inspector then
         return nil
     end
-    local dice = uiState.inspector.owner == "player" and state.player.dice or state.enemy.dice
+    if inspector.ghostDieId then
+        local ghostDie = findVisualDieById(nil, uiState, inspector.ghostDieId)
+        if not ghostDie or not ghostDie.ghostInspectorSides or not ghostDie.ghostInspectorName then
+            return nil
+        end
+        return {
+            name = ghostDie.ghostInspectorName,
+            sides = __TS__ArrayMap(
+                ghostDie.ghostInspectorSides,
+                function(____, side, index) return {
+                    id = "ghost-side-" .. tostring(index + 1),
+                    label = side.label,
+                    describe = function() return side.description end
+                } end
+            )
+        }
+    end
+    if not inspector.combatDieId then
+        return nil
+    end
+    local dice = inspector.owner == "player" and state.player.dice or state.enemy.dice
     return __TS__ArrayFind(
         dice,
-        function(____, die)
-            local ____die_id_25 = die.id
-            local ____opt_23 = uiState.inspector
-            return ____die_id_25 == (____opt_23 and ____opt_23.combatDieId)
-        end
+        function(____, die) return die.id == inspector.combatDieId end
     )
 end
 local BACKGROUND = {r = 0.16, g = 0.16, b = 0.16}
@@ -137,6 +183,7 @@ local function ensurePlayerDice(self, uiState, state)
             return {
                 id = "player-pool-" .. die.id,
                 owner = "player",
+                isItemDie = __TS__StringStartsWith(die.id, "equipped-"),
                 combatDieId = die.id,
                 label = die.name,
                 displayLabel = nil,
@@ -885,10 +932,10 @@ function ____exports.drainSettledEnemyDieIds(self, uiState)
     return settled
 end
 local function findVisualDieByCombatId(self, uiState, dieId)
-    local ____array_21 = __TS__SparseArrayNew(unpack(uiState.playerDice))
+    local ____array_21 = __TS__SparseArrayNew(unpack(uiState.arenaPlayerDice))
     __TS__SparseArrayPush(
         ____array_21,
-        unpack(uiState.arenaPlayerDice)
+        unpack(uiState.playerDice)
     )
     __TS__SparseArrayPush(
         ____array_21,
@@ -910,9 +957,64 @@ end
 function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
     for ____, popup in ipairs(popups) do
         do
+            local ____opt_23 = popup.ghostDie
+            if (____opt_23 and ____opt_23.isGhost) == true then
+                local sourceDie = findVisualDieByCombatId(nil, uiState, popup.dieId)
+                local spawnX = sourceDie and sourceDie.x or uiState.layout.poolX + uiState.layout.poolWidth * 0.3
+                local spawnY = sourceDie and sourceDie.y or uiState.layout.poolY + 84
+                local tossDirection = math.random() < 0.5 and -1 or 1
+                local launchVx = (sourceDie and sourceDie.vx or 0) * 0.28 + tossDirection * (140 + math.random() * 90)
+                local launchVy = (sourceDie and sourceDie.vy or 0) * 0.2 - (190 + math.random() * 120)
+                local ghostConstruct = getDieConstructById(nil, popup.ghostDie.constructId)
+                local ghostInspectDie = createDieFromConstruct(nil, {construct = ghostConstruct, dieId = "ghost-inspector-" .. popup.dieId})
+                local ____uiState_arenaPlayerDice_33 = uiState.arenaPlayerDice
+                ____uiState_arenaPlayerDice_33[#____uiState_arenaPlayerDice_33 + 1] = {
+                    id = (("ghost-" .. popup.dieId) .. "-") .. string.sub(
+                        __TS__NumberToString(
+                            math.random(),
+                            16
+                        ),
+                        3,
+                        8
+                    ),
+                    owner = popup.source,
+                    isGhostDie = true,
+                    label = popup.ghostDie.sideLabel,
+                    displayLabel = popup.ghostDie.sideLabel,
+                    rollingLabel = nil,
+                    rollingFaceTimer = 0,
+                    faceLocked = true,
+                    x = spawnX,
+                    y = spawnY,
+                    vx = launchVx,
+                    vy = launchVy,
+                    angle = 0,
+                    spin = tossDirection * (4 + math.random() * 5),
+                    size = 44,
+                    state = "arena",
+                    flashTimer = RESOLVE_FLASH_DURATION,
+                    ghostInspectorName = popup.ghostDie.dieLabel,
+                    ghostInspectorSides = __TS__ArrayMap(
+                        ghostInspectDie.sides,
+                        function(____, side) return {
+                            label = side.label,
+                            description = type(side.describe) == "function" and side:describe() or side.label
+                        } end
+                    )
+                }
+                local ____uiState_floatingPopups_34 = uiState.floatingPopups
+                ____uiState_floatingPopups_34[#____uiState_floatingPopups_34 + 1] = {
+                    x = spawnX,
+                    y = spawnY - 32,
+                    text = popup.text,
+                    source = popup.source,
+                    timer = POPUP_DURATION
+                }
+                goto __continue171
+            end
             local die = findVisualDieByCombatId(nil, uiState, popup.dieId)
             if not die then
-                goto __continue169
+                goto __continue171
             end
             die.flashTimer = RESOLVE_FLASH_DURATION
             if popup.sideLabel ~= nil then
@@ -920,8 +1022,8 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                 die.displayLabel = popup.sideLabel
             end
             lockVisualDieFace(nil, die)
-            local ____uiState_floatingPopups_22 = uiState.floatingPopups
-            ____uiState_floatingPopups_22[#____uiState_floatingPopups_22 + 1] = {
+            local ____uiState_floatingPopups_35 = uiState.floatingPopups
+            ____uiState_floatingPopups_35[#____uiState_floatingPopups_35 + 1] = {
                 x = die.x,
                 y = die.y - die.size * 0.72,
                 text = popup.text,
@@ -929,7 +1031,7 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                 timer = POPUP_DURATION
             }
         end
-        ::__continue169::
+        ::__continue171::
     end
 end
 local function isPointInsideRect(self, x, y, rect)
@@ -1102,8 +1204,8 @@ local function drawDieInspector(self, uiState, state)
         8,
         8
     )
-    local ____opt_26 = uiState.inspector
-    local ownerLabel = (____opt_26 and ____opt_26.owner) == "player" and "Ally" or "Enemy"
+    local ____opt_36 = uiState.inspector
+    local ownerLabel = (____opt_36 and ____opt_36.owner) == "player" and "Ally" or "Enemy"
     love.graphics.setColor(1, 1, 1)
     love.graphics.print((ownerLabel .. " Die: ") .. die.name, panel.x + 20, panel.y + 14)
     love.graphics.setColor(0.78, 0.83, 0.9)
@@ -1163,13 +1265,13 @@ local function drawDieInspector(self, uiState, state)
         6,
         6
     )
-    local ____opt_28 = uiState.inspector
-    local ____temp_32 = ____opt_28 and ____opt_28.hoveredSideIndex
-    if ____temp_32 == nil then
-        local ____opt_30 = uiState.inspector
-        ____temp_32 = ____opt_30 and ____opt_30.selectedSideIndex
+    local ____opt_38 = uiState.inspector
+    local ____temp_42 = ____opt_38 and ____opt_38.hoveredSideIndex
+    if ____temp_42 == nil then
+        local ____opt_40 = uiState.inspector
+        ____temp_42 = ____opt_40 and ____opt_40.selectedSideIndex
     end
-    local activeSideIndex = ____temp_32
+    local activeSideIndex = ____temp_42
     for ____, tile in ipairs(layout.tiles) do
         local side = die.sides[tile.sideIndex + 1]
         local label = layout.denseMode and tostring(tile.sideIndex + 1) or side.label
@@ -1260,10 +1362,16 @@ local function drawDieInspector(self, uiState, state)
     end
 end
 local function openInspectorForDie(self, uiState, die)
-    if not die.combatDieId then
+    if not die.combatDieId and not die.isGhostDie then
         return
     end
-    uiState.inspector = {owner = die.owner, combatDieId = die.combatDieId, selectedSideIndex = nil, hoveredSideIndex = nil}
+    uiState.inspector = {
+        owner = die.owner,
+        combatDieId = die.combatDieId,
+        ghostDieId = die.isGhostDie and die.id or nil,
+        selectedSideIndex = nil,
+        hoveredSideIndex = nil
+    }
 end
 function ____exports.closeCombatInspector(self, uiState)
     uiState.inspector = nil
@@ -1334,12 +1442,12 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
     for ____, die in ipairs(uiState.playerDice) do
         do
             if die.state == "arena" then
-                goto __continue222
+                goto __continue231
             end
             local half = die.size / 2
             local inside = x >= die.x - half and x <= die.x + half and y >= die.y - half and y <= die.y + half
             if not inside then
-                goto __continue222
+                goto __continue231
             end
             die.state = "dragging"
             die.x = x
@@ -1355,7 +1463,7 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
             }
             return
         end
-        ::__continue222::
+        ::__continue231::
     end
 end
 function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
@@ -1380,9 +1488,9 @@ function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
     local dragged = __TS__ArrayFind(
         uiState.playerDice,
         function(____, die)
-            local ____die_id_35 = die.id
-            local ____opt_33 = uiState.drag
-            return ____die_id_35 == (____opt_33 and ____opt_33.dieId)
+            local ____die_id_45 = die.id
+            local ____opt_43 = uiState.drag
+            return ____die_id_45 == (____opt_43 and ____opt_43.dieId)
         end
     )
     if not dragged then
@@ -1535,7 +1643,13 @@ local function drawDie(self, die)
     love.graphics.push()
     love.graphics.translate(die.x, die.y)
     love.graphics.rotate(die.angle)
-    love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b)
+    if die.isGhostDie then
+        love.graphics.setColor(0.58, 0.76, 1)
+    elseif die.isItemDie then
+        love.graphics.setColor(0.72, 0.74, 0.78)
+    else
+        love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b)
+    end
     love.graphics.rectangle(
         "fill",
         -half,

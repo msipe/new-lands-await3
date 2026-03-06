@@ -11,6 +11,7 @@ export type SideResolveContext = {
   source: DiceEventSource;
   cause: DiceEventCause;
   dieId: string;
+  randomSource?: RandomSource;
 };
 
 export interface DieSide {

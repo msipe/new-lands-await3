@@ -1,6 +1,6 @@
 import { CombatEvent, CombatEventBus } from "./combat-event-bus";
 import {
-  type Die,
+  Die,
   type DieSide,
   EffectType,
   type RandomSource,
@@ -12,6 +12,7 @@ import { getEnemyById, listEnemies } from "../planning/content-registry";
 import type { ContentEnemy } from "../planning/content-types";
 import type { PlayerProgressionState } from "./player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "./player-items";
+import { Miss, WildStrike } from "./faces";
 
 type CombatActor = {
   id: string;
@@ -61,6 +62,12 @@ export type CombatResolutionPopup = {
   dieId: string;
   text: string;
   sideLabel?: string;
+  ghostDie?: {
+    isGhost: true;
+    constructId: string;
+    dieLabel: string;
+    sideLabel: string;
+  };
 };
 
 export type CombatEncounterState = {
@@ -104,6 +111,66 @@ function queueResolutionPopup(
   });
 }
 
+function queueGhostResolutionPopupFromEvents(
+  state: CombatEncounterState,
+  source: "player" | "enemy",
+  dieId: string,
+  events: CombatEvent[],
+): void {
+  const ghostEvent = events.find((event) => event.meta?.ghostDie === true);
+  if (!ghostEvent) {
+    return;
+  }
+
+  const dieLabelMeta = ghostEvent.meta?.ghostDieLabel;
+  const sideLabelMeta = ghostEvent.meta?.ghostSideLabel;
+  const constructIdMeta = ghostEvent.meta?.ghostDieConstructId;
+  const popupTextMeta = ghostEvent.meta?.ghostPopupText;
+  if (
+    typeof dieLabelMeta !== "string" ||
+    typeof sideLabelMeta !== "string" ||
+    typeof constructIdMeta !== "string"
+  ) {
+    return;
+  }
+
+  state.pendingResolutionPopups.push({
+    source,
+    dieId,
+    text:
+      typeof popupTextMeta === "string" && popupTextMeta.length > 0
+        ? `Ghost ${popupTextMeta}`
+        : `Ghost ${sideLabelMeta}`,
+    ghostDie: {
+      isGhost: true,
+      constructId: constructIdMeta,
+      dieLabel: dieLabelMeta,
+      sideLabel: sideLabelMeta,
+    },
+  });
+}
+
+function getGhostRollSummaryFromEvents(
+  events: CombatEvent[],
+): { dieLabel: string; sideLabel: string; popupText?: string } | undefined {
+  const ghostEvent = events.find((event) => event.meta?.ghostDie === true);
+  if (!ghostEvent) {
+    return undefined;
+  }
+
+  const dieLabelMeta = ghostEvent.meta?.ghostDieLabel;
+  const sideLabelMeta = ghostEvent.meta?.ghostSideLabel;
+  if (typeof dieLabelMeta !== "string" || typeof sideLabelMeta !== "string") {
+    return undefined;
+  }
+
+  return {
+    dieLabel: dieLabelMeta,
+    sideLabel: sideLabelMeta,
+    popupText: typeof ghostEvent.meta?.ghostPopupText === "string" ? ghostEvent.meta.ghostPopupText : undefined,
+  };
+}
+
 function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void {
   const appliesToPlayer =
     (event.source === "enemy" && event.target === "opponent") ||
@@ -145,6 +212,15 @@ function resolveImmediateEvents(
       break;
     }
 
+    if (
+      event.effect === EffectType.Damage &&
+      event.meta?.wildStrikeBonusApplied === true &&
+      typeof event.value === "number" &&
+      event.value > 0
+    ) {
+      state.combatLog.push(`Wild Strike bonus triggers for +${event.value} damage.`);
+    }
+
     applyCombatEvent(state, event);
 
     const triggeredEvents = eventBus.publish(event).map((nextEvent) => ({
@@ -156,13 +232,108 @@ function resolveImmediateEvents(
   }
 }
 
+function createMainhandGhostResolver(mainhandWeaponDiceId?: string) {
+  return (context: { source: "player" | "enemy"; cause: "enemy-intent" | "player-roll" | "triggered"; dieId: string; randomSource?: RandomSource }) => {
+    if (!mainhandWeaponDiceId) {
+      return [] as CombatEvent[];
+    }
+
+    const construct = getDieConstructById(mainhandWeaponDiceId);
+    const ghostDie = createDieFromConstruct({
+      construct,
+      dieId: `${context.dieId}-ghost-mainhand`,
+      nameOverride: `${construct.name} (Ghost)`,
+    });
+
+    const ghostSide = ghostDie.roll(context.randomSource ?? defaultRandomSource);
+    const ghostPopupText =
+      typeof ghostSide.getResolvePopupText === "function"
+        ? ghostSide.getResolvePopupText()
+        : ghostSide.label;
+    return ghostSide.resolve({
+      source: context.source,
+      cause: context.cause,
+      dieId: context.dieId,
+      randomSource: context.randomSource,
+    }).map((event) => ({
+      ...event,
+      meta: {
+        ...(event.meta ?? {}),
+        ghostDie: true,
+        ghostDieConstructId: construct.id,
+        ghostDieLabel: construct.name,
+        ghostSideLabel: ghostSide.label,
+        ghostPopupText,
+        ghostSideId: ghostSide.id,
+      },
+    }));
+  };
+}
+
+function createWildStrikeDie(mainhandWeaponDiceId?: string): Die {
+  const resolveGhostWeaponEvents = createMainhandGhostResolver(mainhandWeaponDiceId);
+
+  return new Die({
+    id: "player-die-1",
+    name: "Wild Strike Die",
+    sides: [
+      new WildStrike("player-die-1-side-1", 2, resolveGhostWeaponEvents),
+      new WildStrike("player-die-1-side-2", 1, resolveGhostWeaponEvents),
+      new WildStrike("player-die-1-side-3", 0, resolveGhostWeaponEvents),
+      new Miss("player-die-1-side-4"),
+      new Miss("player-die-1-side-5"),
+      new Miss("player-die-1-side-6"),
+    ],
+  });
+}
+
+function registerWildStrikeBonusSubscriber(eventBus: CombatEventBus): void {
+  eventBus.subscribe(EffectType.Damage, (event) => {
+    const bonusRaw = event.meta?.wildStrikeBonus;
+    const bonus = typeof bonusRaw === "number" ? Math.floor(bonusRaw) : 0;
+
+    if (event.meta?.wildStrikeBonusApplied === true) {
+      return [];
+    }
+
+    if (
+      bonus <= 0 ||
+      event.source !== "player" ||
+      event.target !== "opponent" ||
+      event.value <= 0 ||
+      event.meta?.wildStrike !== true
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        effect: EffectType.Damage,
+        value: bonus,
+        source: event.source,
+        target: event.target,
+        cause: "triggered",
+        dieId: event.dieId,
+        sideId: `${event.sideId}-wild-strike-bonus`,
+        meta: {
+          ...(event.meta ?? {}),
+          wildStrikeBonusApplied: true,
+        },
+      },
+    ];
+  });
+}
+
 function createPlayerDice(progression?: PlayerProgressionState): Die[] {
-  const sparkConstruct = getDieConstructById("spark-die");
+  const mainhandWeaponDiceId = progression
+    ? progression.items.equipped["weapon-1"]?.diceId
+    : "spark-die";
+
   const wardConstruct = getDieConstructById("ward-die");
   const mendConstruct = getDieConstructById("mend-die");
 
   const baseDice = [
-    createDieFromConstruct({ construct: sparkConstruct, dieId: "player-die-1" }),
+    createWildStrikeDie(mainhandWeaponDiceId),
     createDieFromConstruct({ construct: wardConstruct, dieId: "player-die-2" }),
     createDieFromConstruct({ construct: mendConstruct, dieId: "player-die-3" }),
   ];
@@ -253,6 +424,7 @@ export function createCombatEncounter(
 ): { state: CombatEncounterState; eventBus: CombatEventBus } {
   const randomSource = options?.randomSource ?? defaultRandomSource;
   const eventBus = options?.eventBus ?? new CombatEventBus();
+  registerWildStrikeBonusSubscriber(eventBus);
   const enemyTemplate =
     options?.enemyId !== undefined
       ? createEnemyTemplate(getEnemyById(options.enemyId))
@@ -377,11 +549,23 @@ export function rollPlayerDie(
     source: "player",
     cause: "player-roll",
     dieId: die.id,
+    randomSource,
   });
 
   state.combatLog.push(`Player rolls ${die.name}: ${side.label}.`);
   resolveImmediateEvents(state, eventBus, events);
   queueResolutionPopup(state, "player", die.id, side);
+  queueGhostResolutionPopupFromEvents(state, "player", die.id, events);
+  const ghostRollSummary = getGhostRollSummaryFromEvents(events);
+  if (ghostRollSummary) {
+    const ghostOutcome =
+      ghostRollSummary.popupText && ghostRollSummary.popupText !== ghostRollSummary.sideLabel
+        ? `${ghostRollSummary.sideLabel} (${ghostRollSummary.popupText})`
+        : ghostRollSummary.sideLabel;
+    state.combatLog.push(
+      `Ghost roll from ${die.name} (${ghostRollSummary.dieLabel}): ${ghostOutcome}.`,
+    );
+  }
   state.rolledPlayerDieIds.push(die.id);
   state.playerRollIndex = state.rolledPlayerDieIds.length;
 

@@ -9,6 +9,7 @@ export { ShieldBash } from "./abilities/ShieldBash";
 export { ArcaneBurst } from "./abilities/ArcaneBurst";
 export { HealSelf } from "./abilities/HealSelf";
 export { MinorMend } from "./abilities/MinorMend";
+export { WildStrike } from "./abilities/WildStrike";
 
 export { RestorationCharm } from "./items/RestorationCharm";
 

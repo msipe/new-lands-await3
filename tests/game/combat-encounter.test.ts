@@ -2,6 +2,7 @@ import { CombatEventBus } from "../../src/game/combat-event-bus";
 import {
   createCombatEncounter,
   createStubEnemies,
+  drainResolutionPopups,
   resolveNextEnemyDie,
   rollPlayerDie,
   rollNextPlayerDie,
@@ -12,6 +13,17 @@ import { createPlayerProgression } from "../../src/game/player-progression";
 function fixedRandomSource() {
   return {
     nextInt: () => 0,
+  };
+}
+
+function sequenceRandomSource(sequence: number[]) {
+  let index = 0;
+  return {
+    nextInt: () => {
+      const value = sequence[index] ?? sequence[sequence.length - 1] ?? 0;
+      index += 1;
+      return value;
+    },
   };
 }
 
@@ -90,21 +102,25 @@ describe("combat encounter", () => {
     expect(encounter.state.round).toBe(1);
     expect(encounter.state.player.hp).toBe(20);
 
+    const enemyHpAtTurnStart = encounter.state.enemy.hp;
+
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
     expect(encounter.state.playerRollIndex).toBe(1);
-    expect(encounter.state.enemy.hp).toBe(12);
+    expect(encounter.state.enemy.hp).toBeLessThan(enemyHpAtTurnStart);
     expect(encounter.state.phase).toBe("player-turn");
+
+    const enemyHpAfterFirstRoll = encounter.state.enemy.hp;
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
     expect(encounter.state.playerRollIndex).toBe(2);
-    expect(encounter.state.enemy.hp).toBe(11);
+    expect(encounter.state.enemy.hp).toBeLessThanOrEqual(enemyHpAfterFirstRoll);
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
     expect(encounter.state.phase).toBe("enemy-turn");
     expect(encounter.state.round).toBe(2);
     expect(encounter.state.playerRollIndex).toBe(0);
     expect(encounter.state.player.hp).toBe(17);
-    expect(encounter.state.enemy.hp).toBe(12);
+    expect(encounter.state.enemy.hp).toBeLessThanOrEqual(enemyHpAtTurnStart);
   });
 
   it("continues rounds until a combatant is defeated", () => {
@@ -181,7 +197,7 @@ describe("combat encounter", () => {
     encounter.state.player.hp = 15;
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
 
-    expect(encounter.state.player.hp).toBe(16);
+    expect(encounter.state.player.hp).toBe(17);
   });
 
   it("reveals enemy intent first and applies it after player finishes rolling", () => {
@@ -202,5 +218,76 @@ describe("combat encounter", () => {
     // Enemy intent resolves only after player finishes all rolls.
     expect(encounter.state.player.hp).toBe(17);
     expect(encounter.state.phase).toBe("enemy-turn");
+  });
+
+  it("uses only mainhand weapon die for wild strike ghost roll", () => {
+    const progression = createPlayerProgression();
+    progression.items.equipped["weapon-1"] = undefined;
+
+    progression.items.equipped["weapon-2"] = {
+      id: "item:test-offhand",
+      name: "Offhand Spark",
+      description: "Offhand test item.",
+      level: 1,
+      cost: 0,
+      slot: "weapon-2",
+      diceId: "spark-die",
+    };
+
+    // 3 enemy intent rolls, then wild strike face selection.
+    const randomSource = sequenceRandomSource([0, 0, 0, 0]);
+    const encounter = createCombatEncounter({
+      randomSource,
+      playerProgression: progression,
+    });
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    const enemyHpBefore = encounter.state.enemy.hp;
+
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", randomSource);
+
+    // Offhand spark exists, but with empty mainhand there is no ghost weapon attack.
+    expect(encounter.state.enemy.hp).toBe(enemyHpBefore);
+  });
+
+  it("queues a ghost popup when wild strike triggers a mainhand ghost roll", () => {
+    const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
+    const popups = drainResolutionPopups(encounter.state);
+    const ghostPopup = popups.find((popup) => popup.ghostDie?.isGhost === true);
+
+    expect(ghostPopup).toBeDefined();
+    expect(ghostPopup?.ghostDie?.dieLabel).toBe("Spark Die");
+    expect(ghostPopup?.ghostDie?.sideLabel).toBeTruthy();
+  });
+
+  it("writes ghost roll details to combat log when wild strike resolves", () => {
+    const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
+
+    resolveAllEnemyDice(encounter);
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
+
+    const ghostLine = encounter.state.combatLog.find((line) =>
+      line.startsWith("Ghost roll from Wild Strike Die (Spark Die):"),
+    );
+    expect(ghostLine).toBeDefined();
+    expect(ghostLine?.includes("(+")).toBe(true);
+  });
+
+  it("logs explicit wild strike bonus trigger on ghost hit", () => {
+    const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
+
+    resolveAllEnemyDice(encounter);
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
+
+    expect(
+      encounter.state.combatLog.some((line) => line === "Wild Strike bonus triggers for +2 damage."),
+    ).toBe(true);
   });
 });

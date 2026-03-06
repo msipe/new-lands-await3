@@ -1,6 +1,7 @@
 import {
   createCombatUiState,
   enqueueCombatResolutionPopups,
+  isCombatInspectorOpen,
   onCombatMousePressed,
   onCombatMouseReleased,
   updateCombatUiState,
@@ -284,7 +285,7 @@ describe("combat ui", () => {
 
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
-    expect(die.label).toBe("Spark Die");
+    expect(die.label).toBe("Wild Strike Die");
     expect(die.displayLabel).toBeUndefined();
     expect(die.faceLocked).toBe(true);
     expect(uiState.floatingPopups).toHaveLength(0);
@@ -321,6 +322,50 @@ describe("combat ui", () => {
 
     expect(uiState.floatingPopups).toHaveLength(1);
     expect(uiState.floatingPopups[0].text).toBe("+2 damage");
+  });
+
+  it("spawns a blue ghost die in the arena for ghost popups", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+    const sourceDie = uiState.playerDice[0];
+    sourceDie.state = "arena";
+    sourceDie.x = uiState.layout.arenaX + 124;
+    sourceDie.y = uiState.layout.arenaY + 102;
+    sourceDie.vx = 90;
+    sourceDie.vy = -30;
+    uiState.arenaPlayerDice.push(sourceDie);
+
+    enqueueCombatResolutionPopups(uiState, [
+      {
+        source: "player",
+        dieId: sourceDie.combatDieId ?? "player-die-1",
+        text: "Ghost Sword Slash",
+        ghostDie: {
+          isGhost: true,
+          constructId: "rusty-sword-die",
+          dieLabel: "Rusty Sword Die",
+          sideLabel: "Sword Slash",
+        },
+      },
+    ]);
+
+    const ghost = uiState.arenaPlayerDice.find((die) => die.isGhostDie === true);
+    expect(ghost).toBeDefined();
+    expect(ghost?.combatDieId).toBeUndefined();
+    expect(ghost?.label).toBe("Sword Slash");
+    expect(ghost?.x).toBe(sourceDie.x);
+    expect(ghost?.y).toBe(sourceDie.y);
+
+    encounter.state.phase = "player-turn";
+    updateCombatUiState(uiState, encounter.state, 2.8);
+    expect(uiState.arenaPlayerDice.some((die) => die.isGhostDie)).toBe(true);
+
+    onCombatMousePressed(uiState, encounter.state, ghost?.x ?? 0, ghost?.y ?? 0, 2);
+    expect(isCombatInspectorOpen(uiState)).toBe(true);
+
+    encounter.state.phase = "enemy-turn";
+    updateCombatUiState(uiState, encounter.state, 1 / 60);
+    expect(uiState.arenaPlayerDice.some((die) => die.isGhostDie)).toBe(false);
   });
 
   it("syncs enemy die label from authoritative sideLabel", () => {
@@ -375,7 +420,7 @@ describe("combat ui", () => {
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
     expect(die.state).toBe("parked");
-    expect(die.label).toBe("Spark Die");
+    expect(die.label).toBe("Wild Strike Die");
     expect(die.displayLabel).toBeUndefined();
   });
 });
