@@ -148,8 +148,8 @@ describe("combat ui", () => {
 
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
-    expect(uiState.readyPlayerDieIds).toHaveLength(3);
-    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(3);
+    expect(uiState.readyPlayerDieIds).toHaveLength(4);
+    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(4);
   });
 
   it("queues throw during enemy turn and executes it when player turn is available", () => {
@@ -285,7 +285,7 @@ describe("combat ui", () => {
 
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
-    expect(die.label).toBe("Wild Strike Die");
+    expect(die.label).toBe("Warcry Die");
     expect(die.displayLabel).toBeUndefined();
     expect(die.faceLocked).toBe(true);
     expect(uiState.floatingPopups).toHaveLength(0);
@@ -420,7 +420,7 @@ describe("combat ui", () => {
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
     expect(die.state).toBe("parked");
-    expect(die.label).toBe("Wild Strike Die");
+    expect(die.label).toBe("Warcry Die");
     expect(die.displayLabel).toBeUndefined();
   });
 });

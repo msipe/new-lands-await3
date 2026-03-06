@@ -12,7 +12,7 @@ import { getEnemyById, listEnemies } from "../planning/content-registry";
 import type { ContentEnemy } from "../planning/content-types";
 import type { PlayerProgressionState } from "./player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "./player-items";
-import { Miss, WildStrike } from "./faces";
+import { Miss, Warcry, WildStrike } from "./faces";
 
 type CombatActor = {
   id: string;
@@ -82,6 +82,7 @@ export type CombatEncounterState = {
   enemyIntent: PendingEnemyIntent;
   combatLog: string[];
   pendingResolutionPopups: CombatResolutionPopup[];
+  playerAttackModifier: number;
 };
 
 function enterEnemyTurn(state: CombatEncounterState): void {
@@ -199,6 +200,31 @@ function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void
   state.combatLog.push(`${recipientLabel} heals ${event.value}.`);
 }
 
+function applyPlayerAttackModifier(state: CombatEncounterState, event: CombatEvent): CombatEvent {
+  if (
+    state.playerAttackModifier === 0 ||
+    event.effect !== EffectType.Damage ||
+    event.source !== "player" ||
+    event.target !== "opponent"
+  ) {
+    return event;
+  }
+
+  const nextValue = Math.max(0, event.value + state.playerAttackModifier);
+  if (nextValue === event.value) {
+    return event;
+  }
+
+  return {
+    ...event,
+    value: nextValue,
+    meta: {
+      ...(event.meta ?? {}),
+      warcryAppliedModifier: state.playerAttackModifier,
+    },
+  };
+}
+
 function bundleWildStrikeDamage(
   event: CombatEvent,
   triggeredEvents: CombatEvent[],
@@ -267,7 +293,9 @@ function resolveImmediateEvents(
       break;
     }
 
-    const triggeredEvents = eventBus.publish(event).map((nextEvent) => ({
+    const eventWithModifier = applyPlayerAttackModifier(state, event);
+
+    const triggeredEvents = eventBus.publish(eventWithModifier).map((nextEvent) => ({
       ...nextEvent,
       cause: "triggered" as const,
     }));
@@ -275,7 +303,7 @@ function resolveImmediateEvents(
     const {
       eventToApply,
       remainingTriggeredEvents,
-    } = bundleWildStrikeDamage(event, triggeredEvents);
+    } = bundleWildStrikeDamage(eventWithModifier, triggeredEvents);
 
     applyCombatEvent(state, eventToApply);
 
@@ -366,19 +394,34 @@ function createMainhandGhostResolver(mainhandWeaponDiceId?: string) {
   };
 }
 
+function createWarcryDie(): Die {
+  return new Die({
+    id: "player-die-1",
+    name: "Warcry Die",
+    sides: [
+      new Warcry("player-die-1-side-1", 3),
+      new Warcry("player-die-1-side-2", 2),
+      new Warcry("player-die-1-side-3", 1),
+      new Warcry("player-die-1-side-4", 0),
+      new Warcry("player-die-1-side-5", -1),
+      new Warcry("player-die-1-side-6", -2),
+    ],
+  });
+}
+
 function createWildStrikeDie(mainhandWeaponDiceId?: string): Die {
   const resolveGhostWeaponEvents = createMainhandGhostResolver(mainhandWeaponDiceId);
 
   return new Die({
-    id: "player-die-1",
+    id: "player-die-4",
     name: "Wild Strike Die",
     sides: [
-      new WildStrike("player-die-1-side-1", 2, resolveGhostWeaponEvents),
-      new WildStrike("player-die-1-side-2", 1, resolveGhostWeaponEvents),
-      new WildStrike("player-die-1-side-3", 0, resolveGhostWeaponEvents),
-      new Miss("player-die-1-side-4"),
-      new Miss("player-die-1-side-5"),
-      new Miss("player-die-1-side-6"),
+      new WildStrike("player-die-4-side-1", 2, resolveGhostWeaponEvents),
+      new WildStrike("player-die-4-side-2", 1, resolveGhostWeaponEvents),
+      new WildStrike("player-die-4-side-3", 0, resolveGhostWeaponEvents),
+      new Miss("player-die-4-side-4"),
+      new Miss("player-die-4-side-5"),
+      new Miss("player-die-4-side-6"),
     ],
   });
 }
@@ -429,9 +472,10 @@ function createPlayerDice(progression?: PlayerProgressionState): Die[] {
   const mendConstruct = getDieConstructById("mend-die");
 
   const baseDice = [
-    createWildStrikeDie(mainhandWeaponDiceId),
+    createWarcryDie(),
     createDieFromConstruct({ construct: wardConstruct, dieId: "player-die-2" }),
     createDieFromConstruct({ construct: mendConstruct, dieId: "player-die-3" }),
+    createWildStrikeDie(mainhandWeaponDiceId),
   ];
 
   if (!progression) {
@@ -562,6 +606,7 @@ export function createCombatEncounter(
       `${enemy.name} prepares ${enemyIntent.pendingPlayerDamage} damage and ${enemyIntent.pendingEnemyHealing} healing.`,
     ],
     pendingResolutionPopups: [],
+    playerAttackModifier: 0,
   };
 
   enterEnemyTurn(state);
@@ -576,6 +621,7 @@ function startNextRound(state: CombatEncounterState, randomSource: RandomSource)
   state.player.armor = 0;
   state.enemy.armor = 0;
   state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
+  state.playerAttackModifier = 0;
 
   state.combatLog.push(`Round ${state.round} begins.`);
   state.combatLog.push(
@@ -593,6 +639,8 @@ function beginEnemyResolutionIfNeeded(
   if (state.rolledPlayerDieIds.length < state.player.dice.length) {
     return state;
   }
+
+  state.playerAttackModifier = 0;
 
   if (state.enemy.hp <= 0) {
     state.phase = "resolved";
@@ -641,6 +689,10 @@ export function rollPlayerDie(
   }
 
   const side = die.roll(randomSource);
+  if (side instanceof Warcry) {
+    state.playerAttackModifier = side.getAttackModifier();
+  }
+
   const events = side.resolve({
     source: "player",
     cause: "player-roll",
@@ -651,6 +703,13 @@ export function rollPlayerDie(
   const isWildStrikeRoll = die.name === "Wild Strike Die";
   if (isWildStrikeRoll) {
     state.combatLog.push("Player rolls Wild Strike.");
+  } else if (side instanceof Warcry) {
+    const signedModifier = state.playerAttackModifier >= 0
+      ? `+${state.playerAttackModifier}`
+      : `${state.playerAttackModifier}`;
+    state.combatLog.push(
+      `Player rolls ${die.name}: ${side.label} (attacks ${signedModifier} this turn).`,
+    );
   } else {
     state.combatLog.push(`Player rolls ${die.name}: ${side.label}.`);
   }

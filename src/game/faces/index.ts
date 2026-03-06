@@ -10,6 +10,7 @@ export { ArcaneBurst } from "./abilities/ArcaneBurst";
 export { HealSelf } from "./abilities/HealSelf";
 export { MinorMend } from "./abilities/MinorMend";
 export { WildStrike } from "./abilities/WildStrike";
+export { Warcry } from "./abilities/Warcry";
 
 export { RestorationCharm } from "./items/RestorationCharm";
 
