@@ -21,6 +21,10 @@ import {
   createPlayerProgression,
   type PlayerProgressionState,
 } from "../game/player-progression";
+import {
+  EQUIPMENT_SLOT_LABELS,
+  EQUIPMENT_SLOT_ORDER,
+} from "../game/player-items";
 
 type Rect = {
   x: number;
@@ -62,6 +66,8 @@ export type ExploreUiState = {
   playerProgression: PlayerProgressionState;
   isCharacterSheetOpen: boolean;
   characterSheetButtonRect: Rect;
+  isInventoryOpen: boolean;
+  inventoryButtonRect: Rect;
 };
 
 function createPlannerPackage(seedIndex: number): {
@@ -125,6 +131,15 @@ function createCharacterSheetButtonRect(): Rect {
   };
 }
 
+function createInventoryButtonRect(): Rect {
+  return {
+    x: 212,
+    y: 52,
+    width: 180,
+    height: 34,
+  };
+}
+
 function getActionLabel(branch: ExploreBranch, currentTile: ExploreTile): string {
   if (branch === "combat") {
     return "Travel to Combat";
@@ -151,6 +166,7 @@ function refreshLayoutIfNeeded(uiState: ExploreUiState): void {
   uiState.hexSize = Math.max(26, Math.min(42, Math.floor(Math.min(width, height) * 0.045)));
   uiState.buttons = createButtons(width, height);
   uiState.characterSheetButtonRect = createCharacterSheetButtonRect();
+  uiState.inventoryButtonRect = createInventoryButtonRect();
 }
 
 function isPointInRect(x: number, y: number, rect: Rect): boolean {
@@ -223,6 +239,8 @@ export function createExploreUiState(input?: number | CreateExploreUiStateOption
     playerProgression: options.playerProgression ?? createPlayerProgression(),
     isCharacterSheetOpen: false,
     characterSheetButtonRect: createCharacterSheetButtonRect(),
+    isInventoryOpen: false,
+    inventoryButtonRect: createInventoryButtonRect(),
   };
 }
 
@@ -236,13 +254,25 @@ function regeneratePlannerSpec(uiState: ExploreUiState): void {
 }
 
 export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boolean {
-  if (key === "c" || key === "i") {
+  if (key === "c") {
     uiState.isCharacterSheetOpen = !uiState.isCharacterSheetOpen;
+    if (uiState.isCharacterSheetOpen) {
+      uiState.isInventoryOpen = false;
+    }
     return true;
   }
 
-  if (key === "escape" && uiState.isCharacterSheetOpen) {
+  if (key === "i") {
+    uiState.isInventoryOpen = !uiState.isInventoryOpen;
+    if (uiState.isInventoryOpen) {
+      uiState.isCharacterSheetOpen = false;
+    }
+    return true;
+  }
+
+  if (key === "escape" && (uiState.isCharacterSheetOpen || uiState.isInventoryOpen)) {
     uiState.isCharacterSheetOpen = false;
+    uiState.isInventoryOpen = false;
     return true;
   }
 
@@ -279,6 +309,17 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
 
   if (isPointInRect(x, y, uiState.characterSheetButtonRect)) {
     uiState.isCharacterSheetOpen = !uiState.isCharacterSheetOpen;
+    if (uiState.isCharacterSheetOpen) {
+      uiState.isInventoryOpen = false;
+    }
+    return undefined;
+  }
+
+  if (isPointInRect(x, y, uiState.inventoryButtonRect)) {
+    uiState.isInventoryOpen = !uiState.isInventoryOpen;
+    if (uiState.isInventoryOpen) {
+      uiState.isCharacterSheetOpen = false;
+    }
     return undefined;
   }
 
@@ -385,10 +426,43 @@ function drawActionPanel(uiState: ExploreUiState): void {
 
   love.graphics.setColor(1, 1, 1, 1);
   love.graphics.printf(
-    uiState.isCharacterSheetOpen ? "Close Character (C / I)" : "Open Character (C / I)",
+    uiState.isCharacterSheetOpen ? "Close Character (C)" : "Open Character (C)",
     uiState.characterSheetButtonRect.x,
     uiState.characterSheetButtonRect.y + 9,
     uiState.characterSheetButtonRect.width,
+    "center",
+    0,
+    0.62,
+    0.62,
+  );
+
+  love.graphics.setColor(0.2, 0.28, 0.43, 0.96);
+  love.graphics.rectangle(
+    "fill",
+    uiState.inventoryButtonRect.x,
+    uiState.inventoryButtonRect.y,
+    uiState.inventoryButtonRect.width,
+    uiState.inventoryButtonRect.height,
+    8,
+    8,
+  );
+  love.graphics.setColor(0.73, 0.84, 0.98, 0.95);
+  love.graphics.rectangle(
+    "line",
+    uiState.inventoryButtonRect.x,
+    uiState.inventoryButtonRect.y,
+    uiState.inventoryButtonRect.width,
+    uiState.inventoryButtonRect.height,
+    8,
+    8,
+  );
+
+  love.graphics.setColor(1, 1, 1, 1);
+  love.graphics.printf(
+    uiState.isInventoryOpen ? "Close Inventory (I)" : "Open Inventory (I)",
+    uiState.inventoryButtonRect.x,
+    uiState.inventoryButtonRect.y + 9,
+    uiState.inventoryButtonRect.width,
     "center",
     0,
     0.62,
@@ -453,7 +527,7 @@ function drawActionPanel(uiState: ExploreUiState): void {
 
   love.graphics.setColor(0.72, 0.8, 0.95, 0.86);
   love.graphics.printf(
-    "Movement: click neighboring hexes | C/I: Character | P: Planner Debug | R: Reroll Plan",
+    "Movement: click neighboring hexes | C: Character | I: Inventory | P: Planner Debug | R: Reroll Plan",
     panelX + 14,
     uiState.height - 62,
     panelWidth - 28,
@@ -470,8 +544,8 @@ function drawCharacterSheetOverlay(uiState: ExploreUiState): void {
   }
 
   const progression = uiState.playerProgression;
-  const width = Math.min(460, Math.floor(uiState.width * 0.64));
-  const height = Math.min(380, Math.floor(uiState.height * 0.72));
+  const width = Math.min(560, Math.floor(uiState.width * 0.78));
+  const height = Math.min(560, Math.floor(uiState.height * 0.9));
   const x = Math.floor((uiState.width - width) * 0.5);
   const y = Math.floor((uiState.height - height) * 0.5);
 
@@ -502,12 +576,78 @@ function drawCharacterSheetOverlay(uiState: ExploreUiState): void {
   for (const line of lines) {
     love.graphics.setColor(0.85, 0.92, 1, 0.96);
     love.graphics.printf(line, x + 20, textY, width - 40, "left", 0, 0.68, 0.68);
-    textY += 28;
+    textY += 24;
+  }
+
+  textY += 8;
+  love.graphics.setColor(0.92, 0.96, 1, 0.98);
+  love.graphics.printf("Equipped Items (combat-capable dice slots)", x + 20, textY, width - 40, "left", 0, 0.66, 0.66);
+  textY += 24;
+
+  for (const slotId of EQUIPMENT_SLOT_ORDER) {
+    const slotLabel = EQUIPMENT_SLOT_LABELS[slotId];
+    const item = progression.items.equipped[slotId];
+    const itemName = item?.name ?? "Empty";
+
+    love.graphics.setColor(item ? 0.82 : 0.67, item ? 0.92 : 0.78, item ? 1 : 0.9, 0.95);
+    love.graphics.printf(`${slotLabel}: ${itemName}`, x + 20, textY, width - 40, "left", 0, 0.62, 0.62);
+    textY += 19;
   }
 
   love.graphics.setColor(0.74, 0.82, 0.94, 0.9);
   love.graphics.printf(
-    "Press C, I, or Escape to close.",
+    "Press C or Escape to close.",
+    x + 20,
+    y + height - 38,
+    width - 40,
+    "left",
+    0,
+    0.6,
+    0.6,
+  );
+}
+
+function drawInventoryOverlay(uiState: ExploreUiState): void {
+  if (!uiState.isInventoryOpen) {
+    return;
+  }
+
+  const progression = uiState.playerProgression;
+  const width = Math.min(560, Math.floor(uiState.width * 0.78));
+  const height = Math.min(360, Math.floor(uiState.height * 0.72));
+  const x = Math.floor((uiState.width - width) * 0.5);
+  const y = Math.floor((uiState.height - height) * 0.5);
+
+  love.graphics.setColor(0, 0, 0, 0.52);
+  love.graphics.rectangle("fill", 0, 0, uiState.width, uiState.height);
+
+  love.graphics.setColor(0.08, 0.1, 0.15, 0.97);
+  love.graphics.rectangle("fill", x, y, width, height, 10, 10);
+  love.graphics.setColor(0.74, 0.84, 0.98, 0.92);
+  love.graphics.rectangle("line", x, y, width, height, 10, 10);
+
+  love.graphics.setColor(0.96, 0.98, 1, 1);
+  love.graphics.printf("Inventory", x + 18, y + 18, width - 36, "left", 0, 0.9, 0.9);
+
+  love.graphics.setColor(0.82, 0.9, 1, 0.95);
+  love.graphics.printf("Carried Items (exploration access)", x + 20, y + 58, width - 40, "left", 0, 0.66, 0.66);
+
+  let textY = y + 84;
+  if (progression.items.inventory.length === 0) {
+    love.graphics.setColor(0.72, 0.8, 0.94, 0.9);
+    love.graphics.printf("No items in inventory yet.", x + 20, textY, width - 40, "left", 0, 0.62, 0.62);
+    textY += 24;
+  } else {
+    for (const item of progression.items.inventory) {
+      love.graphics.setColor(0.84, 0.92, 1, 0.96);
+      love.graphics.printf(`- ${item.name}`, x + 20, textY, width - 40, "left", 0, 0.62, 0.62);
+      textY += 20;
+    }
+  }
+
+  love.graphics.setColor(0.74, 0.82, 0.94, 0.9);
+  love.graphics.printf(
+    "Press I or Escape to close.",
     x + 20,
     y + height - 38,
     width - 40,
@@ -634,4 +774,5 @@ export function drawExploreUi(uiState: ExploreUiState, visitCount: number): void
   }
 
   drawCharacterSheetOverlay(uiState);
+  drawInventoryOverlay(uiState);
 }

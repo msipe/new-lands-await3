@@ -21,6 +21,9 @@ local ____world_2Dgenerator = require("exploration.world-generator")
 local applyWorldSpecToExploreState = ____world_2Dgenerator.applyWorldSpecToExploreState
 local ____player_2Dprogression = require("game.player-progression")
 local createPlayerProgression = ____player_2Dprogression.createPlayerProgression
+local ____player_2Ditems = require("game.player-items")
+local EQUIPMENT_SLOT_LABELS = ____player_2Ditems.EQUIPMENT_SLOT_LABELS
+local EQUIPMENT_SLOT_ORDER = ____player_2Ditems.EQUIPMENT_SLOT_ORDER
 local function createPlannerPackage(self, seedIndex)
     local plannerSpec = __TS__New(
         GamePlanner,
@@ -60,6 +63,9 @@ end
 local function createCharacterSheetButtonRect(self)
     return {x = 20, y = 52, width = 180, height = 34}
 end
+local function createInventoryButtonRect(self)
+    return {x = 212, y = 52, width = 180, height = 34}
+end
 local function getActionLabel(self, branch, currentTile)
     if branch == "combat" then
         return "Travel to Combat"
@@ -88,6 +94,7 @@ local function refreshLayoutIfNeeded(self, uiState)
     )
     uiState.buttons = createButtons(nil, width, height)
     uiState.characterSheetButtonRect = createCharacterSheetButtonRect(nil)
+    uiState.inventoryButtonRect = createInventoryButtonRect(nil)
 end
 local function isPointInRect(self, x, y, rect)
     return x >= rect.x and x <= rect.x + rect.width and y >= rect.y and y <= rect.y + rect.height
@@ -166,7 +173,9 @@ function ____exports.createExploreUiState(self, input)
         isPlannerDebugOpen = false,
         playerProgression = options.playerProgression or createPlayerProgression(nil),
         isCharacterSheetOpen = false,
-        characterSheetButtonRect = createCharacterSheetButtonRect(nil)
+        characterSheetButtonRect = createCharacterSheetButtonRect(nil),
+        isInventoryOpen = false,
+        inventoryButtonRect = createInventoryButtonRect(nil)
     }
 end
 local function regeneratePlannerSpec(self, uiState)
@@ -178,12 +187,23 @@ local function regeneratePlannerSpec(self, uiState)
     uiState.worldValidation = plannerPackage.worldValidation
 end
 function ____exports.onExploreKeyPressed(self, uiState, key)
-    if key == "c" or key == "i" then
+    if key == "c" then
         uiState.isCharacterSheetOpen = not uiState.isCharacterSheetOpen
+        if uiState.isCharacterSheetOpen then
+            uiState.isInventoryOpen = false
+        end
         return true
     end
-    if key == "escape" and uiState.isCharacterSheetOpen then
+    if key == "i" then
+        uiState.isInventoryOpen = not uiState.isInventoryOpen
+        if uiState.isInventoryOpen then
+            uiState.isCharacterSheetOpen = false
+        end
+        return true
+    end
+    if key == "escape" and (uiState.isCharacterSheetOpen or uiState.isInventoryOpen) then
         uiState.isCharacterSheetOpen = false
+        uiState.isInventoryOpen = false
         return true
     end
     if key == "p" then
@@ -212,6 +232,16 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
     refreshLayoutIfNeeded(nil, uiState)
     if isPointInRect(nil, x, y, uiState.characterSheetButtonRect) then
         uiState.isCharacterSheetOpen = not uiState.isCharacterSheetOpen
+        if uiState.isCharacterSheetOpen then
+            uiState.isInventoryOpen = false
+        end
+        return nil
+    end
+    if isPointInRect(nil, x, y, uiState.inventoryButtonRect) then
+        uiState.isInventoryOpen = not uiState.isInventoryOpen
+        if uiState.isInventoryOpen then
+            uiState.isCharacterSheetOpen = false
+        end
         return nil
     end
     local actionButton = getButtonAt(nil, uiState, x, y)
@@ -369,10 +399,41 @@ local function drawActionPanel(self, uiState)
     )
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.printf(
-        uiState.isCharacterSheetOpen and "Close Character (C / I)" or "Open Character (C / I)",
+        uiState.isCharacterSheetOpen and "Close Character (C)" or "Open Character (C)",
         uiState.characterSheetButtonRect.x,
         uiState.characterSheetButtonRect.y + 9,
         uiState.characterSheetButtonRect.width,
+        "center",
+        0,
+        0.62,
+        0.62
+    )
+    love.graphics.setColor(0.2, 0.28, 0.43, 0.96)
+    love.graphics.rectangle(
+        "fill",
+        uiState.inventoryButtonRect.x,
+        uiState.inventoryButtonRect.y,
+        uiState.inventoryButtonRect.width,
+        uiState.inventoryButtonRect.height,
+        8,
+        8
+    )
+    love.graphics.setColor(0.73, 0.84, 0.98, 0.95)
+    love.graphics.rectangle(
+        "line",
+        uiState.inventoryButtonRect.x,
+        uiState.inventoryButtonRect.y,
+        uiState.inventoryButtonRect.width,
+        uiState.inventoryButtonRect.height,
+        8,
+        8
+    )
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf(
+        uiState.isInventoryOpen and "Close Inventory (I)" or "Open Inventory (I)",
+        uiState.inventoryButtonRect.x,
+        uiState.inventoryButtonRect.y + 9,
+        uiState.inventoryButtonRect.width,
         "center",
         0,
         0.62,
@@ -449,7 +510,7 @@ local function drawActionPanel(self, uiState)
     end
     love.graphics.setColor(0.72, 0.8, 0.95, 0.86)
     love.graphics.printf(
-        "Movement: click neighboring hexes | C/I: Character | P: Planner Debug | R: Reroll Plan",
+        "Movement: click neighboring hexes | C: Character | I: Inventory | P: Planner Debug | R: Reroll Plan",
         panelX + 14,
         uiState.height - 62,
         panelWidth - 28,
@@ -465,12 +526,12 @@ local function drawCharacterSheetOverlay(self, uiState)
     end
     local progression = uiState.playerProgression
     local width = math.min(
-        460,
-        math.floor(uiState.width * 0.64)
+        560,
+        math.floor(uiState.width * 0.78)
     )
     local height = math.min(
-        380,
-        math.floor(uiState.height * 0.72)
+        560,
+        math.floor(uiState.height * 0.9)
     )
     local x = math.floor((uiState.width - width) * 0.5)
     local y = math.floor((uiState.height - height) * 0.5)
@@ -537,11 +598,148 @@ local function drawCharacterSheetOverlay(self, uiState)
             0.68,
             0.68
         )
-        textY = textY + 28
+        textY = textY + 24
+    end
+    textY = textY + 8
+    love.graphics.setColor(0.92, 0.96, 1, 0.98)
+    love.graphics.printf(
+        "Equipped Items (combat-capable dice slots)",
+        x + 20,
+        textY,
+        width - 40,
+        "left",
+        0,
+        0.66,
+        0.66
+    )
+    textY = textY + 24
+    for ____, slotId in ipairs(EQUIPMENT_SLOT_ORDER) do
+        local slotLabel = EQUIPMENT_SLOT_LABELS[slotId]
+        local item = progression.items.equipped[slotId]
+        local itemName = item and item.name or "Empty"
+        love.graphics.setColor(item and 0.82 or 0.67, item and 0.92 or 0.78, item and 1 or 0.9, 0.95)
+        love.graphics.printf(
+            (slotLabel .. ": ") .. itemName,
+            x + 20,
+            textY,
+            width - 40,
+            "left",
+            0,
+            0.62,
+            0.62
+        )
+        textY = textY + 19
     end
     love.graphics.setColor(0.74, 0.82, 0.94, 0.9)
     love.graphics.printf(
-        "Press C, I, or Escape to close.",
+        "Press C or Escape to close.",
+        x + 20,
+        y + height - 38,
+        width - 40,
+        "left",
+        0,
+        0.6,
+        0.6
+    )
+end
+local function drawInventoryOverlay(self, uiState)
+    if not uiState.isInventoryOpen then
+        return
+    end
+    local progression = uiState.playerProgression
+    local width = math.min(
+        560,
+        math.floor(uiState.width * 0.78)
+    )
+    local height = math.min(
+        360,
+        math.floor(uiState.height * 0.72)
+    )
+    local x = math.floor((uiState.width - width) * 0.5)
+    local y = math.floor((uiState.height - height) * 0.5)
+    love.graphics.setColor(0, 0, 0, 0.52)
+    love.graphics.rectangle(
+        "fill",
+        0,
+        0,
+        uiState.width,
+        uiState.height
+    )
+    love.graphics.setColor(0.08, 0.1, 0.15, 0.97)
+    love.graphics.rectangle(
+        "fill",
+        x,
+        y,
+        width,
+        height,
+        10,
+        10
+    )
+    love.graphics.setColor(0.74, 0.84, 0.98, 0.92)
+    love.graphics.rectangle(
+        "line",
+        x,
+        y,
+        width,
+        height,
+        10,
+        10
+    )
+    love.graphics.setColor(0.96, 0.98, 1, 1)
+    love.graphics.printf(
+        "Inventory",
+        x + 18,
+        y + 18,
+        width - 36,
+        "left",
+        0,
+        0.9,
+        0.9
+    )
+    love.graphics.setColor(0.82, 0.9, 1, 0.95)
+    love.graphics.printf(
+        "Carried Items (exploration access)",
+        x + 20,
+        y + 58,
+        width - 40,
+        "left",
+        0,
+        0.66,
+        0.66
+    )
+    local textY = y + 84
+    if #progression.items.inventory == 0 then
+        love.graphics.setColor(0.72, 0.8, 0.94, 0.9)
+        love.graphics.printf(
+            "No items in inventory yet.",
+            x + 20,
+            textY,
+            width - 40,
+            "left",
+            0,
+            0.62,
+            0.62
+        )
+        textY = textY + 24
+    else
+        for ____, item in ipairs(progression.items.inventory) do
+            love.graphics.setColor(0.84, 0.92, 1, 0.96)
+            love.graphics.printf(
+                "- " .. item.name,
+                x + 20,
+                textY,
+                width - 40,
+                "left",
+                0,
+                0.62,
+                0.62
+            )
+            textY = textY + 20
+        end
+    end
+    love.graphics.setColor(0.74, 0.82, 0.94, 0.9)
+    love.graphics.printf(
+        "Press I or Escape to close.",
         x + 20,
         y + height - 38,
         width - 40,
@@ -766,5 +964,6 @@ function ____exports.drawExploreUi(self, uiState, visitCount)
         drawPlannerDebugOverlay(nil, uiState)
     end
     drawCharacterSheetOverlay(nil, uiState)
+    drawInventoryOverlay(nil, uiState)
 end
 return ____exports

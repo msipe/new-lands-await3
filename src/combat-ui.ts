@@ -516,17 +516,6 @@ function updateFloatingPopups(uiState: CombatUiState, dt: number): void {
   uiState.floatingPopups = next;
 }
 
-function enqueueLocalPlayerPopup(uiState: CombatUiState, die: VisualDie, popupText?: string): void {
-  const resolvedText = popupText ?? die.rollingLabel ?? die.displayLabel ?? die.label;
-  uiState.floatingPopups.push({
-    x: die.x,
-    y: die.y - die.size * 0.72,
-    text: resolvedText,
-    source: "player",
-    timer: POPUP_DURATION,
-  });
-}
-
 function queueSettledEnemyDieId(uiState: CombatUiState, dieId: string): void {
   if (uiState.settledEnemyDieIds.includes(dieId)) {
     return;
@@ -733,10 +722,8 @@ function enqueueSettledPlayerDice(uiState: CombatUiState): void {
     visualDie.vy = 0;
     visualDie.spin = 0;
     visualDie.flashTimer = RESOLVE_FLASH_DURATION;
-    const popupText = visualDie.rollingLabel ?? visualDie.label;
-    visualDie.displayLabel = popupText;
+    visualDie.displayLabel = undefined;
     lockVisualDieFace(visualDie);
-    enqueueLocalPlayerPopup(uiState, visualDie, popupText);
 
     if (!uiState.settledPlayerDieIds.includes(dieId)) {
       uiState.settledPlayerDieIds.push(dieId);
@@ -757,10 +744,8 @@ function settleAllPendingPlayerDice(uiState: CombatUiState): void {
       visualDie.vx = 0;
       visualDie.vy = 0;
       visualDie.spin = 0;
-      const popupText = visualDie.rollingLabel ?? visualDie.label;
-      visualDie.displayLabel = popupText;
+      visualDie.displayLabel = undefined;
       lockVisualDieFace(visualDie);
-      enqueueLocalPlayerPopup(uiState, visualDie, popupText);
     }
 
     if (!uiState.settledPlayerDieIds.includes(dieId)) {
@@ -1113,11 +1098,6 @@ export function enqueueCombatResolutionPopups(
       die.displayLabel = popup.sideLabel;
     }
     lockVisualDieFace(die);
-
-    if (popup.source === "player") {
-      // Player popup timing is handled locally on settle; only sync authoritative label here.
-      continue;
-    }
 
     uiState.floatingPopups.push({
       x: die.x,

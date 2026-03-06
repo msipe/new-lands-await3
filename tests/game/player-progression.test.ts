@@ -6,6 +6,7 @@ import {
   recordCombatVictory,
   setPlayerIdentity,
 } from "../../src/game/player-progression";
+import { EQUIPMENT_SLOT_ORDER } from "../../src/game/player-items";
 
 describe("player progression", () => {
   it("starts at level 1 with zero xp", () => {
@@ -61,5 +62,23 @@ describe("player progression", () => {
 
     expect(progression.className).toBe("Warrior");
     expect(progression.raceName).toBe("Human");
+  });
+
+  it("creates equipped and inventory buckets", () => {
+    const progression = createPlayerProgression();
+
+    expect(progression.items.inventory).toHaveLength(0);
+    expect(Object.keys(progression.items.equipped)).toHaveLength(EQUIPMENT_SLOT_ORDER.length);
+    expect(progression.items.equipped["weapon-1"]?.id).toBe("item:rusty-sword");
+    expect(progression.items.equipped["weapon-2"]?.id).toBe("item:wooden-shield");
+    expect(progression.items.equipped.armor?.id).toBe("item:patched-armor");
+
+    for (const slotId of EQUIPMENT_SLOT_ORDER) {
+      if (slotId === "weapon-1" || slotId === "weapon-2" || slotId === "armor") {
+        continue;
+      }
+
+      expect(progression.items.equipped[slotId]).toBeUndefined();
+    }
   });
 });

@@ -1,5 +1,5 @@
-import { RAW_BIG_BADS, RAW_ENEMIES, RAW_NPCS, RAW_QUESTS, RAW_TILES } from "./content-registry-generated";
-import type { ContentBigBad, ContentEnemy, ContentNpc, ContentQuest, ContentTile } from "./content-types";
+import { RAW_BIG_BADS, RAW_ENEMIES, RAW_ITEMS, RAW_NPCS, RAW_QUESTS, RAW_TILES } from "./content-registry-generated";
+import type { ContentBigBad, ContentEnemy, ContentItem, ContentNpc, ContentQuest, ContentTile } from "./content-types";
 
 function cloneEnemyAbilities(abilities: readonly unknown[]): ContentEnemy["abilities"] {
   return abilities.map((ability) => {
@@ -63,6 +63,9 @@ const ENEMIES: ContentEnemy[] = RAW_ENEMIES.map((entry) => ({
   abilities: cloneEnemyAbilities(entry.abilities),
   dice: [...entry.dice],
 }));
+const ITEMS: ContentItem[] = RAW_ITEMS.map((entry) => ({
+  ...entry,
+}));
 
 function assertFound<T>(value: T | undefined, kind: string, id: string): T {
   if (value !== undefined) {
@@ -90,6 +93,10 @@ export function getBigBadById(id: string): ContentBigBad {
 
 export function getEnemyById(id: string): ContentEnemy {
   return assertFound(ENEMIES.find((entry) => entry.id === id), "enemy", id);
+}
+
+export function getItemById(id: string): ContentItem {
+  return assertFound(ITEMS.find((entry) => entry.id === id), "item", id);
 }
 
 export function listNpcs(): ContentNpc[] {
@@ -141,5 +148,11 @@ export function listEnemies(): ContentEnemy[] {
     types: [...entry.types],
     abilities: cloneEnemyAbilities(entry.abilities),
     dice: [...entry.dice],
+  }));
+}
+
+export function listItems(): ContentItem[] {
+  return ITEMS.map((entry) => ({
+    ...entry,
   }));
 }

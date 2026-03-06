@@ -94,7 +94,7 @@ function createCombatForCurrentTile(): { state: CombatEncounterState; eventBus: 
     const currentTile = activeExploreUi ? getCurrentTile(activeExploreUi.model) : undefined;
     const runSeed = activeExploreUi?.plannerSpec.seed ?? `run-fallback-${runSeedNonce}`;
     const enemyId = pickEnemyIdForTile(currentTile, runSeed);
-    return createCombatEncounter({ enemyId });
+    return createCombatEncounter({ enemyId, playerProgression });
 }
 
 love.load = () => {

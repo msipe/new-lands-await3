@@ -56,6 +56,28 @@ export type ContentEnemy = {
   dice: string[];
 };
 
+export type ItemSlot =
+  | "armor"
+  | "ring-1"
+  | "ring-2"
+  | "necklace"
+  | "trinket"
+  | "cloak"
+  | "helmet"
+  | "weapon-1"
+  | "weapon-2"
+  | "inventory";
+
+export type ContentItem = {
+  id: string;
+  name: string;
+  description: string;
+  level: number;
+  cost: number;
+  slot: ItemSlot;
+  diceId?: string;
+};
+
 export type ContentRequirementTemplate = {
   id: string;
   kind: PlannerRequirementKind;

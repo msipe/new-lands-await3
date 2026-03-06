@@ -1,3 +1,10 @@
+import {
+  createInitialInventoryState,
+  type EquipmentSlotId,
+  type PlayerInventoryState,
+} from "./player-items";
+import { getItemById } from "../planning/content-registry";
+
 export type PlayerProgressionState = {
   classId: "class:warrior";
   className: string;
@@ -10,6 +17,7 @@ export type PlayerProgressionState = {
   battlesWon: number;
   maxHp: number;
   diceSlots: number;
+  items: PlayerInventoryState;
 };
 
 export type LevelUpResult = {
@@ -27,6 +35,19 @@ export function getXpRequiredForLevel(level: number): number {
 }
 
 export function createPlayerProgression(): PlayerProgressionState {
+  const items = createInitialInventoryState();
+
+  const starterItemIds = ["item:rusty-sword", "item:wooden-shield", "item:patched-armor"];
+  for (const itemId of starterItemIds) {
+    const starterItem = getItemById(itemId);
+    if (starterItem.slot === "inventory") {
+      items.inventory.push({ ...starterItem });
+      continue;
+    }
+
+    items.equipped[starterItem.slot as EquipmentSlotId] = { ...starterItem };
+  }
+
   return {
     classId: "class:warrior",
     className: "Warrior",
@@ -39,6 +60,7 @@ export function createPlayerProgression(): PlayerProgressionState {
     battlesWon: 0,
     maxHp: 20,
     diceSlots: 3,
+    items,
   };
 }
 

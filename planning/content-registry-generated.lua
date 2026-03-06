@@ -350,4 +350,50 @@ ____exports.RAW_ENEMIES = {
         dice = {"hex-bolt", "slime-claw", "brew-sip"}
     }
 }
+____exports.RAW_ITEMS = {
+    {
+        id = "item:rusty-sword",
+        name = "Rusty Sword",
+        description = "An old blade with chipped edges, but still battle-ready.",
+        level = 1,
+        cost = 12,
+        slot = "weapon-1",
+        diceId = "rusty-sword-die"
+    },
+    {
+        id = "item:threadbare-cloak",
+        name = "Threadbare Cloak",
+        description = "Worn cloth that still offers a little protection from wind and rain.",
+        level = 1,
+        cost = 8,
+        slot = "cloak",
+        diceId = "ward-die"
+    },
+    {
+        id = "item:wooden-shield",
+        name = "Wooden Shield",
+        description = "A sturdy shield built to catch glancing blows.",
+        level = 1,
+        cost = 11,
+        slot = "weapon-2",
+        diceId = "wooden-shield-die"
+    },
+    {
+        id = "item:patched-armor",
+        name = "Patched Armor",
+        description = "Layered plates and stitching that keep a novice warrior alive.",
+        level = 1,
+        cost = 14,
+        slot = "armor",
+        diceId = "patched-armor-die"
+    },
+    {
+        id = "item:rations-pack",
+        name = "Rations Pack",
+        description = "Basic field supplies for long travel.",
+        level = 1,
+        cost = 5,
+        slot = "inventory"
+    }
+}
 return ____exports

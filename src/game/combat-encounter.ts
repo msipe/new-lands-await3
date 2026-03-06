@@ -10,6 +10,8 @@ import { getDieConstructById } from "./dice-constructs";
 import { createDieFromConstruct } from "./dice-factory";
 import { getEnemyById, listEnemies } from "../planning/content-registry";
 import type { ContentEnemy } from "../planning/content-types";
+import type { PlayerProgressionState } from "./player-progression";
+import { EQUIPMENT_SLOT_ORDER } from "./player-items";
 
 type CombatActor = {
   id: string;
@@ -154,16 +156,42 @@ function resolveImmediateEvents(
   }
 }
 
-function createPlayerDice(): Die[] {
+function createPlayerDice(progression?: PlayerProgressionState): Die[] {
   const sparkConstruct = getDieConstructById("spark-die");
   const wardConstruct = getDieConstructById("ward-die");
   const mendConstruct = getDieConstructById("mend-die");
 
-  return [
+  const baseDice = [
     createDieFromConstruct({ construct: sparkConstruct, dieId: "player-die-1" }),
     createDieFromConstruct({ construct: wardConstruct, dieId: "player-die-2" }),
     createDieFromConstruct({ construct: mendConstruct, dieId: "player-die-3" }),
   ];
+
+  if (!progression) {
+    return baseDice;
+  }
+
+  const equipmentDice: Die[] = [];
+  let equipmentIndex = 1;
+
+  for (const slotId of EQUIPMENT_SLOT_ORDER) {
+    const equippedItem = progression.items.equipped[slotId];
+    const diceId = equippedItem?.diceId;
+    if (!diceId) {
+      continue;
+    }
+
+    const construct = getDieConstructById(diceId);
+    equipmentDice.push(
+      createDieFromConstruct({
+        construct,
+        dieId: `equipped-${slotId}-${equipmentIndex}`,
+      }),
+    );
+    equipmentIndex += 1;
+  }
+
+  return [...baseDice, ...equipmentDice];
 }
 
 export function createStubEnemies(): EnemyStub[] {
@@ -220,6 +248,7 @@ export function createCombatEncounter(
     enemyId?: string;
     randomSource?: RandomSource;
     eventBus?: CombatEventBus;
+    playerProgression?: PlayerProgressionState;
   },
 ): { state: CombatEncounterState; eventBus: CombatEventBus } {
   const randomSource = options?.randomSource ?? defaultRandomSource;
@@ -232,11 +261,11 @@ export function createCombatEncounter(
   const player: CombatActor = {
     id: "player",
     name: "Arcanist",
-    level: 1,
-    hp: 20,
-    maxHp: 20,
+    level: options?.playerProgression?.level ?? 1,
+    hp: options?.playerProgression?.maxHp ?? 20,
+    maxHp: options?.playerProgression?.maxHp ?? 20,
     armor: 0,
-    dice: createPlayerDice(),
+    dice: createPlayerDice(options?.playerProgression),
   };
 
   const enemy: CombatActor = {

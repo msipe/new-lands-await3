@@ -13,6 +13,7 @@ local ____exports = {}
 local ____content_2Dregistry_2Dgenerated = require("planning.content-registry-generated")
 local RAW_BIG_BADS = ____content_2Dregistry_2Dgenerated.RAW_BIG_BADS
 local RAW_ENEMIES = ____content_2Dregistry_2Dgenerated.RAW_ENEMIES
+local RAW_ITEMS = ____content_2Dregistry_2Dgenerated.RAW_ITEMS
 local RAW_NPCS = ____content_2Dregistry_2Dgenerated.RAW_NPCS
 local RAW_QUESTS = ____content_2Dregistry_2Dgenerated.RAW_QUESTS
 local RAW_TILES = ____content_2Dregistry_2Dgenerated.RAW_TILES
@@ -104,6 +105,10 @@ local ENEMIES = __TS__ArrayMap(
         }
     ) end
 )
+local ITEMS = __TS__ArrayMap(
+    RAW_ITEMS,
+    function(____, entry) return __TS__ObjectAssign({}, entry) end
+)
 local function assertFound(self, value, kind, id)
     if value ~= nil then
         return value
@@ -165,6 +170,17 @@ function ____exports.getEnemyById(self, id)
             function(____, entry) return entry.id == id end
         ),
         "enemy",
+        id
+    )
+end
+function ____exports.getItemById(self, id)
+    return assertFound(
+        nil,
+        __TS__ArrayFind(
+            ITEMS,
+            function(____, entry) return entry.id == id end
+        ),
+        "item",
         id
     )
 end
@@ -237,6 +253,12 @@ function ____exports.listEnemies(self)
                 dice = {unpack(entry.dice)}
             }
         ) end
+    )
+end
+function ____exports.listItems(self)
+    return __TS__ArrayMap(
+        ITEMS,
+        function(____, entry) return __TS__ObjectAssign({}, entry) end
     )
 end
 return ____exports

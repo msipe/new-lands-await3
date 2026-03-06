@@ -262,7 +262,7 @@ describe("combat ui", () => {
     expect(uiState.rolledPlayerDieIds).toContain(die.combatDieId);
   });
 
-  it("shows rolled face label on settled player dice", () => {
+  it("waits for authoritative player resolution labels before showing face text", () => {
     const encounter = createCombatEncounter();
     encounter.state.phase = "player-turn";
     const uiState = createCombatUiState(encounter.state);
@@ -285,9 +285,9 @@ describe("combat ui", () => {
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
     expect(die.label).toBe("Spark Die");
-    expect(die.displayLabel).toBe("Sword Slash");
+    expect(die.displayLabel).toBeUndefined();
     expect(die.faceLocked).toBe(true);
-    expect(uiState.floatingPopups.some((popup) => popup.source === "player" && popup.text === "Sword Slash")).toBe(true);
+    expect(uiState.floatingPopups).toHaveLength(0);
 
     enqueueCombatResolutionPopups(uiState, [
       {
@@ -300,9 +300,10 @@ describe("combat ui", () => {
 
     expect(die.label).toBe("Sword Slash");
     expect(die.displayLabel).toBe("Sword Slash");
+    expect(uiState.floatingPopups.some((popup) => popup.source === "player" && popup.text === "+2 damage")).toBe(true);
   });
 
-  it("ignores delayed queued player popups to avoid duplicate timing", () => {
+  it("shows player popups from authoritative resolution events", () => {
     const encounter = createCombatEncounter();
     const uiState = createCombatUiState(encounter.state);
 
@@ -318,7 +319,8 @@ describe("combat ui", () => {
       },
     ]);
 
-    expect(uiState.floatingPopups).toHaveLength(0);
+    expect(uiState.floatingPopups).toHaveLength(1);
+    expect(uiState.floatingPopups[0].text).toBe("+2 damage");
   });
 
   it("syncs enemy die label from authoritative sideLabel", () => {

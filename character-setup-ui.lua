@@ -220,9 +220,8 @@ local function drawRadioOption(self, uiState, group, option, isSelected)
         8
     )
     love.graphics.setColor(0.98, 0.99, 1, 1)
-    local selectedLabel = isSelected and option.label .. " (Selected)" or option.label
     love.graphics.printf(
-        selectedLabel,
+        option.label,
         option.rect.x + 14,
         option.rect.y + 10,
         option.rect.width - 20,

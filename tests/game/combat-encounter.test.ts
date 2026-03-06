@@ -7,6 +7,7 @@ import {
   rollNextPlayerDie,
 } from "../../src/game/combat-encounter";
 import { EffectType } from "../../src/game/dice";
+import { createPlayerProgression } from "../../src/game/player-progression";
 
 function fixedRandomSource() {
   return {
@@ -44,6 +45,31 @@ describe("combat encounter", () => {
     for (const die of state.player.dice) {
       expect(die.sides).toHaveLength(6);
     }
+  });
+
+  it("adds equipped item dice to player combat dice", () => {
+    const progression = createPlayerProgression();
+    progression.items.equipped.armor = undefined;
+    progression.items.equipped["weapon-1"] = undefined;
+    progression.items.equipped["weapon-2"] = undefined;
+
+    progression.items.equipped["weapon-1"] = {
+      id: "item:test-spark-blade",
+      name: "Spark Blade",
+      description: "A basic test weapon.",
+      level: 1,
+      cost: 10,
+      slot: "weapon-1",
+      diceId: "spark-die",
+    };
+
+    const { state } = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerProgression: progression,
+    });
+
+    expect(state.player.dice).toHaveLength(4);
+    expect(state.player.dice.some((die) => die.id.includes("equipped-weapon-1"))).toBe(true);
   });
 
   it("rolls enemy dice first and exposes pending intent", () => {

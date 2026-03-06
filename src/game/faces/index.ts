@@ -2,6 +2,8 @@ export { Face, type FaceCategory, type FaceResolveContext } from "./Face";
 export type { FaceUpgrade } from "./FaceUpgrade";
 
 export { DealDamage } from "./abilities/DealDamage";
+export { DealSelfDamage } from "./abilities/DealSelfDamage";
+export { Miss } from "./abilities/Miss";
 export { SwordSlash } from "./abilities/SwordSlash";
 export { ShieldBash } from "./abilities/ShieldBash";
 export { ArcaneBurst } from "./abilities/ArcaneBurst";
