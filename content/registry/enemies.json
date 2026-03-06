@@ -10,6 +10,26 @@
     "dice": ["slime-claw", "slime-jab", "slime-ooze"]
   },
   {
+    "id": "enemy:bog-slime",
+    "name": "Bog Slime",
+    "level": 1,
+    "hp": 16,
+    "tags": ["beast", "slime", "swamp"],
+    "types": ["ooze", "bruiser"],
+    "abilities": [],
+    "dice": ["slime-claw", "slime-ooze", "slime-ooze"]
+  },
+  {
+    "id": "enemy:vine-slime",
+    "name": "Vine Slime",
+    "level": 2,
+    "hp": 15,
+    "tags": ["beast", "slime", "forest"],
+    "types": ["ooze", "striker"],
+    "abilities": [],
+    "dice": ["slime-jab", "slime-jab", "slime-ooze"]
+  },
+  {
     "id": "enemy:goblin-hexer",
     "name": "Goblin Hexer",
     "level": 2,
@@ -18,5 +38,55 @@
     "types": ["raider", "caster"],
     "abilities": [],
     "dice": ["hex-bolt", "knife-toss", "brew-sip"]
+  },
+  {
+    "id": "enemy:goblin-raider",
+    "name": "Goblin Raider",
+    "level": 1,
+    "hp": 13,
+    "tags": ["humanoid", "goblin", "ambush"],
+    "types": ["raider", "striker"],
+    "abilities": [],
+    "dice": ["knife-toss", "knife-toss", "hex-bolt"]
+  },
+  {
+    "id": "enemy:goblin-brewguard",
+    "name": "Goblin Brewguard",
+    "level": 2,
+    "hp": 17,
+    "tags": ["humanoid", "goblin", "support"],
+    "types": ["raider", "support"],
+    "abilities": [],
+    "dice": ["brew-sip", "hex-bolt", "slime-claw"]
+  },
+  {
+    "id": "enemy:reef-marauder",
+    "name": "Reef Marauder",
+    "level": 2,
+    "hp": 16,
+    "tags": ["nautical", "raider", "coastal"],
+    "types": ["pirate", "striker"],
+    "abilities": [],
+    "dice": ["knife-toss", "hex-bolt", "slime-jab"]
+  },
+  {
+    "id": "enemy:peak-warlock",
+    "name": "Peak Warlock",
+    "level": 3,
+    "hp": 18,
+    "tags": ["humanoid", "caster", "mountain"],
+    "types": ["cultist", "caster"],
+    "abilities": [],
+    "dice": ["hex-bolt", "hex-bolt", "brew-sip"]
+  },
+  {
+    "id": "enemy:castle-sentinel",
+    "name": "Castle Sentinel",
+    "level": 4,
+    "hp": 22,
+    "tags": ["elite", "castle", "guardian"],
+    "types": ["elite", "defender"],
+    "abilities": [],
+    "dice": ["hex-bolt", "slime-claw", "brew-sip"]
   }
 ]

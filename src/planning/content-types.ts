@@ -18,6 +18,19 @@ export type ContentTile = {
   name: string;
   zone: ZoneType;
   unique: boolean;
+  isTemplate?: boolean;
+  description?: string;
+  color?: [number, number, number, number];
+  defaultStatus?: "unvisited" | "visited" | "active";
+  encounterPlaceholders?: Array<{
+    id: string;
+    weight: number;
+    tags: string[];
+  }>;
+  enemyPool?: Array<{
+    enemyId: string;
+    weight: number;
+  }>;
   tags: string[];
   enemyIds?: string[];
 };

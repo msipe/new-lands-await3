@@ -61,6 +61,19 @@ local TILES = __TS__ArrayMap(
         {},
         entry,
         {
+            color = entry.color and ({entry.color[1], entry.color[2], entry.color[3], entry.color[4]}) or nil,
+            encounterPlaceholders = entry.encounterPlaceholders and __TS__ArrayMap(
+                entry.encounterPlaceholders,
+                function(____, placeholder) return {
+                    id = placeholder.id,
+                    weight = placeholder.weight,
+                    tags = {unpack(placeholder.tags)}
+                } end
+            ) or nil,
+            enemyPool = entry.enemyPool and __TS__ArrayMap(
+                entry.enemyPool,
+                function(____, enemyEntry) return {enemyId = enemyEntry.enemyId, weight = enemyEntry.weight} end
+            ) or nil,
             tags = {unpack(entry.tags)},
             enemyIds = entry.enemyIds ~= nil and ({unpack(entry.enemyIds)}) or nil
         }
@@ -182,6 +195,32 @@ function ____exports.listQuests(self)
                     }
                 ) end
             )}
+        ) end
+    )
+end
+function ____exports.listTiles(self)
+    return __TS__ArrayMap(
+        TILES,
+        function(____, entry) return __TS__ObjectAssign(
+            {},
+            entry,
+            {
+                color = entry.color and ({entry.color[1], entry.color[2], entry.color[3], entry.color[4]}) or nil,
+                encounterPlaceholders = entry.encounterPlaceholders and __TS__ArrayMap(
+                    entry.encounterPlaceholders,
+                    function(____, placeholder) return {
+                        id = placeholder.id,
+                        weight = placeholder.weight,
+                        tags = {unpack(placeholder.tags)}
+                    } end
+                ) or nil,
+                enemyPool = entry.enemyPool and __TS__ArrayMap(
+                    entry.enemyPool,
+                    function(____, enemyEntry) return {enemyId = enemyEntry.enemyId, weight = enemyEntry.weight} end
+                ) or nil,
+                tags = {unpack(entry.tags)},
+                enemyIds = entry.enemyIds ~= nil and ({unpack(entry.enemyIds)}) or nil
+            }
         ) end
     )
 end

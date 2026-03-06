@@ -29,8 +29,24 @@ const QUESTS: ContentQuest[] = RAW_QUESTS.map((entry) => ({
     metadata: { ...req.metadata },
   })),
 }));
-const TILES: ContentTile[] = RAW_TILES.map((entry) => ({
+const TILES: ContentTile[] = (RAW_TILES as unknown as ContentTile[]).map((entry) => ({
   ...entry,
+  color: entry.color
+    ? [entry.color[0], entry.color[1], entry.color[2], entry.color[3]]
+    : undefined,
+  encounterPlaceholders: entry.encounterPlaceholders
+    ? entry.encounterPlaceholders.map((placeholder) => ({
+        id: placeholder.id,
+        weight: placeholder.weight,
+        tags: [...placeholder.tags],
+      }))
+    : undefined,
+  enemyPool: entry.enemyPool
+    ? entry.enemyPool.map((enemyEntry) => ({
+        enemyId: enemyEntry.enemyId,
+        weight: enemyEntry.weight,
+      }))
+    : undefined,
   tags: [...entry.tags],
   enemyIds: entry.enemyIds !== undefined ? [...entry.enemyIds] : undefined,
 }));
@@ -91,6 +107,30 @@ export function listQuests(): ContentQuest[] {
       tags: [...req.tags],
       metadata: { ...req.metadata },
     })),
+  }));
+}
+
+export function listTiles(): ContentTile[] {
+  return TILES.map((entry) => ({
+    ...entry,
+    color: entry.color
+      ? [entry.color[0], entry.color[1], entry.color[2], entry.color[3]]
+      : undefined,
+    encounterPlaceholders: entry.encounterPlaceholders
+      ? entry.encounterPlaceholders.map((placeholder) => ({
+          id: placeholder.id,
+          weight: placeholder.weight,
+          tags: [...placeholder.tags],
+        }))
+      : undefined,
+    enemyPool: entry.enemyPool
+      ? entry.enemyPool.map((enemyEntry) => ({
+          enemyId: enemyEntry.enemyId,
+          weight: enemyEntry.weight,
+        }))
+      : undefined,
+    tags: [...entry.tags],
+    enemyIds: entry.enemyIds !== undefined ? [...entry.enemyIds] : undefined,
   }));
 }
 

@@ -1,3 +1,5 @@
+import { listTiles } from "../planning/content-registry";
+
 export type ZoneType = "forest" | "mountain" | "farmland" | "town" | "ocean";
 
 export type TileStatus = "unvisited" | "visited" | "active";
@@ -129,87 +131,52 @@ function chooseDefaultZoneByRoll(roll: number): ZoneType {
   return "town";
 }
 
+function toTileTemplateByZone(): Record<ZoneType, TileTemplate> {
+  const templateEntries = listTiles().filter((tile) => tile.isTemplate === true);
+
+  const templateMap: Partial<Record<ZoneType, TileTemplate>> = {};
+  for (const tile of templateEntries) {
+    if (
+      tile.description === undefined ||
+      tile.color === undefined ||
+      tile.defaultStatus === undefined ||
+      tile.encounterPlaceholders === undefined ||
+      tile.enemyPool === undefined
+    ) {
+      throw new Error(`Tile template is missing required template fields: ${tile.id}`);
+    }
+
+    templateMap[tile.zone] = {
+      zone: tile.zone,
+      name: tile.name,
+      description: tile.description,
+      color: [tile.color[0], tile.color[1], tile.color[2], tile.color[3]],
+      defaultStatus: tile.defaultStatus,
+      encounterPlaceholders: tile.encounterPlaceholders.map((placeholder) => ({
+        id: placeholder.id,
+        weight: placeholder.weight,
+        tags: [...placeholder.tags],
+      })),
+      enemyPool: tile.enemyPool.map((entry) => ({
+        enemyId: entry.enemyId,
+        weight: entry.weight,
+      })),
+      tags: [...tile.tags],
+    };
+  }
+
+  const requiredZones: ZoneType[] = ["forest", "mountain", "farmland", "town", "ocean"];
+  for (const zone of requiredZones) {
+    if (templateMap[zone] === undefined) {
+      throw new Error(`Missing tile template definition for zone: ${zone}`);
+    }
+  }
+
+  return templateMap as Record<ZoneType, TileTemplate>;
+}
+
 export function createDefaultTileFactoryConfig(): TileFactoryConfig {
-  const templatesByZone: Record<ZoneType, TileTemplate> = {
-    forest: {
-      zone: "forest",
-      name: "Whisperwood",
-      description: "Dense groves hide old ruins, beasts, and overgrown tracks.",
-      color: [0.19, 0.48, 0.22, 1],
-      defaultStatus: "unvisited",
-      encounterPlaceholders: [
-        { id: "wolf-pack", weight: 3, tags: ["beast", "combat"] },
-        { id: "lost-scout", weight: 2, tags: ["npc", "encounter"] },
-      ],
-      enemyPool: [
-        { enemyId: "enemy:slime-raider", weight: 3 },
-        { enemyId: "enemy:goblin-hexer", weight: 1 },
-      ],
-      tags: ["wild", "green"],
-    },
-    mountain: {
-      zone: "mountain",
-      name: "Shale Peaks",
-      description: "Craggy heights with thin air, narrow paths, and hidden ore seams.",
-      color: [0.5, 0.5, 0.53, 1],
-      defaultStatus: "unvisited",
-      encounterPlaceholders: [
-        { id: "stone-raider", weight: 2, tags: ["combat", "ambush"] },
-        { id: "collapsed-pass", weight: 1, tags: ["hazard", "encounter"] },
-      ],
-      enemyPool: [
-        { enemyId: "enemy:goblin-hexer", weight: 3 },
-        { enemyId: "enemy:slime-raider", weight: 1 },
-      ],
-      tags: ["elevated", "harsh"],
-    },
-    farmland: {
-      zone: "farmland",
-      name: "Golden Fields",
-      description: "Patchwork farms and villages touched by trade roads.",
-      color: [0.67, 0.56, 0.27, 1],
-      defaultStatus: "unvisited",
-      encounterPlaceholders: [
-        { id: "bandit-tax", weight: 2, tags: ["combat", "human"] },
-        { id: "harvest-fair", weight: 2, tags: ["event", "encounter"] },
-      ],
-      enemyPool: [
-        { enemyId: "enemy:goblin-hexer", weight: 2 },
-        { enemyId: "enemy:slime-raider", weight: 2 },
-      ],
-      tags: ["civilized", "roads"],
-    },
-    town: {
-      zone: "town",
-      name: "Waypost",
-      description: "A small hub for caravans, repairs, and rumors of the frontier.",
-      color: [0.45, 0.35, 0.2, 1],
-      defaultStatus: "unvisited",
-      encounterPlaceholders: [
-        { id: "market-brawl", weight: 1, tags: ["combat", "urban"] },
-        { id: "guild-contract", weight: 3, tags: ["quest", "encounter"] },
-      ],
-      enemyPool: [
-        { enemyId: "enemy:goblin-hexer", weight: 1 },
-      ],
-      tags: ["safe-ish", "services"],
-    },
-    ocean: {
-      zone: "ocean",
-      name: "Salt Expanse",
-      description: "Open waters, storm fronts, and drifting wreckage.",
-      color: [0.17, 0.36, 0.64, 1],
-      defaultStatus: "unvisited",
-      encounterPlaceholders: [
-        { id: "reef-serpent", weight: 1, tags: ["combat", "beast"] },
-        { id: "drifter-cache", weight: 2, tags: ["loot", "encounter"] },
-      ],
-      enemyPool: [
-        { enemyId: "enemy:slime-raider", weight: 2 },
-      ],
-      tags: ["nautical", "open"],
-    },
-  };
+  const templatesByZone = toTileTemplateByZone();
 
   return {
     templatesByZone,

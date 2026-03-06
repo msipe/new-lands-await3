@@ -67,6 +67,273 @@ export const RAW_NPCS = [
 
 export const RAW_TILES = [
   {
+    "id": "tile:whisperwood",
+    "name": "Whisperwood",
+    "zone": "forest",
+    "unique": false,
+    "isTemplate": true,
+    "description": "Dense groves hide old ruins, beasts, and overgrown tracks.",
+    "color": [
+      0.19,
+      0.48,
+      0.22,
+      1
+    ],
+    "defaultStatus": "unvisited",
+    "encounterPlaceholders": [
+      {
+        "id": "wolf-pack",
+        "weight": 3,
+        "tags": [
+          "beast",
+          "combat"
+        ]
+      },
+      {
+        "id": "lost-scout",
+        "weight": 2,
+        "tags": [
+          "npc",
+          "encounter"
+        ]
+      }
+    ],
+    "enemyPool": [
+      {
+        "enemyId": "enemy:slime-raider",
+        "weight": 3
+      },
+      {
+        "enemyId": "enemy:bog-slime",
+        "weight": 2
+      },
+      {
+        "enemyId": "enemy:vine-slime",
+        "weight": 2
+      },
+      {
+        "enemyId": "enemy:goblin-raider",
+        "weight": 1
+      }
+    ],
+    "tags": [
+      "wild",
+      "green"
+    ]
+  },
+  {
+    "id": "tile:shale-peaks",
+    "name": "Shale Peaks",
+    "zone": "mountain",
+    "unique": false,
+    "isTemplate": true,
+    "description": "Craggy heights with thin air, narrow paths, and hidden ore seams.",
+    "color": [
+      0.5,
+      0.5,
+      0.53,
+      1
+    ],
+    "defaultStatus": "unvisited",
+    "encounterPlaceholders": [
+      {
+        "id": "stone-raider",
+        "weight": 2,
+        "tags": [
+          "combat",
+          "ambush"
+        ]
+      },
+      {
+        "id": "collapsed-pass",
+        "weight": 1,
+        "tags": [
+          "hazard",
+          "encounter"
+        ]
+      }
+    ],
+    "enemyPool": [
+      {
+        "enemyId": "enemy:goblin-hexer",
+        "weight": 3
+      },
+      {
+        "enemyId": "enemy:peak-warlock",
+        "weight": 2
+      },
+      {
+        "enemyId": "enemy:goblin-brewguard",
+        "weight": 1
+      },
+      {
+        "enemyId": "enemy:slime-raider",
+        "weight": 1
+      }
+    ],
+    "tags": [
+      "elevated",
+      "harsh"
+    ]
+  },
+  {
+    "id": "tile:golden-fields",
+    "name": "Golden Fields",
+    "zone": "farmland",
+    "unique": false,
+    "isTemplate": true,
+    "description": "Patchwork farms and villages touched by trade roads.",
+    "color": [
+      0.67,
+      0.56,
+      0.27,
+      1
+    ],
+    "defaultStatus": "unvisited",
+    "encounterPlaceholders": [
+      {
+        "id": "bandit-tax",
+        "weight": 2,
+        "tags": [
+          "combat",
+          "human"
+        ]
+      },
+      {
+        "id": "harvest-fair",
+        "weight": 2,
+        "tags": [
+          "event",
+          "encounter"
+        ]
+      }
+    ],
+    "enemyPool": [
+      {
+        "enemyId": "enemy:goblin-hexer",
+        "weight": 2
+      },
+      {
+        "enemyId": "enemy:goblin-raider",
+        "weight": 3
+      },
+      {
+        "enemyId": "enemy:goblin-brewguard",
+        "weight": 1
+      },
+      {
+        "enemyId": "enemy:slime-raider",
+        "weight": 1
+      }
+    ],
+    "tags": [
+      "civilized",
+      "roads"
+    ]
+  },
+  {
+    "id": "tile:waypost",
+    "name": "Waypost",
+    "zone": "town",
+    "unique": false,
+    "isTemplate": true,
+    "description": "A small hub for caravans, repairs, and rumors of the frontier.",
+    "color": [
+      0.45,
+      0.35,
+      0.2,
+      1
+    ],
+    "defaultStatus": "unvisited",
+    "encounterPlaceholders": [
+      {
+        "id": "market-brawl",
+        "weight": 1,
+        "tags": [
+          "combat",
+          "urban"
+        ]
+      },
+      {
+        "id": "guild-contract",
+        "weight": 3,
+        "tags": [
+          "quest",
+          "encounter"
+        ]
+      }
+    ],
+    "enemyPool": [
+      {
+        "enemyId": "enemy:goblin-hexer",
+        "weight": 2
+      },
+      {
+        "enemyId": "enemy:goblin-raider",
+        "weight": 2
+      },
+      {
+        "enemyId": "enemy:goblin-brewguard",
+        "weight": 1
+      }
+    ],
+    "tags": [
+      "safe-ish",
+      "services"
+    ]
+  },
+  {
+    "id": "tile:salt-expanse",
+    "name": "Salt Expanse",
+    "zone": "ocean",
+    "unique": false,
+    "isTemplate": true,
+    "description": "Open waters, storm fronts, and drifting wreckage.",
+    "color": [
+      0.17,
+      0.36,
+      0.64,
+      1
+    ],
+    "defaultStatus": "unvisited",
+    "encounterPlaceholders": [
+      {
+        "id": "reef-serpent",
+        "weight": 1,
+        "tags": [
+          "combat",
+          "beast"
+        ]
+      },
+      {
+        "id": "drifter-cache",
+        "weight": 2,
+        "tags": [
+          "loot",
+          "encounter"
+        ]
+      }
+    ],
+    "enemyPool": [
+      {
+        "enemyId": "enemy:reef-marauder",
+        "weight": 3
+      },
+      {
+        "enemyId": "enemy:bog-slime",
+        "weight": 1
+      },
+      {
+        "enemyId": "enemy:slime-raider",
+        "weight": 1
+      }
+    ],
+    "tags": [
+      "nautical",
+      "open"
+    ]
+  },
+  {
     "id": "tile:draculas-castle",
     "name": "Dracula's Castle",
     "zone": "mountain",
@@ -77,7 +344,8 @@ export const RAW_TILES = [
       "big-bad"
     ],
     "enemyIds": [
-      "enemy:goblin-hexer"
+      "enemy:castle-sentinel",
+      "enemy:peak-warlock"
     ]
   }
 ] as const;
@@ -345,6 +613,48 @@ export const RAW_ENEMIES = [
     ]
   },
   {
+    "id": "enemy:bog-slime",
+    "name": "Bog Slime",
+    "level": 1,
+    "hp": 16,
+    "tags": [
+      "beast",
+      "slime",
+      "swamp"
+    ],
+    "types": [
+      "ooze",
+      "bruiser"
+    ],
+    "abilities": [],
+    "dice": [
+      "slime-claw",
+      "slime-ooze",
+      "slime-ooze"
+    ]
+  },
+  {
+    "id": "enemy:vine-slime",
+    "name": "Vine Slime",
+    "level": 2,
+    "hp": 15,
+    "tags": [
+      "beast",
+      "slime",
+      "forest"
+    ],
+    "types": [
+      "ooze",
+      "striker"
+    ],
+    "abilities": [],
+    "dice": [
+      "slime-jab",
+      "slime-jab",
+      "slime-ooze"
+    ]
+  },
+  {
     "id": "enemy:goblin-hexer",
     "name": "Goblin Hexer",
     "level": 2,
@@ -362,6 +672,111 @@ export const RAW_ENEMIES = [
     "dice": [
       "hex-bolt",
       "knife-toss",
+      "brew-sip"
+    ]
+  },
+  {
+    "id": "enemy:goblin-raider",
+    "name": "Goblin Raider",
+    "level": 1,
+    "hp": 13,
+    "tags": [
+      "humanoid",
+      "goblin",
+      "ambush"
+    ],
+    "types": [
+      "raider",
+      "striker"
+    ],
+    "abilities": [],
+    "dice": [
+      "knife-toss",
+      "knife-toss",
+      "hex-bolt"
+    ]
+  },
+  {
+    "id": "enemy:goblin-brewguard",
+    "name": "Goblin Brewguard",
+    "level": 2,
+    "hp": 17,
+    "tags": [
+      "humanoid",
+      "goblin",
+      "support"
+    ],
+    "types": [
+      "raider",
+      "support"
+    ],
+    "abilities": [],
+    "dice": [
+      "brew-sip",
+      "hex-bolt",
+      "slime-claw"
+    ]
+  },
+  {
+    "id": "enemy:reef-marauder",
+    "name": "Reef Marauder",
+    "level": 2,
+    "hp": 16,
+    "tags": [
+      "nautical",
+      "raider",
+      "coastal"
+    ],
+    "types": [
+      "pirate",
+      "striker"
+    ],
+    "abilities": [],
+    "dice": [
+      "knife-toss",
+      "hex-bolt",
+      "slime-jab"
+    ]
+  },
+  {
+    "id": "enemy:peak-warlock",
+    "name": "Peak Warlock",
+    "level": 3,
+    "hp": 18,
+    "tags": [
+      "humanoid",
+      "caster",
+      "mountain"
+    ],
+    "types": [
+      "cultist",
+      "caster"
+    ],
+    "abilities": [],
+    "dice": [
+      "hex-bolt",
+      "hex-bolt",
+      "brew-sip"
+    ]
+  },
+  {
+    "id": "enemy:castle-sentinel",
+    "name": "Castle Sentinel",
+    "level": 4,
+    "hp": 22,
+    "tags": [
+      "elite",
+      "castle",
+      "guardian"
+    ],
+    "types": [
+      "elite",
+      "defender"
+    ],
+    "abilities": [],
+    "dice": [
+      "hex-bolt",
+      "slime-claw",
       "brew-sip"
     ]
   }

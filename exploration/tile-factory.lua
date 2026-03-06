@@ -1,7 +1,17 @@
 local ____lualib = require("lualib_bundle")
+local __TS__ArrayFilter = ____lualib.__TS__ArrayFilter
+local Error = ____lualib.Error
+local RangeError = ____lualib.RangeError
+local ReferenceError = ____lualib.ReferenceError
+local SyntaxError = ____lualib.SyntaxError
+local TypeError = ____lualib.TypeError
+local URIError = ____lualib.URIError
+local __TS__New = ____lualib.__TS__New
 local __TS__ArrayMap = ____lualib.__TS__ArrayMap
 local __TS__ObjectAssign = ____lualib.__TS__ObjectAssign
 local ____exports = {}
+local ____content_2Dregistry = require("planning.content-registry")
+local listTiles = ____content_2Dregistry.listTiles
 local function createDefaultTownLocations(self, tileKey)
     return {{
         id = tileKey .. ":market-square",
@@ -41,59 +51,59 @@ local function chooseDefaultZoneByRoll(self, roll)
     end
     return "town"
 end
-function ____exports.createDefaultTileFactoryConfig(self)
-    local templatesByZone = {
-        forest = {
-            zone = "forest",
-            name = "Whisperwood",
-            description = "Dense groves hide old ruins, beasts, and overgrown tracks.",
-            color = {0.19, 0.48, 0.22, 1},
-            defaultStatus = "unvisited",
-            encounterPlaceholders = {{id = "wolf-pack", weight = 3, tags = {"beast", "combat"}}, {id = "lost-scout", weight = 2, tags = {"npc", "encounter"}}},
-            enemyPool = {{enemyId = "enemy:slime-raider", weight = 3}, {enemyId = "enemy:goblin-hexer", weight = 1}},
-            tags = {"wild", "green"}
-        },
-        mountain = {
-            zone = "mountain",
-            name = "Shale Peaks",
-            description = "Craggy heights with thin air, narrow paths, and hidden ore seams.",
-            color = {0.5, 0.5, 0.53, 1},
-            defaultStatus = "unvisited",
-            encounterPlaceholders = {{id = "stone-raider", weight = 2, tags = {"combat", "ambush"}}, {id = "collapsed-pass", weight = 1, tags = {"hazard", "encounter"}}},
-            enemyPool = {{enemyId = "enemy:goblin-hexer", weight = 3}, {enemyId = "enemy:slime-raider", weight = 1}},
-            tags = {"elevated", "harsh"}
-        },
-        farmland = {
-            zone = "farmland",
-            name = "Golden Fields",
-            description = "Patchwork farms and villages touched by trade roads.",
-            color = {0.67, 0.56, 0.27, 1},
-            defaultStatus = "unvisited",
-            encounterPlaceholders = {{id = "bandit-tax", weight = 2, tags = {"combat", "human"}}, {id = "harvest-fair", weight = 2, tags = {"event", "encounter"}}},
-            enemyPool = {{enemyId = "enemy:goblin-hexer", weight = 2}, {enemyId = "enemy:slime-raider", weight = 2}},
-            tags = {"civilized", "roads"}
-        },
-        town = {
-            zone = "town",
-            name = "Waypost",
-            description = "A small hub for caravans, repairs, and rumors of the frontier.",
-            color = {0.45, 0.35, 0.2, 1},
-            defaultStatus = "unvisited",
-            encounterPlaceholders = {{id = "market-brawl", weight = 1, tags = {"combat", "urban"}}, {id = "guild-contract", weight = 3, tags = {"quest", "encounter"}}},
-            enemyPool = {{enemyId = "enemy:goblin-hexer", weight = 1}},
-            tags = {"safe-ish", "services"}
-        },
-        ocean = {
-            zone = "ocean",
-            name = "Salt Expanse",
-            description = "Open waters, storm fronts, and drifting wreckage.",
-            color = {0.17, 0.36, 0.64, 1},
-            defaultStatus = "unvisited",
-            encounterPlaceholders = {{id = "reef-serpent", weight = 1, tags = {"combat", "beast"}}, {id = "drifter-cache", weight = 2, tags = {"loot", "encounter"}}},
-            enemyPool = {{enemyId = "enemy:slime-raider", weight = 2}},
-            tags = {"nautical", "open"}
+local function toTileTemplateByZone(self)
+    local templateEntries = __TS__ArrayFilter(
+        listTiles(nil),
+        function(____, tile) return tile.isTemplate == true end
+    )
+    local templateMap = {}
+    for ____, tile in ipairs(templateEntries) do
+        if tile.description == nil or tile.color == nil or tile.defaultStatus == nil or tile.encounterPlaceholders == nil or tile.enemyPool == nil then
+            error(
+                __TS__New(Error, "Tile template is missing required template fields: " .. tile.id),
+                0
+            )
+        end
+        templateMap[tile.zone] = {
+            zone = tile.zone,
+            name = tile.name,
+            description = tile.description,
+            color = {tile.color[1], tile.color[2], tile.color[3], tile.color[4]},
+            defaultStatus = tile.defaultStatus,
+            encounterPlaceholders = __TS__ArrayMap(
+                tile.encounterPlaceholders,
+                function(____, placeholder) return {
+                    id = placeholder.id,
+                    weight = placeholder.weight,
+                    tags = {unpack(placeholder.tags)}
+                } end
+            ),
+            enemyPool = __TS__ArrayMap(
+                tile.enemyPool,
+                function(____, entry) return {enemyId = entry.enemyId, weight = entry.weight} end
+            ),
+            tags = {unpack(tile.tags)}
         }
+    end
+    local requiredZones = {
+        "forest",
+        "mountain",
+        "farmland",
+        "town",
+        "ocean"
     }
+    for ____, zone in ipairs(requiredZones) do
+        if templateMap[zone] == nil then
+            error(
+                __TS__New(Error, "Missing tile template definition for zone: " .. zone),
+                0
+            )
+        end
+    end
+    return templateMap
+end
+function ____exports.createDefaultTileFactoryConfig(self)
+    local templatesByZone = toTileTemplateByZone(nil)
     return {
         templatesByZone = templatesByZone,
         chooseZone = function(____, context)
