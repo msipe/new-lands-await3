@@ -21,6 +21,7 @@ export type SceneState = {
 function createInitialVisitCounts(): VisitCounts {
   return {
     "main-menu": 1,
+    "character-setup": 0,
     explore: 0,
     combat: 0,
     encounter: 0,
@@ -32,6 +33,7 @@ function createInitialVisitCounts(): VisitCounts {
 function createInitialContexts(): SceneContexts {
   return {
     "main-menu": SCENE_CONTRACTS["main-menu"].createInitialContext(),
+    "character-setup": SCENE_CONTRACTS["character-setup"].createInitialContext(),
     explore: SCENE_CONTRACTS.explore.createInitialContext(),
     combat: SCENE_CONTRACTS.combat.createInitialContext(),
     encounter: SCENE_CONTRACTS.encounter.createInitialContext(),
@@ -65,6 +67,15 @@ export function advanceScene(state: SceneState): SceneState {
       state,
       SCENE_CONTRACTS["main-menu"].reduce(state.contexts["main-menu"], {
         kind: "start-run",
+      }).nextScene,
+    );
+  }
+
+  if (state.current === "character-setup") {
+    return transitionTo(
+      state,
+      SCENE_CONTRACTS["character-setup"].reduce(state.contexts["character-setup"], {
+        kind: "confirm-selection",
       }).nextScene,
     );
   }

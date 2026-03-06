@@ -1,5 +1,6 @@
 export const SCENE_IDS = [
   "main-menu",
+  "character-setup",
   "explore",
   "combat",
   "encounter",
@@ -11,6 +12,10 @@ export type SceneId = (typeof SCENE_IDS)[number];
 
 export type MainMenuInput = {
   kind: "start-run";
+};
+
+export type CharacterSetupInput = {
+  kind: "confirm-selection";
 };
 
 export type ExploreInput =
@@ -40,6 +45,7 @@ export type EndGameInput = {
 
 export type SceneInputById = {
   "main-menu": MainMenuInput;
+  "character-setup": CharacterSetupInput;
   explore: ExploreInput;
   combat: CombatInput;
   encounter: EncounterInput;
@@ -54,6 +60,11 @@ export type MainMenuContext = {
 export type ExploreContext = {
   nodeIndex: number;
   availableBranches: Array<"combat" | "encounter">;
+};
+
+export type CharacterSetupContext = {
+  selectedClassId: "class:warrior";
+  selectedRaceId: "race:human";
 };
 
 export type CombatContext = {
@@ -76,6 +87,7 @@ export type EndGameContext = {
 
 export type SceneContextById = {
   "main-menu": MainMenuContext;
+  "character-setup": CharacterSetupContext;
   explore: ExploreContext;
   combat: CombatContext;
   encounter: EncounterContext;
@@ -84,7 +96,8 @@ export type SceneContextById = {
 };
 
 export type SceneOutputById = {
-  "main-menu": { nextScene: "explore" };
+  "main-menu": { nextScene: "character-setup" };
+  "character-setup": { nextScene: "explore" };
   explore: { nextScene: "combat" | "encounter" };
   combat: { nextScene: "explore" };
   encounter: { nextScene: "explore" };
@@ -113,14 +126,25 @@ export const SCENE_CONTRACTS: SceneContracts = {
     id: "main-menu",
     title: "Main Menu",
     prompt: "Press Space to start your run.",
-    defaultNext: "explore",
+    defaultNext: "character-setup",
     createInitialContext: () => ({ runNumber: 1 }),
+    reduce: () => ({ nextScene: "character-setup" }),
+  },
+  "character-setup": {
+    id: "character-setup",
+    title: "Character Setup",
+    prompt: "Choose your class and race, then continue.",
+    defaultNext: "explore",
+    createInitialContext: () => ({
+      selectedClassId: "class:warrior",
+      selectedRaceId: "race:human",
+    }),
     reduce: () => ({ nextScene: "explore" }),
   },
   explore: {
     id: "explore",
     title: "Explore",
-    prompt: "Click a neighboring hex to travel, then choose Combat or Encounter (C/E shortcuts still work).",
+    prompt: "Click a neighboring hex to travel, then choose Combat or Encounter.",
     defaultNext: "combat",
     createInitialContext: () => ({
       nodeIndex: 0,

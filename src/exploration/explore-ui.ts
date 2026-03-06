@@ -17,6 +17,10 @@ import {
 import { createWorldSpecFromPlan, type WorldSpec } from "../planning/world-spec-builder";
 import { validateWorldAgainstSpec, type WorldValidationResult } from "../planning/world-validator";
 import { applyWorldSpecToExploreState } from "./world-generator";
+import {
+  createPlayerProgression,
+  type PlayerProgressionState,
+} from "../game/player-progression";
 
 type Rect = {
   x: number;
@@ -26,8 +30,14 @@ type Rect = {
 };
 
 type ActionButton = {
+  kind: "branch";
   branch: ExploreBranch;
   rect: Rect;
+};
+
+export type CreateExploreUiStateOptions = {
+  initialSeedIndex?: number;
+  playerProgression?: PlayerProgressionState;
 };
 
 export type ExploreUiAction =
@@ -49,6 +59,9 @@ export type ExploreUiState = {
   worldValidation: WorldValidationResult;
   plannerSeedIndex: number;
   isPlannerDebugOpen: boolean;
+  playerProgression: PlayerProgressionState;
+  isCharacterSheetOpen: boolean;
+  characterSheetButtonRect: Rect;
 };
 
 function createPlannerPackage(seedIndex: number): {
@@ -91,14 +104,25 @@ function createButtons(width: number, height: number): ActionButton[] {
 
   return [
     {
+      kind: "branch",
       branch: "combat",
       rect: { x, y: top, width: buttonWidth, height: buttonHeight },
     },
     {
+      kind: "branch",
       branch: "encounter",
       rect: { x, y: top + buttonHeight + 14, width: buttonWidth, height: buttonHeight },
     },
   ];
+}
+
+function createCharacterSheetButtonRect(): Rect {
+  return {
+    x: 20,
+    y: 52,
+    width: 180,
+    height: 34,
+  };
 }
 
 function getActionLabel(branch: ExploreBranch, currentTile: ExploreTile): string {
@@ -126,6 +150,7 @@ function refreshLayoutIfNeeded(uiState: ExploreUiState): void {
   uiState.mapCenterY = Math.floor(height * 0.5);
   uiState.hexSize = Math.max(26, Math.min(42, Math.floor(Math.min(width, height) * 0.045)));
   uiState.buttons = createButtons(width, height);
+  uiState.characterSheetButtonRect = createCharacterSheetButtonRect();
 }
 
 function isPointInRect(x: number, y: number, rect: Rect): boolean {
@@ -172,10 +197,12 @@ function drawHex(centerX: number, centerY: number, size: number, mode: "fill" | 
   love.graphics.polygon(mode, ...vertices);
 }
 
-export function createExploreUiState(initialSeedIndex?: number): ExploreUiState {
+export function createExploreUiState(input?: number | CreateExploreUiStateOptions): ExploreUiState {
+  const options: CreateExploreUiStateOptions =
+    typeof input === "number" ? { initialSeedIndex: input } : input ?? {};
   const width = love.graphics.getWidth();
   const height = love.graphics.getHeight();
-  const plannerSeedIndex = Math.max(1, Math.floor(initialSeedIndex ?? 1));
+  const plannerSeedIndex = Math.max(1, Math.floor(options.initialSeedIndex ?? 1));
   const plannerPackage = createPlannerPackage(plannerSeedIndex);
 
   return {
@@ -193,6 +220,9 @@ export function createExploreUiState(initialSeedIndex?: number): ExploreUiState 
     worldValidation: plannerPackage.worldValidation,
     plannerSeedIndex,
     isPlannerDebugOpen: false,
+    playerProgression: options.playerProgression ?? createPlayerProgression(),
+    isCharacterSheetOpen: false,
+    characterSheetButtonRect: createCharacterSheetButtonRect(),
   };
 }
 
@@ -206,6 +236,16 @@ function regeneratePlannerSpec(uiState: ExploreUiState): void {
 }
 
 export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boolean {
+  if (key === "c" || key === "i") {
+    uiState.isCharacterSheetOpen = !uiState.isCharacterSheetOpen;
+    return true;
+  }
+
+  if (key === "escape" && uiState.isCharacterSheetOpen) {
+    uiState.isCharacterSheetOpen = false;
+    return true;
+  }
+
   if (key === "p") {
     uiState.isPlannerDebugOpen = !uiState.isPlannerDebugOpen;
     return true;
@@ -237,6 +277,11 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
 
   refreshLayoutIfNeeded(uiState);
 
+  if (isPointInRect(x, y, uiState.characterSheetButtonRect)) {
+    uiState.isCharacterSheetOpen = !uiState.isCharacterSheetOpen;
+    return undefined;
+  }
+
   const actionButton = getButtonAt(uiState, x, y);
   if (actionButton) {
     return {
@@ -253,6 +298,56 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
   return undefined;
 }
 
+function drawPlayerProgressHud(uiState: ExploreUiState): void {
+  const progression = uiState.playerProgression;
+  const panelX = 20;
+  const panelY = 94;
+  const panelWidth = 260;
+  const panelHeight = 88;
+
+  love.graphics.setColor(0.1, 0.12, 0.17, 0.92);
+  love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 8, 8);
+  love.graphics.setColor(0.67, 0.76, 0.9, 0.85);
+  love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 8, 8);
+
+  love.graphics.setColor(0.96, 0.98, 1, 1);
+  love.graphics.printf(
+    `${progression.raceName} ${progression.className}  |  Level ${progression.level}`,
+    panelX + 10,
+    panelY + 10,
+    panelWidth - 20,
+    "left",
+    0,
+    0.66,
+    0.66,
+  );
+
+  const barX = panelX + 10;
+  const barY = panelY + 40;
+  const barWidth = panelWidth - 20;
+  const barHeight = 20;
+  const fillRatio = progression.xpToNextLevel > 0 ? progression.xp / progression.xpToNextLevel : 0;
+
+  love.graphics.setColor(0.18, 0.22, 0.32, 1);
+  love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, 5, 5);
+  love.graphics.setColor(0.4, 0.71, 0.94, 0.95);
+  love.graphics.rectangle("fill", barX, barY, Math.max(0, Math.floor(barWidth * fillRatio)), barHeight, 5, 5);
+  love.graphics.setColor(0.72, 0.83, 0.98, 0.9);
+  love.graphics.rectangle("line", barX, barY, barWidth, barHeight, 5, 5);
+
+  love.graphics.setColor(0.85, 0.92, 1, 0.92);
+  love.graphics.printf(
+    `XP ${progression.xp}/${progression.xpToNextLevel}  |  Battles won: ${progression.battlesWon}`,
+    panelX + 10,
+    panelY + 66,
+    panelWidth - 20,
+    "left",
+    0,
+    0.58,
+    0.58,
+  );
+}
+
 function drawActionPanel(uiState: ExploreUiState): void {
   const panelX = Math.floor(uiState.width * 0.78);
   const panelY = 24;
@@ -266,6 +361,39 @@ function drawActionPanel(uiState: ExploreUiState): void {
 
   love.graphics.setColor(0.95, 0.97, 1, 1);
   love.graphics.printf("Expedition Map", panelX + 14, panelY + 14, panelWidth - 28, "left", 0, 0.96, 0.96);
+
+  love.graphics.setColor(0.2, 0.28, 0.43, 0.96);
+  love.graphics.rectangle(
+    "fill",
+    uiState.characterSheetButtonRect.x,
+    uiState.characterSheetButtonRect.y,
+    uiState.characterSheetButtonRect.width,
+    uiState.characterSheetButtonRect.height,
+    8,
+    8,
+  );
+  love.graphics.setColor(0.73, 0.84, 0.98, 0.95);
+  love.graphics.rectangle(
+    "line",
+    uiState.characterSheetButtonRect.x,
+    uiState.characterSheetButtonRect.y,
+    uiState.characterSheetButtonRect.width,
+    uiState.characterSheetButtonRect.height,
+    8,
+    8,
+  );
+
+  love.graphics.setColor(1, 1, 1, 1);
+  love.graphics.printf(
+    uiState.isCharacterSheetOpen ? "Close Character (C / I)" : "Open Character (C / I)",
+    uiState.characterSheetButtonRect.x,
+    uiState.characterSheetButtonRect.y + 9,
+    uiState.characterSheetButtonRect.width,
+    "center",
+    0,
+    0.62,
+    0.62,
+  );
 
   const currentTile = getCurrentTile(uiState.model);
   const playerKey = toCoordKey(uiState.model.playerCoord);
@@ -325,7 +453,7 @@ function drawActionPanel(uiState: ExploreUiState): void {
 
   love.graphics.setColor(0.72, 0.8, 0.95, 0.86);
   love.graphics.printf(
-    "Movement: click neighboring hexes only | P: Planner Debug | R: Reroll Plan",
+    "Movement: click neighboring hexes | C/I: Character | P: Planner Debug | R: Reroll Plan",
     panelX + 14,
     uiState.height - 62,
     panelWidth - 28,
@@ -333,6 +461,60 @@ function drawActionPanel(uiState: ExploreUiState): void {
     0,
     0.66,
     0.66,
+  );
+}
+
+function drawCharacterSheetOverlay(uiState: ExploreUiState): void {
+  if (!uiState.isCharacterSheetOpen) {
+    return;
+  }
+
+  const progression = uiState.playerProgression;
+  const width = Math.min(460, Math.floor(uiState.width * 0.64));
+  const height = Math.min(380, Math.floor(uiState.height * 0.72));
+  const x = Math.floor((uiState.width - width) * 0.5);
+  const y = Math.floor((uiState.height - height) * 0.5);
+
+  love.graphics.setColor(0, 0, 0, 0.52);
+  love.graphics.rectangle("fill", 0, 0, uiState.width, uiState.height);
+
+  love.graphics.setColor(0.08, 0.1, 0.15, 0.97);
+  love.graphics.rectangle("fill", x, y, width, height, 10, 10);
+  love.graphics.setColor(0.74, 0.84, 0.98, 0.92);
+  love.graphics.rectangle("line", x, y, width, height, 10, 10);
+
+  love.graphics.setColor(0.96, 0.98, 1, 1);
+  love.graphics.printf("Character Sheet", x + 18, y + 18, width - 36, "left", 0, 0.9, 0.9);
+
+  const lines = [
+    `Class: ${progression.className}`,
+    `Race: ${progression.raceName}`,
+    `Level: ${progression.level}`,
+    `Current XP: ${progression.xp}`,
+    `XP to next level: ${progression.xpToNextLevel}`,
+    `Total XP earned: ${progression.totalXp}`,
+    `Battles won: ${progression.battlesWon}`,
+    `Max HP (progression): ${progression.maxHp}`,
+    `Dice slots: ${progression.diceSlots}`,
+  ];
+
+  let textY = y + 64;
+  for (const line of lines) {
+    love.graphics.setColor(0.85, 0.92, 1, 0.96);
+    love.graphics.printf(line, x + 20, textY, width - 40, "left", 0, 0.68, 0.68);
+    textY += 28;
+  }
+
+  love.graphics.setColor(0.74, 0.82, 0.94, 0.9);
+  love.graphics.printf(
+    "Press C, I, or Escape to close.",
+    x + 20,
+    y + height - 38,
+    width - 40,
+    "left",
+    0,
+    0.6,
+    0.6,
   );
 }
 
@@ -443,9 +625,13 @@ export function drawExploreUi(uiState: ExploreUiState, visitCount: number): void
   love.graphics.setColor(0.9, 0.95, 1, 0.96);
   love.graphics.printf(`Explore Visits: ${visitCount}`, 20, 18, 280, "left", 0, 0.75, 0.75);
 
+  drawPlayerProgressHud(uiState);
+
   drawActionPanel(uiState);
 
   if (uiState.isPlannerDebugOpen) {
     drawPlannerDebugOverlay(uiState);
   }
+
+  drawCharacterSheetOverlay(uiState);
 }

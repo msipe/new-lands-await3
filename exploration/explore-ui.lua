@@ -19,6 +19,8 @@ local ____world_2Dvalidator = require("planning.world-validator")
 local validateWorldAgainstSpec = ____world_2Dvalidator.validateWorldAgainstSpec
 local ____world_2Dgenerator = require("exploration.world-generator")
 local applyWorldSpecToExploreState = ____world_2Dgenerator.applyWorldSpecToExploreState
+local ____player_2Dprogression = require("game.player-progression")
+local createPlayerProgression = ____player_2Dprogression.createPlayerProgression
 local function createPlannerPackage(self, seedIndex)
     local plannerSpec = __TS__New(
         GamePlanner,
@@ -53,7 +55,10 @@ local function createButtons(self, width, height)
     local rightEdge = width - 20
     local x = rightEdge - panelWidth + 14
     local top = math.floor(height * 0.52)
-    return {{branch = "combat", rect = {x = x, y = top, width = buttonWidth, height = buttonHeight}}, {branch = "encounter", rect = {x = x, y = top + buttonHeight + 14, width = buttonWidth, height = buttonHeight}}}
+    return {{kind = "branch", branch = "combat", rect = {x = x, y = top, width = buttonWidth, height = buttonHeight}}, {kind = "branch", branch = "encounter", rect = {x = x, y = top + buttonHeight + 14, width = buttonWidth, height = buttonHeight}}}
+end
+local function createCharacterSheetButtonRect(self)
+    return {x = 20, y = 52, width = 180, height = 34}
 end
 local function getActionLabel(self, branch, currentTile)
     if branch == "combat" then
@@ -82,6 +87,7 @@ local function refreshLayoutIfNeeded(self, uiState)
         )
     )
     uiState.buttons = createButtons(nil, width, height)
+    uiState.characterSheetButtonRect = createCharacterSheetButtonRect(nil)
 end
 local function isPointInRect(self, x, y, rect)
     return x >= rect.x and x <= rect.x + rect.width and y >= rect.y and y <= rect.y + rect.height
@@ -128,12 +134,13 @@ local function drawHex(self, centerX, centerY, size, mode)
         unpack(vertices)
     )
 end
-function ____exports.createExploreUiState(self, initialSeedIndex)
+function ____exports.createExploreUiState(self, input)
+    local options = type(input) == "number" and ({initialSeedIndex = input}) or (input or ({}))
     local width = love.graphics.getWidth()
     local height = love.graphics.getHeight()
     local plannerSeedIndex = math.max(
         1,
-        math.floor(initialSeedIndex or 1)
+        math.floor(options.initialSeedIndex or 1)
     )
     local plannerPackage = createPlannerPackage(nil, plannerSeedIndex)
     return {
@@ -156,7 +163,10 @@ function ____exports.createExploreUiState(self, initialSeedIndex)
         worldSpec = plannerPackage.worldSpec,
         worldValidation = plannerPackage.worldValidation,
         plannerSeedIndex = plannerSeedIndex,
-        isPlannerDebugOpen = false
+        isPlannerDebugOpen = false,
+        playerProgression = options.playerProgression or createPlayerProgression(nil),
+        isCharacterSheetOpen = false,
+        characterSheetButtonRect = createCharacterSheetButtonRect(nil)
     }
 end
 local function regeneratePlannerSpec(self, uiState)
@@ -168,6 +178,14 @@ local function regeneratePlannerSpec(self, uiState)
     uiState.worldValidation = plannerPackage.worldValidation
 end
 function ____exports.onExploreKeyPressed(self, uiState, key)
+    if key == "c" or key == "i" then
+        uiState.isCharacterSheetOpen = not uiState.isCharacterSheetOpen
+        return true
+    end
+    if key == "escape" and uiState.isCharacterSheetOpen then
+        uiState.isCharacterSheetOpen = false
+        return true
+    end
     if key == "p" then
         uiState.isPlannerDebugOpen = not uiState.isPlannerDebugOpen
         return true
@@ -192,6 +210,10 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         return nil
     end
     refreshLayoutIfNeeded(nil, uiState)
+    if isPointInRect(nil, x, y, uiState.characterSheetButtonRect) then
+        uiState.isCharacterSheetOpen = not uiState.isCharacterSheetOpen
+        return nil
+    end
     local actionButton = getButtonAt(nil, uiState, x, y)
     if actionButton then
         return {kind = "choose-branch", branch = actionButton.branch}
@@ -201,6 +223,93 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         tryTravelToCoord(nil, uiState.model, clickedTile.coord)
     end
     return nil
+end
+local function drawPlayerProgressHud(self, uiState)
+    local progression = uiState.playerProgression
+    local panelX = 20
+    local panelY = 94
+    local panelWidth = 260
+    local panelHeight = 88
+    love.graphics.setColor(0.1, 0.12, 0.17, 0.92)
+    love.graphics.rectangle(
+        "fill",
+        panelX,
+        panelY,
+        panelWidth,
+        panelHeight,
+        8,
+        8
+    )
+    love.graphics.setColor(0.67, 0.76, 0.9, 0.85)
+    love.graphics.rectangle(
+        "line",
+        panelX,
+        panelY,
+        panelWidth,
+        panelHeight,
+        8,
+        8
+    )
+    love.graphics.setColor(0.96, 0.98, 1, 1)
+    love.graphics.printf(
+        (((progression.raceName .. " ") .. progression.className) .. "  |  Level ") .. tostring(progression.level),
+        panelX + 10,
+        panelY + 10,
+        panelWidth - 20,
+        "left",
+        0,
+        0.66,
+        0.66
+    )
+    local barX = panelX + 10
+    local barY = panelY + 40
+    local barWidth = panelWidth - 20
+    local barHeight = 20
+    local fillRatio = progression.xpToNextLevel > 0 and progression.xp / progression.xpToNextLevel or 0
+    love.graphics.setColor(0.18, 0.22, 0.32, 1)
+    love.graphics.rectangle(
+        "fill",
+        barX,
+        barY,
+        barWidth,
+        barHeight,
+        5,
+        5
+    )
+    love.graphics.setColor(0.4, 0.71, 0.94, 0.95)
+    love.graphics.rectangle(
+        "fill",
+        barX,
+        barY,
+        math.max(
+            0,
+            math.floor(barWidth * fillRatio)
+        ),
+        barHeight,
+        5,
+        5
+    )
+    love.graphics.setColor(0.72, 0.83, 0.98, 0.9)
+    love.graphics.rectangle(
+        "line",
+        barX,
+        barY,
+        barWidth,
+        barHeight,
+        5,
+        5
+    )
+    love.graphics.setColor(0.85, 0.92, 1, 0.92)
+    love.graphics.printf(
+        (((("XP " .. tostring(progression.xp)) .. "/") .. tostring(progression.xpToNextLevel)) .. "  |  Battles won: ") .. tostring(progression.battlesWon),
+        panelX + 10,
+        panelY + 66,
+        panelWidth - 20,
+        "left",
+        0,
+        0.58,
+        0.58
+    )
 end
 local function drawActionPanel(self, uiState)
     local panelX = math.floor(uiState.width * 0.78)
@@ -237,6 +346,37 @@ local function drawActionPanel(self, uiState)
         0,
         0.96,
         0.96
+    )
+    love.graphics.setColor(0.2, 0.28, 0.43, 0.96)
+    love.graphics.rectangle(
+        "fill",
+        uiState.characterSheetButtonRect.x,
+        uiState.characterSheetButtonRect.y,
+        uiState.characterSheetButtonRect.width,
+        uiState.characterSheetButtonRect.height,
+        8,
+        8
+    )
+    love.graphics.setColor(0.73, 0.84, 0.98, 0.95)
+    love.graphics.rectangle(
+        "line",
+        uiState.characterSheetButtonRect.x,
+        uiState.characterSheetButtonRect.y,
+        uiState.characterSheetButtonRect.width,
+        uiState.characterSheetButtonRect.height,
+        8,
+        8
+    )
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf(
+        uiState.isCharacterSheetOpen and "Close Character (C / I)" or "Open Character (C / I)",
+        uiState.characterSheetButtonRect.x,
+        uiState.characterSheetButtonRect.y + 9,
+        uiState.characterSheetButtonRect.width,
+        "center",
+        0,
+        0.62,
+        0.62
     )
     local currentTile = getCurrentTile(nil, uiState.model)
     local playerKey = toCoordKey(nil, uiState.model.playerCoord)
@@ -309,7 +449,7 @@ local function drawActionPanel(self, uiState)
     end
     love.graphics.setColor(0.72, 0.8, 0.95, 0.86)
     love.graphics.printf(
-        "Movement: click neighboring hexes only | P: Planner Debug | R: Reroll Plan",
+        "Movement: click neighboring hexes | C/I: Character | P: Planner Debug | R: Reroll Plan",
         panelX + 14,
         uiState.height - 62,
         panelWidth - 28,
@@ -317,6 +457,98 @@ local function drawActionPanel(self, uiState)
         0,
         0.66,
         0.66
+    )
+end
+local function drawCharacterSheetOverlay(self, uiState)
+    if not uiState.isCharacterSheetOpen then
+        return
+    end
+    local progression = uiState.playerProgression
+    local width = math.min(
+        460,
+        math.floor(uiState.width * 0.64)
+    )
+    local height = math.min(
+        380,
+        math.floor(uiState.height * 0.72)
+    )
+    local x = math.floor((uiState.width - width) * 0.5)
+    local y = math.floor((uiState.height - height) * 0.5)
+    love.graphics.setColor(0, 0, 0, 0.52)
+    love.graphics.rectangle(
+        "fill",
+        0,
+        0,
+        uiState.width,
+        uiState.height
+    )
+    love.graphics.setColor(0.08, 0.1, 0.15, 0.97)
+    love.graphics.rectangle(
+        "fill",
+        x,
+        y,
+        width,
+        height,
+        10,
+        10
+    )
+    love.graphics.setColor(0.74, 0.84, 0.98, 0.92)
+    love.graphics.rectangle(
+        "line",
+        x,
+        y,
+        width,
+        height,
+        10,
+        10
+    )
+    love.graphics.setColor(0.96, 0.98, 1, 1)
+    love.graphics.printf(
+        "Character Sheet",
+        x + 18,
+        y + 18,
+        width - 36,
+        "left",
+        0,
+        0.9,
+        0.9
+    )
+    local lines = {
+        "Class: " .. progression.className,
+        "Race: " .. progression.raceName,
+        "Level: " .. tostring(progression.level),
+        "Current XP: " .. tostring(progression.xp),
+        "XP to next level: " .. tostring(progression.xpToNextLevel),
+        "Total XP earned: " .. tostring(progression.totalXp),
+        "Battles won: " .. tostring(progression.battlesWon),
+        "Max HP (progression): " .. tostring(progression.maxHp),
+        "Dice slots: " .. tostring(progression.diceSlots)
+    }
+    local textY = y + 64
+    for ____, line in ipairs(lines) do
+        love.graphics.setColor(0.85, 0.92, 1, 0.96)
+        love.graphics.printf(
+            line,
+            x + 20,
+            textY,
+            width - 40,
+            "left",
+            0,
+            0.68,
+            0.68
+        )
+        textY = textY + 28
+    end
+    love.graphics.setColor(0.74, 0.82, 0.94, 0.9)
+    love.graphics.printf(
+        "Press C, I, or Escape to close.",
+        x + 20,
+        y + height - 38,
+        width - 40,
+        "left",
+        0,
+        0.6,
+        0.6
     )
 end
 local function drawPlannerDebugOverlay(self, uiState)
@@ -528,9 +760,11 @@ function ____exports.drawExploreUi(self, uiState, visitCount)
         0.75,
         0.75
     )
+    drawPlayerProgressHud(nil, uiState)
     drawActionPanel(nil, uiState)
     if uiState.isPlannerDebugOpen then
         drawPlannerDebugOverlay(nil, uiState)
     end
+    drawCharacterSheetOverlay(nil, uiState)
 end
 return ____exports

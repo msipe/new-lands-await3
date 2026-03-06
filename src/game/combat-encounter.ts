@@ -14,6 +14,7 @@ import type { ContentEnemy } from "../planning/content-types";
 type CombatActor = {
   id: string;
   name: string;
+  level: number;
   hp: number;
   maxHp: number;
   armor: number;
@@ -23,6 +24,7 @@ type CombatActor = {
 export type EnemyStub = {
   id: string;
   name: string;
+  level: number;
   maxHp: number;
   dice: Die[];
 };
@@ -31,6 +33,7 @@ function createEnemyTemplate(enemy: ContentEnemy): EnemyStub {
   return {
     id: enemy.id,
     name: enemy.name,
+    level: enemy.level,
     maxHp: enemy.hp,
     dice: enemy.dice.map((constructId, index) => {
       const construct = getDieConstructById(constructId);
@@ -229,6 +232,7 @@ export function createCombatEncounter(
   const player: CombatActor = {
     id: "player",
     name: "Arcanist",
+    level: 1,
     hp: 20,
     maxHp: 20,
     armor: 0,
@@ -238,6 +242,7 @@ export function createCombatEncounter(
   const enemy: CombatActor = {
     id: enemyTemplate.id,
     name: enemyTemplate.name,
+    level: enemyTemplate.level,
     hp: enemyTemplate.maxHp,
     maxHp: enemyTemplate.maxHp,
     armor: 0,

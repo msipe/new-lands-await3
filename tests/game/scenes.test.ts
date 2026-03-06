@@ -16,6 +16,9 @@ describe("scene state machine", () => {
     let state = createInitialSceneState();
 
     state = advanceScene(state);
+    expect(state.current).toBe("character-setup");
+
+    state = advanceScene(state);
     expect(state.current).toBe("explore");
 
     state = advanceScene(state);
@@ -29,6 +32,7 @@ describe("scene state machine", () => {
   it("supports explore branch to encounter", () => {
     let state = createInitialSceneState();
     state = advanceScene(state);
+    state = advanceScene(state);
 
     state = chooseExploreBranch(state, "encounter");
     expect(state.current).toBe("encounter");
@@ -37,6 +41,7 @@ describe("scene state machine", () => {
 
   it("returns from encounter to exploration", () => {
     let state = createInitialSceneState();
+    state = advanceScene(state);
     state = advanceScene(state);
     state = chooseExploreBranch(state, "encounter");
 

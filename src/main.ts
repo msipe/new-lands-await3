@@ -1,4 +1,14 @@
 import {
+    createCharacterSetupUiState,
+    drawCharacterSetupUi,
+    onCharacterSetupKeyPressed,
+    onCharacterSetupMouseMoved,
+    onCharacterSetupMousePressed,
+    onCharacterSetupMouseReleased,
+    type CharacterSetupUiState,
+    updateCharacterSetupUiState,
+} from "./character-setup-ui";
+import {
     closeCombatInspector,
     createCombatUiState,
     drainSettledEnemyDieIds,
@@ -48,6 +58,13 @@ import {
     createInitialSceneState,
 } from "./game/scenes";
 import {
+    calculateCombatXpReward,
+    createPlayerProgression,
+    recordCombatVictory,
+    setPlayerIdentity,
+    type PlayerProgressionState,
+} from "./game/player-progression";
+import {
     createMainMenuUiState,
     drawMainMenuUi,
     onMainMenuMouseMoved,
@@ -64,9 +81,12 @@ let activeCombat: { state: CombatEncounterState; eventBus: CombatEventBus } | un
 let activeCombatUi: CombatUiState | undefined;
 let activeExploreUi: ExploreUiState | undefined;
 let activeEncounterUi: EncounterUiState | undefined;
+let activeCharacterSetupUi: CharacterSetupUiState | undefined;
 let mainMenuUi: MainMenuUiState | undefined;
 let runSeedNonce = 0;
 let combatResolvedHoldTimer = 0;
+let hasGrantedCombatProgression = false;
+let playerProgression: PlayerProgressionState = createPlayerProgression();
 
 const COMBAT_RESOLVE_BEAT_SECONDS = 0.5;
 
@@ -90,18 +110,31 @@ love.update = (dt: number) => {
             activeCombat = createCombatForCurrentTile();
             activeCombatUi = createCombatUiState(activeCombat.state);
             combatResolvedHoldTimer = 0;
+            hasGrantedCombatProgression = false;
             setResolvedContinueEnabled(activeCombatUi, false);
         }
 
+        if (sceneState.current === "character-setup") {
+            if (previousScene === "main-menu") {
+                resetQuestLogForNewRun();
+                runSeedNonce += 1;
+                playerProgression = createPlayerProgression();
+                activeExploreUi = undefined;
+            }
+
+            if (!activeCharacterSetupUi) {
+                activeCharacterSetupUi = createCharacterSetupUiState();
+            }
+        }
+
         if (sceneState.current === "explore") {
-            const enteringNewRun = previousScene === "main-menu";
+            const enteringNewRun = previousScene === "character-setup";
             if (enteringNewRun || !activeExploreUi) {
-                if (enteringNewRun) {
-                    resetQuestLogForNewRun();
-                    runSeedNonce += 1;
-                }
                 const runtimeSeedIndex = Math.floor(love.timer.getTime() * 1000) + runSeedNonce * 7919;
-                activeExploreUi = createExploreUiState(runtimeSeedIndex);
+                activeExploreUi = createExploreUiState({
+                    initialSeedIndex: runtimeSeedIndex,
+                    playerProgression,
+                });
             }
         }
 
@@ -127,6 +160,10 @@ love.update = (dt: number) => {
             activeEncounterUi = undefined;
         }
 
+        if (previousScene === "character-setup" && sceneState.current !== "character-setup") {
+            activeCharacterSetupUi = undefined;
+        }
+
         previousScene = sceneState.current;
     }
 
@@ -149,6 +186,22 @@ love.update = (dt: number) => {
         }
 
         if (activeCombat.state.phase === "resolved") {
+            if (!hasGrantedCombatProgression && activeCombat.state.enemy.hp <= 0 && activeCombat.state.player.hp > 0) {
+                const rewardXp = calculateCombatXpReward(activeCombat.state.enemy.level);
+                const levelResult = recordCombatVictory(playerProgression, activeCombat.state.enemy.level);
+                if (activeExploreUi) {
+                    if (levelResult.didLevelUp) {
+                        activeExploreUi.model.notice =
+                            `Victory! +${rewardXp} XP and ${levelResult.levelsGained} level gained. Continue to return.`;
+                    } else {
+                        activeExploreUi.model.notice =
+                            `Victory! +${rewardXp} XP earned. Continue to return.`;
+                    }
+                }
+
+                hasGrantedCombatProgression = true;
+            }
+
             combatResolvedHoldTimer += dt;
             const canContinue = combatResolvedHoldTimer >= COMBAT_RESOLVE_BEAT_SECONDS;
             setResolvedContinueEnabled(activeCombatUi, canContinue);
@@ -165,7 +218,7 @@ love.update = (dt: number) => {
 
     if (sceneState.current === "explore") {
         if (!activeExploreUi) {
-            activeExploreUi = createExploreUiState();
+            activeExploreUi = createExploreUiState({ playerProgression });
         }
 
         updateExploreUiState(activeExploreUi, dt);
@@ -177,6 +230,14 @@ love.update = (dt: number) => {
         }
 
         updateEncounterUiState(activeEncounterUi, dt);
+    }
+
+    if (sceneState.current === "character-setup") {
+        if (!activeCharacterSetupUi) {
+            activeCharacterSetupUi = createCharacterSetupUiState();
+        }
+
+        updateCharacterSetupUiState(activeCharacterSetupUi, dt);
     }
 
     if (sceneState.current === "main-menu") {
@@ -220,9 +281,22 @@ love.keypressed = (key) => {
         return;
     }
 
+    if (sceneState.current === "character-setup") {
+        if (!activeCharacterSetupUi) {
+            activeCharacterSetupUi = createCharacterSetupUiState();
+        }
+
+        const action = onCharacterSetupKeyPressed(activeCharacterSetupUi, key);
+        if (action?.kind === "confirm-character") {
+            setPlayerIdentity(playerProgression, action.classId, action.raceId);
+            sceneState = advanceScene(sceneState);
+            return;
+        }
+    }
+
     if (sceneState.current === "explore") {
         if (!activeExploreUi) {
-            activeExploreUi = createExploreUiState();
+            activeExploreUi = createExploreUiState({ playerProgression });
         }
 
         if (onExploreKeyPressed(activeExploreUi, key)) {
@@ -255,6 +329,15 @@ love.mousepressed = (x, y, button) => {
         return;
     }
 
+    if (sceneState.current === "character-setup") {
+        if (!activeCharacterSetupUi) {
+            activeCharacterSetupUi = createCharacterSetupUiState();
+        }
+
+        onCharacterSetupMousePressed(activeCharacterSetupUi, x, y, button);
+        return;
+    }
+
     if (sceneState.current !== "combat" || !activeCombat || !activeCombatUi) {
         return;
     }
@@ -274,10 +357,19 @@ love.mousemoved = (x, y, dx, dy) => {
 
     if (sceneState.current === "explore") {
         if (!activeExploreUi) {
-            activeExploreUi = createExploreUiState();
+            activeExploreUi = createExploreUiState({ playerProgression });
         }
 
         onExploreMouseMoved(activeExploreUi, x, y);
+        return;
+    }
+
+    if (sceneState.current === "character-setup") {
+        if (!activeCharacterSetupUi) {
+            activeCharacterSetupUi = createCharacterSetupUiState();
+        }
+
+        onCharacterSetupMouseMoved(activeCharacterSetupUi, x, y);
         return;
     }
 
@@ -317,10 +409,24 @@ love.mousereleased = (x, y, button) => {
         return;
     }
 
+    if (sceneState.current === "character-setup") {
+        if (!activeCharacterSetupUi) {
+            activeCharacterSetupUi = createCharacterSetupUiState();
+        }
+
+        const action = onCharacterSetupMouseReleased(activeCharacterSetupUi, x, y, button);
+        if (action?.kind === "confirm-character") {
+            setPlayerIdentity(playerProgression, action.classId, action.raceId);
+            sceneState = advanceScene(sceneState);
+        }
+
+        return;
+    }
+
     if (sceneState.current !== "combat" || !activeCombat || !activeCombatUi) {
         if (sceneState.current === "explore") {
             if (!activeExploreUi) {
-                activeExploreUi = createExploreUiState();
+                activeExploreUi = createExploreUiState({ playerProgression });
             }
 
             const exploreAction = onExploreMouseReleased(activeExploreUi, x, y, button);
@@ -365,10 +471,19 @@ love.draw = () => {
 
     if (sceneState.current === "explore") {
         if (!activeExploreUi) {
-            activeExploreUi = createExploreUiState();
+            activeExploreUi = createExploreUiState({ playerProgression });
         }
 
         drawExploreUi(activeExploreUi, sceneState.visitCounts.explore);
+        return;
+    }
+
+    if (sceneState.current === "character-setup") {
+        if (!activeCharacterSetupUi) {
+            activeCharacterSetupUi = createCharacterSetupUiState();
+        }
+
+        drawCharacterSetupUi(activeCharacterSetupUi, sceneState.visitCounts["character-setup"]);
         return;
     }
 
@@ -385,9 +500,10 @@ love.draw = () => {
     love.graphics.print(`Scene: ${sceneState.current}`, 40, 30);
     love.graphics.print("Visit counts:", 40, 80);
     love.graphics.print(`Main Menu: ${sceneState.visitCounts["main-menu"]}`, 40, 110);
-    love.graphics.print(`Explore: ${sceneState.visitCounts.explore}`, 40, 134);
-    love.graphics.print(`Combat: ${sceneState.visitCounts.combat}`, 40, 158);
-    love.graphics.print(`Encounter: ${sceneState.visitCounts.encounter}`, 40, 182);
-    love.graphics.print(`Post Combat: ${sceneState.visitCounts["post-combat"]}`, 40, 206);
-    love.graphics.print(`End Game: ${sceneState.visitCounts["end-game"]}`, 40, 230);
+    love.graphics.print(`Character Setup: ${sceneState.visitCounts["character-setup"]}`, 40, 134);
+    love.graphics.print(`Explore: ${sceneState.visitCounts.explore}`, 40, 158);
+    love.graphics.print(`Combat: ${sceneState.visitCounts.combat}`, 40, 182);
+    love.graphics.print(`Encounter: ${sceneState.visitCounts.encounter}`, 40, 206);
+    love.graphics.print(`Post Combat: ${sceneState.visitCounts["post-combat"]}`, 40, 230);
+    love.graphics.print(`End Game: ${sceneState.visitCounts["end-game"]}`, 40, 254);
 };

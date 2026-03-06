@@ -550,7 +550,9 @@ function ____exports.createCombatUiState(self, state)
         settledEnemyDieIds = {},
         floatingPopups = {},
         queuedPlayerThrow = nil,
-        inspector = nil
+        inspector = nil,
+        resolvedContinueEnabled = false,
+        requestedSceneAdvance = false
     }
     ensurePlayerDice(nil, uiState, state)
     return uiState
@@ -855,6 +857,16 @@ function ____exports.drainSettledPlayerDieIds(self, uiState)
     uiState.settledPlayerDieIds = {}
     return settled
 end
+function ____exports.setResolvedContinueEnabled(self, uiState, enabled)
+    uiState.resolvedContinueEnabled = enabled
+end
+function ____exports.consumeRequestedSceneAdvance(self, uiState)
+    if not uiState.requestedSceneAdvance then
+        return false
+    end
+    uiState.requestedSceneAdvance = false
+    return true
+end
 local function getTurnButtonRect(self, layout)
     local width = 148
     local height = 36
@@ -862,7 +874,7 @@ local function getTurnButtonRect(self, layout)
 end
 local function getTurnButtonState(self, uiState, state)
     if state.phase == "resolved" then
-        return {visible = false, enabled = false, label = ""}
+        return {visible = true, enabled = uiState.resolvedContinueEnabled, label = "Return to Explore"}
     end
     if uiState.pendingRound ~= nil then
         return {visible = true, enabled = true, label = "Continue"}
@@ -915,7 +927,7 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
         do
             local die = findVisualDieByCombatId(nil, uiState, popup.dieId)
             if not die then
-                goto __continue167
+                goto __continue170
             end
             die.flashTimer = RESOLVE_FLASH_DURATION
             if popup.sideLabel ~= nil then
@@ -924,7 +936,7 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
             end
             lockVisualDieFace(nil, die)
             if popup.source == "player" then
-                goto __continue167
+                goto __continue170
             end
             local ____uiState_floatingPopups_23 = uiState.floatingPopups
             ____uiState_floatingPopups_23[#____uiState_floatingPopups_23 + 1] = {
@@ -935,7 +947,7 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                 timer = POPUP_DURATION
             }
         end
-        ::__continue167::
+        ::__continue170::
     end
 end
 local function isPointInsideRect(self, x, y, rect)
@@ -1299,6 +1311,10 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
     if turnButton.visible and turnButton.enabled then
         local turnButtonRect = getTurnButtonRect(nil, uiState.layout)
         if isPointInsideRect(nil, x, y, turnButtonRect) then
+            if state.phase == "resolved" then
+                uiState.requestedSceneAdvance = true
+                return
+            end
             ____exports.fastForwardCombatUi(nil, uiState, state)
             return
         end
@@ -1336,12 +1352,12 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
     for ____, die in ipairs(uiState.playerDice) do
         do
             if die.state == "arena" then
-                goto __continue220
+                goto __continue224
             end
             local half = die.size / 2
             local inside = x >= die.x - half and x <= die.x + half and y >= die.y - half and y <= die.y + half
             if not inside then
-                goto __continue220
+                goto __continue224
             end
             die.state = "dragging"
             die.x = x
@@ -1357,7 +1373,7 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
             }
             return
         end
-        ::__continue220::
+        ::__continue224::
     end
 end
 function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
