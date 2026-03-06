@@ -86,8 +86,8 @@ export type SceneContextById = {
 export type SceneOutputById = {
   "main-menu": { nextScene: "explore" };
   explore: { nextScene: "combat" | "encounter" };
-  combat: { nextScene: "post-combat" };
-  encounter: { nextScene: "post-combat" };
+  combat: { nextScene: "explore" };
+  encounter: { nextScene: "explore" };
   "post-combat": { nextScene: "end-game" };
   "end-game": { nextScene: "main-menu" };
 };
@@ -120,7 +120,7 @@ export const SCENE_CONTRACTS: SceneContracts = {
   explore: {
     id: "explore",
     title: "Explore",
-    prompt: "Press C for Combat, E for Encounter, or Space for default path.",
+    prompt: "Click a neighboring hex to travel, then choose Combat or Encounter (C/E shortcuts still work).",
     defaultNext: "combat",
     createInitialContext: () => ({
       nodeIndex: 0,
@@ -137,18 +137,18 @@ export const SCENE_CONTRACTS: SceneContracts = {
   combat: {
     id: "combat",
     title: "Combat",
-    prompt: "Press R to roll a die. Press Space after combat resolves.",
-    defaultNext: "post-combat",
+    prompt: "Press R to roll a die. Press Space after combat resolves to return to exploration.",
+    defaultNext: "explore",
     createInitialContext: () => ({ enemyGroupId: "stub-slimes", turnCount: 1 }),
-    reduce: () => ({ nextScene: "post-combat" }),
+    reduce: () => ({ nextScene: "explore" }),
   },
   encounter: {
     id: "encounter",
     title: "Encounter",
-    prompt: "Press Space to continue.",
-    defaultNext: "post-combat",
+    prompt: "Press Space to return to exploration.",
+    defaultNext: "explore",
     createInitialContext: () => ({ encounterId: "stub-shrine", isResolved: false }),
-    reduce: () => ({ nextScene: "post-combat" }),
+    reduce: () => ({ nextScene: "explore" }),
   },
   "post-combat": {
     id: "post-combat",

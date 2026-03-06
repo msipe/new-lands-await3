@@ -1,0 +1,144 @@
+[
+  {
+    "id": "main:defeat-dracula",
+    "name": "Defeat Lord Dracula",
+    "summary": "Uncover Dracula's weakness and confront him in the castle.",
+    "type": "main",
+    "requirements": [
+      {
+        "id": "npc:igor",
+        "kind": "npc-presence",
+        "description": "Place Igor in a village/town with dialogue options about defeating Dracula.",
+        "tags": ["main-quest", "npc"],
+        "metadata": { "preferredZone": "town", "givesClue": true, "npcId": "npc:igor" }
+      },
+      {
+        "id": "quest:defeat-dracula",
+        "kind": "quest-presence",
+        "description": "Main questline for defeating Lord Dracula must exist.",
+        "tags": ["main-quest"],
+        "metadata": { "target": "lord-dracula" }
+      }
+    ]
+  },
+  {
+    "id": "side:sacred-tome",
+    "name": "Sacred Tome",
+    "summary": "Recover the Sacred Tome from Dracula's castle archives.",
+    "type": "side",
+    "requirements": [
+      {
+        "id": "npc:castle-librarian",
+        "kind": "npc-presence",
+        "description": "Place a Librarian in Dracula's Castle tied to the Sacred Tome quest.",
+        "tags": ["side-quest", "npc", "castle"],
+        "metadata": { "location": "draculas-castle", "npcId": "npc:castle-librarian" }
+      },
+      {
+        "id": "quest:sacred-tome",
+        "kind": "quest-presence",
+        "description": "Include Sacred Tome side quest in world quest pool.",
+        "tags": ["side-quest"],
+        "metadata": { "questId": "sacred-tome" }
+      }
+    ]
+  },
+  {
+    "id": "side:night-caravan",
+    "name": "Night Caravan",
+    "summary": "Escort a caravan that only travels under moonlight.",
+    "type": "side",
+    "requirements": [
+      {
+        "id": "tile-zone:farmland",
+        "kind": "tile-zone",
+        "description": "Ensure at least one farmland tile for caravan route.",
+        "tags": ["side-quest", "route"],
+        "metadata": { "zone": "farmland" }
+      },
+      {
+        "id": "npc:captain-marla",
+        "kind": "npc-presence",
+        "description": "Place Captain Marla in a town to brief the caravan route.",
+        "tags": ["side-quest", "npc", "caravan"],
+        "metadata": { "npcId": "npc:captain-marla", "preferredZone": "town" }
+      }
+    ]
+  },
+  {
+    "id": "side:grave-sigil",
+    "name": "Grave Sigil",
+    "summary": "Gather sigils from cursed burial grounds.",
+    "type": "side",
+    "requirements": [
+      {
+        "id": "tile-zone:mountain",
+        "kind": "tile-zone",
+        "description": "Ensure at least one mountain tile with cursed landmark hooks.",
+        "tags": ["side-quest", "landmark"],
+        "metadata": { "zone": "mountain", "cursed": true }
+      }
+    ]
+  },
+  {
+    "id": "town:big-scary-wolf",
+    "name": "Big Scary Wolf",
+    "summary": "Track a wolf terrorizing settlements near the woods.",
+    "type": "town",
+    "requirements": [
+      {
+        "id": "tile-zone:forest",
+        "kind": "tile-zone",
+        "description": "Spawn a dense forest tile for the wolf hunt.",
+        "tags": ["town-quest", "forest"],
+        "minCount": 1,
+        "metadata": { "zone": "forest", "dense": true }
+      }
+    ]
+  },
+  {
+    "id": "town:bandit-den",
+    "name": "Bandit Den",
+    "summary": "Clear out a hidden den raiding nearby roads.",
+    "type": "town",
+    "requirements": [
+      {
+        "id": "tile-zone:forest",
+        "kind": "tile-zone",
+        "description": "Spawn an additional dense forest tile for the bandit den.",
+        "tags": ["town-quest", "forest", "additional"],
+        "minCount": 1,
+        "metadata": { "zone": "forest", "dense": true }
+      },
+      {
+        "id": "npc:warden-bren",
+        "kind": "npc-presence",
+        "description": "Place Warden Bren in a town to provide den intel.",
+        "tags": ["town-quest", "npc", "bandits"],
+        "metadata": { "npcId": "npc:warden-bren", "preferredZone": "town" }
+      }
+    ]
+  },
+  {
+    "id": "town:river-toll",
+    "name": "River Toll",
+    "summary": "Negotiate or fight for passage at a flooded crossing.",
+    "type": "town",
+    "requirements": [
+      {
+        "id": "tile-zone:ocean",
+        "kind": "tile-zone",
+        "description": "Ensure at least one ocean/coastal tile for river crossing events.",
+        "tags": ["town-quest", "water"],
+        "metadata": { "zone": "ocean" }
+      },
+      {
+        "id": "npc:ferryman-colt",
+        "kind": "npc-presence",
+        "description": "Place Ferryman Colt in a town to negotiate crossing terms.",
+        "tags": ["town-quest", "npc", "water"],
+        "metadata": { "npcId": "npc:ferryman-colt", "preferredZone": "town" }
+      }
+    ]
+  }
+]

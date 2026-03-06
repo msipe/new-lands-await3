@@ -22,14 +22,8 @@ describe("scene state machine", () => {
     expect(state.current).toBe("combat");
 
     state = advanceScene(state);
-    expect(state.current).toBe("post-combat");
-
-    state = advanceScene(state);
-    expect(state.current).toBe("end-game");
-
-    state = advanceScene(state);
-    expect(state.current).toBe("main-menu");
-    expect(state.visitCounts["main-menu"]).toBe(2);
+    expect(state.current).toBe("explore");
+    expect(state.visitCounts.explore).toBe(2);
   });
 
   it("supports explore branch to encounter", () => {
@@ -41,6 +35,16 @@ describe("scene state machine", () => {
     expect(state.visitCounts.encounter).toBe(1);
   });
 
+  it("returns from encounter to exploration", () => {
+    let state = createInitialSceneState();
+    state = advanceScene(state);
+    state = chooseExploreBranch(state, "encounter");
+
+    state = advanceScene(state);
+    expect(state.current).toBe("explore");
+    expect(state.visitCounts.explore).toBe(2);
+  });
+
   it("ignores explore branch selection outside explore scene", () => {
     const state = createInitialSceneState();
     const unchanged = chooseExploreBranch(state, "encounter");
@@ -50,6 +54,6 @@ describe("scene state machine", () => {
   });
 
   it("provides explore-specific prompt", () => {
-    expect(getScenePrompt("explore")).toContain("Press C");
+    expect(getScenePrompt("explore")).toContain("neighboring hex");
   });
 });

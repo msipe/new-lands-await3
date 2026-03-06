@@ -1,0 +1,13 @@
+[
+  {
+    "id": "lord-dracula",
+    "name": "Lord Dracula",
+    "summary": "Master of the castle domain and final obstacle of the run.",
+    "mainQuestId": "main:defeat-dracula",
+    "sideQuestIds": ["side:sacred-tome", "side:night-caravan", "side:grave-sigil"],
+    "townQuestIds": ["town:big-scary-wolf", "town:bandit-den", "town:river-toll"],
+    "mandatorySideQuestIds": ["side:sacred-tome"],
+    "specialTileId": "tile:draculas-castle",
+    "eventCollectionId": "event-collection:dracula"
+  }
+]

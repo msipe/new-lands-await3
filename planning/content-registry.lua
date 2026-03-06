@@ -1,0 +1,203 @@
+local ____lualib = require("lualib_bundle")
+local __TS__ObjectAssign = ____lualib.__TS__ObjectAssign
+local __TS__ArrayMap = ____lualib.__TS__ArrayMap
+local Error = ____lualib.Error
+local RangeError = ____lualib.RangeError
+local ReferenceError = ____lualib.ReferenceError
+local SyntaxError = ____lualib.SyntaxError
+local TypeError = ____lualib.TypeError
+local URIError = ____lualib.URIError
+local __TS__New = ____lualib.__TS__New
+local __TS__ArrayFind = ____lualib.__TS__ArrayFind
+local ____exports = {}
+local ____content_2Dregistry_2Dgenerated = require("planning.content-registry-generated")
+local RAW_BIG_BADS = ____content_2Dregistry_2Dgenerated.RAW_BIG_BADS
+local RAW_ENEMIES = ____content_2Dregistry_2Dgenerated.RAW_ENEMIES
+local RAW_NPCS = ____content_2Dregistry_2Dgenerated.RAW_NPCS
+local RAW_QUESTS = ____content_2Dregistry_2Dgenerated.RAW_QUESTS
+local RAW_TILES = ____content_2Dregistry_2Dgenerated.RAW_TILES
+local function cloneEnemyAbilities(self, abilities)
+    return __TS__ArrayMap(
+        abilities,
+        function(____, ability)
+            local candidate = ability
+            return {
+                id = candidate.id,
+                kind = candidate.kind,
+                metadata = __TS__ObjectAssign({}, candidate.metadata)
+            }
+        end
+    )
+end
+local NPCS = __TS__ArrayMap(
+    RAW_NPCS,
+    function(____, entry) return __TS__ObjectAssign(
+        {},
+        entry,
+        {standardDialog = {unpack(entry.standardDialog)}}
+    ) end
+)
+local QUESTS = __TS__ArrayMap(
+    RAW_QUESTS,
+    function(____, entry) return __TS__ObjectAssign(
+        {},
+        entry,
+        {requirements = __TS__ArrayMap(
+            entry.requirements,
+            function(____, req) return __TS__ObjectAssign(
+                {},
+                req,
+                {
+                    tags = {unpack(req.tags)},
+                    metadata = __TS__ObjectAssign({}, req.metadata)
+                }
+            ) end
+        )}
+    ) end
+)
+local TILES = __TS__ArrayMap(
+    RAW_TILES,
+    function(____, entry) return __TS__ObjectAssign(
+        {},
+        entry,
+        {
+            tags = {unpack(entry.tags)},
+            enemyIds = entry.enemyIds ~= nil and ({unpack(entry.enemyIds)}) or nil
+        }
+    ) end
+)
+local BIG_BADS = __TS__ArrayMap(
+    RAW_BIG_BADS,
+    function(____, entry) return __TS__ObjectAssign(
+        {},
+        entry,
+        {
+            sideQuestIds = {unpack(entry.sideQuestIds)},
+            townQuestIds = {unpack(entry.townQuestIds)},
+            mandatorySideQuestIds = {unpack(entry.mandatorySideQuestIds)}
+        }
+    ) end
+)
+local ENEMIES = __TS__ArrayMap(
+    RAW_ENEMIES,
+    function(____, entry) return __TS__ObjectAssign(
+        {},
+        entry,
+        {
+            tags = {unpack(entry.tags)},
+            types = {unpack(entry.types)},
+            abilities = cloneEnemyAbilities(nil, entry.abilities),
+            dice = {unpack(entry.dice)}
+        }
+    ) end
+)
+local function assertFound(self, value, kind, id)
+    if value ~= nil then
+        return value
+    end
+    error(
+        __TS__New(Error, (("Missing " .. kind) .. " in registry: ") .. id),
+        0
+    )
+end
+function ____exports.getNpcById(self, id)
+    return assertFound(
+        nil,
+        __TS__ArrayFind(
+            NPCS,
+            function(____, entry) return entry.id == id end
+        ),
+        "npc",
+        id
+    )
+end
+function ____exports.getQuestById(self, id)
+    return assertFound(
+        nil,
+        __TS__ArrayFind(
+            QUESTS,
+            function(____, entry) return entry.id == id end
+        ),
+        "quest",
+        id
+    )
+end
+function ____exports.getTileById(self, id)
+    return assertFound(
+        nil,
+        __TS__ArrayFind(
+            TILES,
+            function(____, entry) return entry.id == id end
+        ),
+        "tile",
+        id
+    )
+end
+function ____exports.getBigBadById(self, id)
+    return assertFound(
+        nil,
+        __TS__ArrayFind(
+            BIG_BADS,
+            function(____, entry) return entry.id == id end
+        ),
+        "big bad",
+        id
+    )
+end
+function ____exports.getEnemyById(self, id)
+    return assertFound(
+        nil,
+        __TS__ArrayFind(
+            ENEMIES,
+            function(____, entry) return entry.id == id end
+        ),
+        "enemy",
+        id
+    )
+end
+function ____exports.listNpcs(self)
+    return __TS__ArrayMap(
+        NPCS,
+        function(____, entry) return __TS__ObjectAssign(
+            {},
+            entry,
+            {standardDialog = {unpack(entry.standardDialog)}}
+        ) end
+    )
+end
+function ____exports.listQuests(self)
+    return __TS__ArrayMap(
+        QUESTS,
+        function(____, entry) return __TS__ObjectAssign(
+            {},
+            entry,
+            {requirements = __TS__ArrayMap(
+                entry.requirements,
+                function(____, req) return __TS__ObjectAssign(
+                    {},
+                    req,
+                    {
+                        tags = {unpack(req.tags)},
+                        metadata = __TS__ObjectAssign({}, req.metadata)
+                    }
+                ) end
+            )}
+        ) end
+    )
+end
+function ____exports.listEnemies(self)
+    return __TS__ArrayMap(
+        ENEMIES,
+        function(____, entry) return __TS__ObjectAssign(
+            {},
+            entry,
+            {
+                tags = {unpack(entry.tags)},
+                types = {unpack(entry.types)},
+                abilities = cloneEnemyAbilities(nil, entry.abilities),
+                dice = {unpack(entry.dice)}
+            }
+        ) end
+    )
+end
+return ____exports

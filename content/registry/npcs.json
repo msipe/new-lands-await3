@@ -1,0 +1,62 @@
+[
+  {
+    "id": "npc:igor",
+    "name": "Igor",
+    "role": "Caretaker",
+    "defaultZone": "town",
+    "residenceBuilding": "square",
+    "notes": "Provides clues needed to defeat Dracula.",
+    "standardDialog": [
+      "Keep your lantern high. Shadows here remember faces.",
+      "If you seek Dracula's weakness, begin where old vows were broken."
+    ]
+  },
+  {
+    "id": "npc:castle-librarian",
+    "name": "Castle Librarian",
+    "role": "Archivist",
+    "defaultZone": "mountain",
+    "residenceBuilding": "guild",
+    "notes": "Holds information about the Sacred Tome.",
+    "standardDialog": [
+      "Books bite when handled by fools. Turn pages carefully.",
+      "Knowledge is a blade. Know where to point it."
+    ]
+  },
+  {
+    "id": "npc:captain-marla",
+    "name": "Captain Marla",
+    "role": "Caravan Captain",
+    "defaultZone": "town",
+    "residenceBuilding": "inn",
+    "notes": "Leads moonlit supply routes and knows hidden road hazards.",
+    "standardDialog": [
+      "Moonlight keeps the raiders nervous. We move when they squint.",
+      "Tie your packs high. Mud steals more than bandits do."
+    ]
+  },
+  {
+    "id": "npc:warden-bren",
+    "name": "Warden Bren",
+    "role": "Village Warden",
+    "defaultZone": "town",
+    "residenceBuilding": "square",
+    "notes": "Coordinates militia patrols and tracks nearby den activity.",
+    "standardDialog": [
+      "Bandits test fences first, then resolve.",
+      "If you clear the den, people will sleep with both eyes shut."
+    ]
+  },
+  {
+    "id": "npc:ferryman-colt",
+    "name": "Ferryman Colt",
+    "role": "River Pilot",
+    "defaultZone": "town",
+    "residenceBuilding": "inn",
+    "notes": "Controls crossing schedules when floodwaters rise.",
+    "standardDialog": [
+      "River decides the fare. I just collect it.",
+      "Storm upstream means trouble here by sundown."
+    ]
+  }
+]

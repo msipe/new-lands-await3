@@ -14,6 +14,25 @@ import {
     updateCombatUiState,
 } from "./combat-ui";
 import {
+    createEncounterUiState,
+    drawEncounterUi,
+    onEncounterMouseMoved,
+    onEncounterMouseReleased,
+    type EncounterUiState,
+    updateEncounterUiState,
+} from "./encounter-ui";
+import {
+    createExploreUiState,
+    drawExploreUi,
+    onExploreKeyPressed,
+    onExploreMouseMoved,
+    onExploreMouseReleased,
+    type ExploreUiState,
+    updateExploreUiState,
+} from "./exploration/explore-ui";
+import { pickEnemyIdForTile } from "./exploration/enemy-selection";
+import { getCurrentTile } from "./exploration/explore-state";
+import {
     createCombatEncounter,
     drainResolutionPopups,
     resolveEnemyDie,
@@ -35,12 +54,23 @@ import {
     type MainMenuUiState,
     updateMainMenuUiState,
 } from "./main-menu-ui";
+import { resetQuestLogForNewRun } from "./planning/quest-log";
 
 let sceneState = createInitialSceneState();
 let previousScene = sceneState.current;
 let activeCombat: { state: CombatEncounterState; eventBus: CombatEventBus } | undefined;
 let activeCombatUi: CombatUiState | undefined;
+let activeExploreUi: ExploreUiState | undefined;
+let activeEncounterUi: EncounterUiState | undefined;
 let mainMenuUi: MainMenuUiState | undefined;
+let runSeedNonce = 0;
+
+function createCombatForCurrentTile(): { state: CombatEncounterState; eventBus: CombatEventBus } {
+    const currentTile = activeExploreUi ? getCurrentTile(activeExploreUi.model) : undefined;
+    const runSeed = activeExploreUi?.plannerSpec.seed ?? `run-fallback-${runSeedNonce}`;
+    const enemyId = pickEnemyIdForTile(currentTile, runSeed);
+    return createCombatEncounter({ enemyId });
+}
 
 love.load = () => {
     love.window.setTitle("new-lands-await3");
@@ -52,13 +82,42 @@ love.load = () => {
 love.update = (dt: number) => {
     if (sceneState.current !== previousScene) {
         if (sceneState.current === "combat") {
-            activeCombat = createCombatEncounter();
+            activeCombat = createCombatForCurrentTile();
             activeCombatUi = createCombatUiState(activeCombat.state);
+        }
+
+        if (sceneState.current === "explore") {
+            const enteringNewRun = previousScene === "main-menu";
+            if (enteringNewRun || !activeExploreUi) {
+                if (enteringNewRun) {
+                    resetQuestLogForNewRun();
+                    runSeedNonce += 1;
+                }
+                const runtimeSeedIndex = Math.floor(love.timer.getTime() * 1000) + runSeedNonce * 7919;
+                activeExploreUi = createExploreUiState(runtimeSeedIndex);
+            }
+        }
+
+        if (sceneState.current === "encounter") {
+            const currentTile = activeExploreUi ? getCurrentTile(activeExploreUi.model) : undefined;
+            activeEncounterUi = createEncounterUiState(
+                currentTile
+                    ? {
+                          tileName: currentTile.name,
+                          tileZone: currentTile.zone,
+                          locations: currentTile.locations,
+                      }
+                    : undefined,
+            );
         }
 
         if (previousScene === "combat" && sceneState.current !== "combat") {
             activeCombat = undefined;
             activeCombatUi = undefined;
+        }
+
+        if (previousScene === "encounter" && sceneState.current !== "encounter") {
+            activeEncounterUi = undefined;
         }
 
         previousScene = sceneState.current;
@@ -83,6 +142,22 @@ love.update = (dt: number) => {
         }
     }
 
+    if (sceneState.current === "explore") {
+        if (!activeExploreUi) {
+            activeExploreUi = createExploreUiState();
+        }
+
+        updateExploreUiState(activeExploreUi, dt);
+    }
+
+    if (sceneState.current === "encounter") {
+        if (!activeEncounterUi) {
+            activeEncounterUi = createEncounterUiState();
+        }
+
+        updateEncounterUiState(activeEncounterUi, dt);
+    }
+
     if (sceneState.current === "main-menu") {
         if (!mainMenuUi) {
             mainMenuUi = createMainMenuUiState();
@@ -95,7 +170,7 @@ love.update = (dt: number) => {
 love.keypressed = (key) => {
     if (sceneState.current === "combat") {
         if (!activeCombat) {
-            activeCombat = createCombatEncounter();
+            activeCombat = createCombatForCurrentTile();
             activeCombatUi = createCombatUiState(activeCombat.state);
         }
 
@@ -113,6 +188,21 @@ love.keypressed = (key) => {
             fastForwardCombatUi(activeCombatUi, activeCombat.state);
         }
         return;
+    }
+
+    if (sceneState.current === "encounter" && key === "space") {
+        sceneState = advanceScene(sceneState);
+        return;
+    }
+
+    if (sceneState.current === "explore") {
+        if (!activeExploreUi) {
+            activeExploreUi = createExploreUiState();
+        }
+
+        if (onExploreKeyPressed(activeExploreUi, key)) {
+            return;
+        }
     }
 
     if (key === "space") {
@@ -157,6 +247,24 @@ love.mousemoved = (x, y, dx, dy) => {
         return;
     }
 
+    if (sceneState.current === "explore") {
+        if (!activeExploreUi) {
+            activeExploreUi = createExploreUiState();
+        }
+
+        onExploreMouseMoved(activeExploreUi, x, y);
+        return;
+    }
+
+    if (sceneState.current === "encounter") {
+        if (!activeEncounterUi) {
+            activeEncounterUi = createEncounterUiState();
+        }
+
+        onEncounterMouseMoved(activeEncounterUi, x, y);
+        return;
+    }
+
     if (sceneState.current !== "combat" || !activeCombatUi || !activeCombat) {
         return;
     }
@@ -185,6 +293,30 @@ love.mousereleased = (x, y, button) => {
     }
 
     if (sceneState.current !== "combat" || !activeCombat || !activeCombatUi) {
+        if (sceneState.current === "explore") {
+            if (!activeExploreUi) {
+                activeExploreUi = createExploreUiState();
+            }
+
+            const exploreAction = onExploreMouseReleased(activeExploreUi, x, y, button);
+            if (exploreAction?.kind === "choose-branch") {
+                sceneState = chooseExploreBranch(sceneState, exploreAction.branch);
+            }
+            return;
+        }
+
+        if (sceneState.current === "encounter") {
+            if (!activeEncounterUi) {
+                activeEncounterUi = createEncounterUiState();
+            }
+
+            const didContinue = onEncounterMouseReleased(activeEncounterUi, x, y, button);
+            if (didContinue) {
+                sceneState = advanceScene(sceneState);
+            }
+            return;
+        }
+
         return;
     }
 
@@ -203,6 +335,24 @@ love.draw = () => {
 
     if (sceneState.current === "combat" && activeCombat && activeCombatUi) {
         drawCombatUi(activeCombatUi, activeCombat.state);
+        return;
+    }
+
+    if (sceneState.current === "explore") {
+        if (!activeExploreUi) {
+            activeExploreUi = createExploreUiState();
+        }
+
+        drawExploreUi(activeExploreUi, sceneState.visitCounts.explore);
+        return;
+    }
+
+    if (sceneState.current === "encounter") {
+        if (!activeEncounterUi) {
+            activeEncounterUi = createEncounterUiState();
+        }
+
+        drawEncounterUi(activeEncounterUi, sceneState.visitCounts.encounter);
         return;
     }
 

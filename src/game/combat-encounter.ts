@@ -8,6 +8,8 @@ import {
 } from "./dice";
 import { getDieConstructById } from "./dice-constructs";
 import { createDieFromConstruct } from "./dice-factory";
+import { getEnemyById, listEnemies } from "../planning/content-registry";
+import type { ContentEnemy } from "../planning/content-types";
 
 type CombatActor = {
   id: string;
@@ -24,6 +26,21 @@ export type EnemyStub = {
   maxHp: number;
   dice: Die[];
 };
+
+function createEnemyTemplate(enemy: ContentEnemy): EnemyStub {
+  return {
+    id: enemy.id,
+    name: enemy.name,
+    maxHp: enemy.hp,
+    dice: enemy.dice.map((constructId, index) => {
+      const construct = getDieConstructById(constructId);
+      return createDieFromConstruct({
+        construct,
+        dieId: `${enemy.id}-die-${index + 1}`,
+      });
+    }),
+  };
+}
 
 export type PendingEnemyIntent = {
   events: CombatEvent[];
@@ -147,35 +164,7 @@ function createPlayerDice(): Die[] {
 }
 
 export function createStubEnemies(): EnemyStub[] {
-  const slimeClaw = getDieConstructById("slime-claw");
-  const slimeJab = getDieConstructById("slime-jab");
-  const slimeOoze = getDieConstructById("slime-ooze");
-  const hexBolt = getDieConstructById("hex-bolt");
-  const knifeToss = getDieConstructById("knife-toss");
-  const brewSip = getDieConstructById("brew-sip");
-
-  return [
-    {
-      id: "slime-raider",
-      name: "Slime Raider",
-      maxHp: 14,
-      dice: [
-        createDieFromConstruct({ construct: slimeClaw, dieId: "enemy-die-1" }),
-        createDieFromConstruct({ construct: slimeJab, dieId: "enemy-die-2" }),
-        createDieFromConstruct({ construct: slimeOoze, dieId: "enemy-die-3" }),
-      ],
-    },
-    {
-      id: "goblin-hexer",
-      name: "Goblin Hexer",
-      maxHp: 12,
-      dice: [
-        createDieFromConstruct({ construct: hexBolt, dieId: "goblin-die-1" }),
-        createDieFromConstruct({ construct: knifeToss, dieId: "goblin-die-2" }),
-        createDieFromConstruct({ construct: brewSip, dieId: "goblin-die-3" }),
-      ],
-    },
-  ];
+  return listEnemies().map((entry) => createEnemyTemplate(entry));
 }
 
 function buildEnemyIntent(
@@ -233,7 +222,9 @@ export function createCombatEncounter(
   const randomSource = options?.randomSource ?? defaultRandomSource;
   const eventBus = options?.eventBus ?? new CombatEventBus();
   const enemyTemplate =
-    createStubEnemies().find((enemy) => enemy.id === options?.enemyId) ?? createStubEnemies()[0];
+    options?.enemyId !== undefined
+      ? createEnemyTemplate(getEnemyById(options.enemyId))
+      : createStubEnemies()[0];
 
   const player: CombatActor = {
     id: "player",

@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tstl -p tsconfig.json && node scripts/sync-lua.mjs",
+    "generate:content": "node scripts/generate-content-registry.mjs",
+    "build": "npm run generate:content && tstl -p tsconfig.json && node scripts/sync-lua.mjs",
     "watch": "tstl -p tsconfig.json -w",
     "dev": "npm run build && npm run watch",
-    "test": "jest",
+    "test": "npm run generate:content && jest",
     "test:watch": "jest --watch"
   },
   "devDependencies": {

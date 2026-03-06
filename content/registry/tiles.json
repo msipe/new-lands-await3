@@ -1,0 +1,10 @@
+[
+  {
+    "id": "tile:draculas-castle",
+    "name": "Dracula's Castle",
+    "zone": "mountain",
+    "unique": true,
+    "tags": ["special", "castle", "big-bad"],
+    "enemyIds": ["enemy:goblin-hexer"]
+  }
+]

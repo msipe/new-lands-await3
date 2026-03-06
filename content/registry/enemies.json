@@ -1,0 +1,22 @@
+[
+  {
+    "id": "enemy:slime-raider",
+    "name": "Slime Raider",
+    "level": 1,
+    "hp": 14,
+    "tags": ["beast", "slime", "melee"],
+    "types": ["ooze"],
+    "abilities": [],
+    "dice": ["slime-claw", "slime-jab", "slime-ooze"]
+  },
+  {
+    "id": "enemy:goblin-hexer",
+    "name": "Goblin Hexer",
+    "level": 2,
+    "hp": 12,
+    "tags": ["humanoid", "goblin", "caster"],
+    "types": ["raider", "caster"],
+    "abilities": [],
+    "dice": ["hex-bolt", "knife-toss", "brew-sip"]
+  }
+]

@@ -1,0 +1,73 @@
+import type { PlannerRequirementKind } from "./game-planner";
+import type { ZoneType } from "../exploration/explore-state";
+
+export type NpcResidenceBuilding = "shop" | "inn" | "guild" | "square" | "shrine";
+
+export type ContentNpc = {
+  id: string;
+  name: string;
+  role: string;
+  defaultZone: ZoneType;
+  residenceBuilding: NpcResidenceBuilding;
+  notes: string;
+  standardDialog: string[];
+};
+
+export type ContentTile = {
+  id: string;
+  name: string;
+  zone: ZoneType;
+  unique: boolean;
+  tags: string[];
+  enemyIds?: string[];
+};
+
+export type EnemyTag = string;
+
+export type EnemyType = string;
+
+export type ContentEnemyAbilityStub = {
+  id: string;
+  kind: string;
+  metadata: Record<string, string | number | boolean>;
+};
+
+export type ContentEnemy = {
+  id: string;
+  name: string;
+  level: number;
+  hp: number;
+  tags: EnemyTag[];
+  types: EnemyType[];
+  abilities: ContentEnemyAbilityStub[];
+  dice: string[];
+};
+
+export type ContentRequirementTemplate = {
+  id: string;
+  kind: PlannerRequirementKind;
+  description: string;
+  minCount?: number;
+  tags: string[];
+  metadata: Record<string, string | number | boolean>;
+};
+
+export type ContentQuest = {
+  id: string;
+  name: string;
+  summary: string;
+  type: "main" | "side" | "town";
+  requirements: ContentRequirementTemplate[];
+};
+
+export type ContentBigBad = {
+  id: string;
+  name: string;
+  summary: string;
+  mainQuestId: string;
+  sideQuestIds: string[];
+  townQuestIds: string[];
+  mandatorySideQuestIds: string[];
+  specialTileId: string;
+  eventCollectionId: string;
+};
