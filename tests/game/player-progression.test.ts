@@ -6,9 +6,11 @@ import {
   getXpRequiredForLevel,
   grantPlayerXp,
   recordCombatVictory,
+  recordFaceAdjustment,
   setPlayerIdentity,
   spendPlayerGold,
 } from "../../src/game/player-progression";
+import { FaceAdjustmentModalityType } from "../../src/game/faces";
 import { EQUIPMENT_SLOT_ORDER } from "../../src/game/player-items";
 
 describe("player progression", () => {
@@ -115,5 +117,22 @@ describe("player progression", () => {
 
       expect(progression.items.equipped[slotId]).toBeUndefined();
     }
+  });
+
+  it("records persistent face adjustments", () => {
+    const progression = createPlayerProgression();
+
+    recordFaceAdjustment(progression, {
+      dieId: "player-die-1",
+      sideId: "player-die-1-side-1",
+      operation: {
+        propertyId: "attack_modifier",
+        type: FaceAdjustmentModalityType.Improve,
+        steps: 1,
+      },
+    });
+
+    expect(progression.faceAdjustments).toHaveLength(1);
+    expect(progression.faceAdjustments[0].dieId).toBe("player-die-1");
   });
 });

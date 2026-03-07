@@ -1,6 +1,7 @@
 import { Die } from "./dice";
 import { getDieConstructById } from "./dice-constructs";
 import { createDieFromConstruct } from "./dice-factory";
+import { applyRecordedFaceAdjustments } from "./face-adjustments";
 import type { PlayerProgressionState } from "./player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "./player-items";
 import { Ironhide, Miss, WildStrike, Warcry } from "./faces";
@@ -89,8 +90,14 @@ export function createEquippedItemCombatDice(progression?: PlayerProgressionStat
 }
 
 export function createPlayerCombatDiceLoadout(progression?: PlayerProgressionState): Die[] {
-  return [
+  const dice = [
     ...createWarriorStarterCombatDice(progression),
     ...createEquippedItemCombatDice(progression),
   ];
+
+  if (progression) {
+    applyRecordedFaceAdjustments(dice, progression.faceAdjustments);
+  }
+
+  return dice;
 }

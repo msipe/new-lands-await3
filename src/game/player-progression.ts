@@ -3,6 +3,7 @@ import {
   type EquipmentSlotId,
   type PlayerInventoryState,
 } from "./player-items";
+import type { FaceAdjustmentEntry } from "./face-adjustments";
 import { getItemById } from "../planning/content-registry";
 
 export type PlayerProgressionState = {
@@ -15,6 +16,7 @@ export type PlayerProgressionState = {
   xpToNextLevel: number;
   totalXp: number;
   gold: number;
+  faceAdjustments: FaceAdjustmentEntry[];
   battlesWon: number;
   maxHp: number;
   diceSlots: number;
@@ -75,6 +77,7 @@ export function createPlayerProgression(): PlayerProgressionState {
     xpToNextLevel: getXpRequiredForLevel(1),
     totalXp: 0,
     gold: 1000,
+    faceAdjustments: [],
     battlesWon: 0,
     maxHp: 20,
     diceSlots: 3,
@@ -161,6 +164,16 @@ export function spendPlayerGold(state: PlayerProgressionState, amount: number): 
     amount: safeAmount,
     nextGold: state.gold,
   };
+}
+
+export function recordFaceAdjustment(
+  state: PlayerProgressionState,
+  entry: FaceAdjustmentEntry,
+): void {
+  state.faceAdjustments.push({
+    ...entry,
+    operation: { ...entry.operation },
+  });
 }
 
 export function grantPlayerXp(state: PlayerProgressionState, amount: number): LevelUpResult {
