@@ -13,6 +13,15 @@ import {
 } from "../../transient-die";
 import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
+import type {
+  FaceAdjustmentOperation,
+  FaceAdjustmentProperty,
+  FaceAdjustmentResult,
+  FaceAdjustmentTextTemplate,
+} from "../FaceAdjustmentModel";
+import { FaceAdjustmentModalityType } from "../FaceAdjustmentModel";
+
+type WildStrikeWeaponChoice = "mainhand" | "offhand" | "both_hands";
 
 type ResolveTransientWeaponEvents = (
   context: FaceResolveContext,
@@ -121,6 +130,17 @@ export function summarizeWildStrikeRoll(events: CombatEvent[]): WildStrikeRollSu
 }
 
 export class WildStrike extends Face {
+  private static readonly minAttackCount = 1;
+  private static readonly minExtraDamage = 0;
+
+  static readonly attackCountUpgradeRate = 3;
+  static readonly attackCountReductionRate = 3;
+  static readonly bonusDamageUpgradeRate = 1;
+  static readonly bonusDamageReductionRate = 0.5;
+  static readonly weaponChoiceChangeRate = 5;
+
+  private attackCount = 1;
+  private weaponChoice: WildStrikeWeaponChoice = "mainhand";
   private bonusDamage: number;
   private readonly resolveTransientWeaponEvents: ResolveTransientWeaponEvents;
   private lastTransientPopupData?: TransientDiePopupData;
@@ -151,7 +171,7 @@ export class WildStrike extends Face {
   }
 
   describe(): string {
-    return `Trigger an extra mainhand weapon attack. If it damages the opponent, add +${this.bonusDamage} damage.`;
+    return `Trigger ${this.attackCount} extra ${this.weaponChoice.replace("_", " ")} attack(s). If they damage the opponent, add +${this.bonusDamage} damage.`;
   }
 
   getResolvePopupText(): string {
@@ -160,6 +180,224 @@ export class WildStrike extends Face {
 
   getSpawnedDiePopupData(): TransientDiePopupData | undefined {
     return this.lastTransientPopupData;
+  }
+
+  getAdjustmentProperties(): FaceAdjustmentProperty[] {
+    return [
+      {
+        id: "attack_times",
+        label: "Attack Times",
+        description: "How many extra attacks Wild Strike triggers.",
+        value: this.attackCount,
+        improvementRate: WildStrike.attackCountUpgradeRate,
+        reductionRate: WildStrike.attackCountReductionRate,
+        modalities: [
+          {
+            type: FaceAdjustmentModalityType.Improve,
+            step: 1,
+            rate: WildStrike.attackCountUpgradeRate,
+            min: WildStrike.minAttackCount,
+          },
+          {
+            type: FaceAdjustmentModalityType.Reduce,
+            step: 1,
+            rate: WildStrike.attackCountReductionRate,
+            min: WildStrike.minAttackCount,
+          },
+        ],
+      },
+      {
+        id: "weapon_choice",
+        label: "Weapon Choice",
+        description: "Which equipped weapon slot Wild Strike should use.",
+        value: this.weaponChoice,
+        improvementRate: WildStrike.weaponChoiceChangeRate,
+        modalities: [
+          {
+            type: FaceAdjustmentModalityType.Select,
+            options: ["mainhand", "offhand", "both_hands"],
+            multi: false,
+            rate: WildStrike.weaponChoiceChangeRate,
+          },
+        ],
+      },
+      {
+        id: "extra_damage",
+        label: "Extra Damage",
+        description: "Bonus damage applied when the transient strike hits.",
+        value: this.bonusDamage,
+        improvementRate: WildStrike.bonusDamageUpgradeRate,
+        reductionRate: WildStrike.bonusDamageReductionRate,
+        modalities: [
+          {
+            type: FaceAdjustmentModalityType.Improve,
+            step: 1,
+            rate: WildStrike.bonusDamageUpgradeRate,
+            min: WildStrike.minExtraDamage,
+          },
+          {
+            type: FaceAdjustmentModalityType.Reduce,
+            step: 1,
+            rate: WildStrike.bonusDamageReductionRate,
+            min: WildStrike.minExtraDamage,
+          },
+        ],
+      },
+    ];
+  }
+
+  getAdjustmentTextTemplate(): FaceAdjustmentTextTemplate {
+    return {
+      template:
+        "Trigger $attack_times extra $weapon_choice attack(s). If they damage the opponent, add +$extra_damage damage.",
+      bindings: {
+        attack_times: {
+          propertyId: "attack_times",
+          display: "value",
+          tooltipKey: "attack-times",
+        },
+        weapon_choice: {
+          propertyId: "weapon_choice",
+          display: "value",
+          tooltipKey: "weapon-choice",
+        },
+        extra_damage: {
+          propertyId: "extra_damage",
+          display: "value",
+          tooltipKey: "extra-damage",
+        },
+      },
+    };
+  }
+
+  applyAdjustment(operation: FaceAdjustmentOperation): FaceAdjustmentResult {
+    const property = this.getAdjustmentProperty(operation.propertyId);
+    if (!property) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Unsupported property for this face.",
+      };
+    }
+
+    if (!this.supportsAdjustmentModality(property, operation.type)) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Unsupported adjustment modality for this property.",
+      };
+    }
+
+    switch (operation.propertyId) {
+      case "attack_times":
+        return this.applyAttackTimesAdjustment(operation);
+      case "weapon_choice":
+        return this.applyWeaponChoiceAdjustment(operation);
+      case "extra_damage":
+        return this.applyExtraDamageAdjustment(operation);
+      default:
+        return {
+          applied: false,
+          resourceDelta: 0,
+          reason: "Unsupported property for this face.",
+        };
+    }
+  }
+
+  private applyAttackTimesAdjustment(operation: FaceAdjustmentOperation): FaceAdjustmentResult {
+    if (operation.type === FaceAdjustmentModalityType.Improve) {
+      const steps = Math.max(1, Math.floor(operation.steps ?? 1));
+      this.attackCount += steps;
+      return {
+        applied: true,
+        resourceDelta: -(steps * WildStrike.attackCountUpgradeRate),
+      };
+    }
+
+    if (operation.type !== FaceAdjustmentModalityType.Reduce) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Unsupported adjustment modality for this property.",
+      };
+    }
+
+    const steps = Math.max(1, Math.floor(operation.steps ?? 1));
+    const nextAttackCount = Math.max(WildStrike.minAttackCount, this.attackCount - steps);
+    const adjustedSteps = this.attackCount - nextAttackCount;
+    if (adjustedSteps === 0) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Attack times is already at minimum.",
+      };
+    }
+
+    this.attackCount = nextAttackCount;
+    return {
+      applied: true,
+      resourceDelta: adjustedSteps * WildStrike.attackCountReductionRate,
+    };
+  }
+
+  private applyWeaponChoiceAdjustment(operation: FaceAdjustmentOperation): FaceAdjustmentResult {
+    if (operation.type !== FaceAdjustmentModalityType.Select) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Unsupported adjustment modality for this property.",
+      };
+    }
+
+    if (this.weaponChoice === operation.value) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Weapon choice is already selected.",
+      };
+    }
+
+    this.weaponChoice = operation.value as WildStrikeWeaponChoice;
+    return {
+      applied: true,
+      resourceDelta: -WildStrike.weaponChoiceChangeRate,
+    };
+  }
+
+  private applyExtraDamageAdjustment(operation: FaceAdjustmentOperation): FaceAdjustmentResult {
+    if (operation.type === FaceAdjustmentModalityType.Improve) {
+      const steps = Math.max(1, Math.floor(operation.steps ?? 1));
+      this.bonusDamage += steps;
+      return {
+        applied: true,
+        resourceDelta: -(steps * WildStrike.bonusDamageUpgradeRate),
+      };
+    }
+
+    if (operation.type !== FaceAdjustmentModalityType.Reduce) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Unsupported adjustment modality for this property.",
+      };
+    }
+
+    const steps = Math.max(1, Math.floor(operation.steps ?? 1));
+    const nextBonusDamage = Math.max(WildStrike.minExtraDamage, this.bonusDamage - steps);
+    const adjustedSteps = this.bonusDamage - nextBonusDamage;
+    if (adjustedSteps === 0) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Extra damage is already at minimum.",
+      };
+    }
+
+    this.bonusDamage = nextBonusDamage;
+    return {
+      applied: true,
+      resourceDelta: adjustedSteps * WildStrike.bonusDamageReductionRate,
+    };
   }
 
   createCombatEventModifier(): CombatEventModifierRegistration {
@@ -219,13 +457,19 @@ export class WildStrike extends Face {
   protected onResolve(context: FaceResolveContext): CombatEvent[] {
     const randomSource = context.randomSource ?? defaultRandomSource;
     this.lastTransientPopupData = undefined;
-    const transientEvents = this.resolveTransientWeaponEvents(
-      context,
-      randomSource,
-      (popupData) => {
-        this.lastTransientPopupData = popupData;
-      },
-    );
+
+    const transientEvents: CombatEvent[] = [];
+    for (let attackIndex = 0; attackIndex < this.attackCount; attackIndex += 1) {
+      const resolvedEvents = this.resolveTransientWeaponEvents(
+        context,
+        randomSource,
+        (popupData) => {
+          // Keep last popup data for compatibility with existing popup plumbing.
+          this.lastTransientPopupData = popupData;
+        },
+      );
+      transientEvents.push(...resolvedEvents);
+    }
 
     if (transientEvents.length === 0) {
       return [];

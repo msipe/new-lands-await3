@@ -1,6 +1,12 @@
 import { type CombatEvent } from "../../combat-event-bus";
 import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
+import type {
+  FaceAdjustmentOperation,
+  FaceAdjustmentProperty,
+  FaceAdjustmentResult,
+  FaceAdjustmentTextTemplate,
+} from "../FaceAdjustmentModel";
 
 export class Miss extends Face {
   constructor(id: string) {
@@ -18,6 +24,25 @@ export class Miss extends Face {
 
   getResolvePopupText(): string {
     return "Miss";
+  }
+
+  getAdjustmentProperties(): FaceAdjustmentProperty[] {
+    return [];
+  }
+
+  getAdjustmentTextTemplate(): FaceAdjustmentTextTemplate {
+    return {
+      template: "Miss.",
+      bindings: {},
+    };
+  }
+
+  applyAdjustment(_operation: FaceAdjustmentOperation): FaceAdjustmentResult {
+    return {
+      applied: false,
+      resourceDelta: 0,
+      reason: "Miss has no adjustable properties.",
+    };
   }
 
   protected onResolve(_context: FaceResolveContext): CombatEvent[] {

@@ -1,6 +1,12 @@
 import type { CombatEvent } from "../combat-event-bus";
 import type { DieSide, SideResolveContext } from "../dice";
 import type { FaceUpgrade } from "./FaceUpgrade";
+import type {
+  FaceAdjustmentOperation,
+  FaceAdjustmentProperty,
+  FaceAdjustmentResult,
+  FaceAdjustmentTextTemplate,
+} from "./FaceAdjustmentModel";
 
 export type FaceCategory = "abilities" | "items" | "misc";
 
@@ -46,6 +52,33 @@ export abstract class Face implements DieSide {
   }
 
   abstract applyUpgrade(upgrade: FaceUpgrade): boolean;
+
+  getAdjustmentProperties(): FaceAdjustmentProperty[] {
+    return [];
+  }
+
+  applyAdjustment(_operation: FaceAdjustmentOperation): FaceAdjustmentResult {
+    return {
+      applied: false,
+      resourceDelta: 0,
+      reason: "Face does not expose adjustable properties.",
+    };
+  }
+
+  getAdjustmentTextTemplate(): FaceAdjustmentTextTemplate | undefined {
+    return undefined;
+  }
+
+  protected getAdjustmentProperty(propertyId: string): FaceAdjustmentProperty | undefined {
+    return this.getAdjustmentProperties().find((property) => property.id === propertyId);
+  }
+
+  protected supportsAdjustmentModality(
+    property: FaceAdjustmentProperty,
+    operationType: FaceAdjustmentOperation["type"],
+  ): boolean {
+    return property.modalities.some((modality) => modality.type === operationType);
+  }
 
   protected beforeResolve(_context: FaceResolveContext): void {}
 

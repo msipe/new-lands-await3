@@ -1,5 +1,15 @@
 export { Face, type FaceCategory, type FaceResolveContext } from "./Face";
 export type { FaceUpgrade } from "./FaceUpgrade";
+export type {
+  FaceAdjustmentOperation,
+  FaceAdjustmentProperty,
+  FaceAdjustmentPropertyModality,
+  FaceAdjustmentResult,
+  FaceAdjustmentTextTemplate,
+  FaceAdjustmentTextTokenBinding,
+  FaceAdjustmentTextTokenDisplay,
+} from "./FaceAdjustmentModel";
+export { FaceAdjustmentModalityType } from "./FaceAdjustmentModel";
 
 export { DealDamage } from "./abilities/DealDamage";
 export { ArmorGain } from "./abilities/ArmorGain";

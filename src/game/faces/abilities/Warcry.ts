@@ -8,8 +8,19 @@ import {
 import type { CombatLogRollContext } from "../../combat-log";
 import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
+import type {
+  FaceAdjustmentOperation,
+  FaceAdjustmentProperty,
+  FaceAdjustmentResult,
+  FaceAdjustmentTextTemplate,
+} from "../FaceAdjustmentModel";
+import { FaceAdjustmentModalityType } from "../FaceAdjustmentModel";
 
 export class Warcry extends Face {
+  private static readonly minAttackModifier = 0;
+  static readonly attackModifierImproveRate = 1;
+  static readonly attackModifierReduceRate = 0.5;
+
   private attackModifier: number;
 
   constructor(id: string, attackModifier: number) {
@@ -41,6 +52,119 @@ export class Warcry extends Face {
     return this.attackModifier >= 0
       ? `Attacks +${this.attackModifier} this turn`
       : `Attacks ${this.attackModifier} this turn`;
+  }
+
+  getAttackModifier(): number {
+    return this.attackModifier;
+  }
+
+  getAdjustmentProperties(): FaceAdjustmentProperty[] {
+    return [
+      {
+        id: "attack_modifier",
+        label: "Attack Modifier",
+        description: "How much this face adds to attack damage this turn.",
+        value: this.attackModifier,
+        improvementRate: Warcry.attackModifierImproveRate,
+        reductionRate: Warcry.attackModifierReduceRate,
+        modalities: [
+          {
+            type: FaceAdjustmentModalityType.Improve,
+            step: 1,
+            rate: Warcry.attackModifierImproveRate,
+            min: Warcry.minAttackModifier,
+          },
+          {
+            type: FaceAdjustmentModalityType.Reduce,
+            step: 1,
+            rate: Warcry.attackModifierReduceRate,
+            min: Warcry.minAttackModifier,
+          },
+        ],
+      },
+    ];
+  }
+
+  getAdjustmentTextTemplate(): FaceAdjustmentTextTemplate {
+    return {
+      template: "Your attacks deal $attack_modifier damage until end of turn.",
+      bindings: {
+        attack_modifier: {
+          propertyId: "attack_modifier",
+          display: "value",
+          tooltipKey: "attack-modifier",
+        },
+      },
+    };
+  }
+
+  applyAdjustment(operation: FaceAdjustmentOperation): FaceAdjustmentResult {
+    const property = this.getAdjustmentProperty(operation.propertyId);
+    if (!property) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Unsupported property for this face.",
+      };
+    }
+
+    if (!this.supportsAdjustmentModality(property, operation.type)) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Unsupported adjustment modality for this property.",
+      };
+    }
+
+    switch (operation.propertyId) {
+      case "attack_modifier":
+        return this.applyAttackModifierAdjustment(operation);
+      default:
+        return {
+          applied: false,
+          resourceDelta: 0,
+          reason: "Unsupported property for this face.",
+        };
+    }
+  }
+
+  private applyAttackModifierAdjustment(operation: FaceAdjustmentOperation): FaceAdjustmentResult {
+    if (operation.type === FaceAdjustmentModalityType.Improve) {
+      const requestedSteps = Math.max(1, Math.floor(operation.steps ?? 1));
+      this.attackModifier += requestedSteps;
+      return {
+        applied: true,
+        resourceDelta: -(requestedSteps * Warcry.attackModifierImproveRate),
+      };
+    }
+
+    if (operation.type !== FaceAdjustmentModalityType.Reduce) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Unsupported adjustment modality for this property.",
+      };
+    }
+
+    const requestedSteps = Math.max(1, Math.floor(operation.steps ?? 1));
+    const nextModifier = Math.max(
+      Warcry.minAttackModifier,
+      this.attackModifier - requestedSteps,
+    );
+    const adjustedSteps = this.attackModifier - nextModifier;
+    if (adjustedSteps === 0) {
+      return {
+        applied: false,
+        resourceDelta: 0,
+        reason: "Attack modifier is already at minimum.",
+      };
+    }
+
+    this.attackModifier = nextModifier;
+    return {
+      applied: true,
+      resourceDelta: adjustedSteps * Warcry.attackModifierReduceRate,
+    };
   }
 
   createCombatEventModifier(): CombatEventModifierRegistration {
