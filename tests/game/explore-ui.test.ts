@@ -77,6 +77,46 @@ describe("explore-ui talent tree", () => {
     expect(uiState.isTalentTreeOpen).toBe(true);
   });
 
+  it("toggles craft shop with keyboard and closes other overlays", () => {
+    const uiState = createExploreUiState();
+    uiState.isInventoryOpen = true;
+    uiState.isCharacterSheetOpen = true;
+
+    expect(onExploreKeyPressed(uiState, "u")).toBe(true);
+    expect(uiState.isCraftShopOpen).toBe(true);
+    expect(uiState.isInventoryOpen).toBe(false);
+    expect(uiState.isCharacterSheetOpen).toBe(false);
+
+    expect(onExploreKeyPressed(uiState, "escape")).toBe(true);
+    expect(uiState.isCraftShopOpen).toBe(false);
+  });
+
+  it("supports selecting craftsfolk and die while shop is open", () => {
+    const uiState = createExploreUiState();
+    onExploreKeyPressed(uiState, "u");
+    expect(uiState.isCraftShopOpen).toBe(true);
+
+    // Click craftsfolk row in 1120x620 test layout.
+    onExploreMouseReleased(uiState, 120, 108, 1);
+    expect(uiState.selectedCraftsfolkId).toBe("craft:up-down-smith");
+
+    // Click first die row in 1120x620 test layout.
+    onExploreMouseReleased(uiState, 120, 212, 1);
+    expect(uiState.selectedUpgradeDieId).toBeDefined();
+    expect(uiState.selectedUpgradeSideId).toBeDefined();
+  });
+
+  it("captures branch clicks while craft shop modal is open", () => {
+    const uiState = createExploreUiState();
+    onExploreKeyPressed(uiState, "u");
+
+    const branch = uiState.buttons[0];
+    const action = onExploreMouseReleased(uiState, branch.rect.x + 8, branch.rect.y + 8, 1);
+
+    expect(action).toBeUndefined();
+    expect(uiState.isCraftShopOpen).toBe(true);
+  });
+
   it("applies confirm and cancel for selected talents", () => {
     const uiState = createExploreUiState();
     uiState.playerProgression.unspentTalentPoints = 1;

@@ -21,10 +21,12 @@ import {
   createPlayerProgression,
   type PlayerProgressionState,
 } from "../game/player-progression";
+import { createPlayerCombatDiceLoadout } from "../game/player-combat-dice";
 import {
   EQUIPMENT_SLOT_LABELS,
   EQUIPMENT_SLOT_ORDER,
 } from "../game/player-items";
+import type { Die } from "../game/dice";
 
 type Rect = {
   x: number;
@@ -37,6 +39,29 @@ type ActionButton = {
   kind: "branch";
   branch: ExploreBranch;
   rect: Rect;
+};
+
+type CraftsfolkId = "craft:up-down-smith";
+
+type CraftsfolkOption = {
+  id: CraftsfolkId;
+  name: string;
+  description: string;
+};
+
+type ShopRowRect = {
+  id: string;
+  rect: Rect;
+};
+
+type ShopLayout = {
+  panelRect: Rect;
+  closeButtonRect: Rect;
+  dieListRect: Rect;
+  faceListRect: Rect;
+  craftsfolkRows: ShopRowRect[];
+  dieRows: ShopRowRect[];
+  faceRows: ShopRowRect[];
 };
 
 export type CreateExploreUiStateOptions = {
@@ -71,6 +96,14 @@ export type ExploreUiState = {
   characterSheetButtonRect: Rect;
   isInventoryOpen: boolean;
   inventoryButtonRect: Rect;
+  isCraftShopOpen: boolean;
+  craftShopButtonRect: Rect;
+  availableCraftsfolk: CraftsfolkOption[];
+  selectedCraftsfolkId?: CraftsfolkId;
+  selectedUpgradeDieId?: string;
+  selectedUpgradeSideId?: string;
+  selectedUpgradePropertyId?: string;
+  shopStatusText?: string;
 };
 
 type TalentTreeLayout = {
@@ -222,6 +255,25 @@ function createInventoryButtonRect(): Rect {
   };
 }
 
+function createCraftShopButtonRect(): Rect {
+  return {
+    x: 404,
+    y: 52,
+    width: 200,
+    height: 34,
+  };
+}
+
+function createCraftsfolkOptions(): CraftsfolkOption[] {
+  return [
+    {
+      id: "craft:up-down-smith",
+      name: "Up/Down Smith",
+      description: "Simple face tuning specialist for upgrade and downgrade work.",
+    },
+  ];
+}
+
 function getActionLabel(branch: ExploreBranch, currentTile: ExploreTile): string {
   if (branch === "combat") {
     return "Travel to Combat";
@@ -249,6 +301,7 @@ function refreshLayoutIfNeeded(uiState: ExploreUiState): void {
   uiState.buttons = createButtons(width, height);
   uiState.characterSheetButtonRect = createCharacterSheetButtonRect();
   uiState.inventoryButtonRect = createInventoryButtonRect();
+  uiState.craftShopButtonRect = createCraftShopButtonRect();
   uiState.xpBarRect = createXpBarRect();
 }
 
@@ -264,6 +317,103 @@ function getButtonAt(uiState: ExploreUiState, x: number, y: number): ActionButto
   }
 
   return undefined;
+}
+
+function getCraftShopLayout(uiState: ExploreUiState, dice: Die[]): ShopLayout {
+  const panelWidth = Math.min(960, Math.floor(uiState.width * 0.92));
+  const panelHeight = Math.min(560, Math.floor(uiState.height * 0.9));
+  const panelX = Math.floor((uiState.width - panelWidth) * 0.5);
+  const panelY = Math.floor((uiState.height - panelHeight) * 0.5);
+
+  const craftsfolkRows: ShopRowRect[] = [];
+  let craftsfolkY = panelY + 74;
+  for (const option of uiState.availableCraftsfolk) {
+    craftsfolkRows.push({
+      id: option.id,
+      rect: {
+        x: panelX + 20,
+        y: craftsfolkY,
+        width: panelWidth - 40,
+        height: 42,
+      },
+    });
+    craftsfolkY += 50;
+  }
+
+  const dieListRect: Rect = {
+    x: panelX + 20,
+    y: craftsfolkY + 12,
+    width: Math.floor((panelWidth - 60) * 0.45),
+    height: panelHeight - (craftsfolkY - panelY) - 36,
+  };
+
+  const faceListRect: Rect = {
+    x: dieListRect.x + dieListRect.width + 20,
+    y: dieListRect.y,
+    width: panelWidth - (dieListRect.width + 60),
+    height: dieListRect.height,
+  };
+
+  const dieRows: ShopRowRect[] = [];
+  let dieY = dieListRect.y + 36;
+  for (const die of dice) {
+    if (dieY > dieListRect.y + dieListRect.height - 32) {
+      break;
+    }
+
+    dieRows.push({
+      id: die.id,
+      rect: {
+        x: dieListRect.x + 10,
+        y: dieY,
+        width: dieListRect.width - 20,
+        height: 28,
+      },
+    });
+    dieY += 32;
+  }
+
+  const selectedDie = dice.find((die) => die.id === uiState.selectedUpgradeDieId) ?? dice[0];
+  const faceRows: ShopRowRect[] = [];
+  let faceY = faceListRect.y + 36;
+  if (selectedDie !== undefined) {
+    for (const side of selectedDie.sides) {
+      if (faceY > faceListRect.y + faceListRect.height - 32) {
+        break;
+      }
+
+      faceRows.push({
+        id: side.id,
+        rect: {
+          x: faceListRect.x + 10,
+          y: faceY,
+          width: faceListRect.width - 20,
+          height: 28,
+        },
+      });
+      faceY += 32;
+    }
+  }
+
+  return {
+    panelRect: {
+      x: panelX,
+      y: panelY,
+      width: panelWidth,
+      height: panelHeight,
+    },
+    closeButtonRect: {
+      x: panelX + panelWidth - 126,
+      y: panelY + 14,
+      width: 106,
+      height: 34,
+    },
+    dieListRect,
+    faceListRect,
+    craftsfolkRows,
+    dieRows,
+    faceRows,
+  };
 }
 
 function getTileAt(uiState: ExploreUiState, x: number, y: number): ExploreTile | undefined {
@@ -327,6 +477,14 @@ export function createExploreUiState(input?: number | CreateExploreUiStateOption
     characterSheetButtonRect: createCharacterSheetButtonRect(),
     isInventoryOpen: false,
     inventoryButtonRect: createInventoryButtonRect(),
+    isCraftShopOpen: false,
+    craftShopButtonRect: createCraftShopButtonRect(),
+    availableCraftsfolk: createCraftsfolkOptions(),
+    selectedCraftsfolkId: undefined,
+    selectedUpgradeDieId: undefined,
+    selectedUpgradeSideId: undefined,
+    selectedUpgradePropertyId: undefined,
+    shopStatusText: undefined,
   };
 }
 
@@ -360,11 +518,27 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     return true;
   }
 
+  if (key === "u") {
+    uiState.isCraftShopOpen = !uiState.isCraftShopOpen;
+    if (uiState.isCraftShopOpen) {
+      uiState.isCharacterSheetOpen = false;
+      uiState.isInventoryOpen = false;
+      uiState.isTalentTreeOpen = false;
+      uiState.selectedTalentId = undefined;
+    }
+    return true;
+  }
+
   if (key === "escape" && (uiState.isCharacterSheetOpen || uiState.isInventoryOpen || uiState.isTalentTreeOpen)) {
     uiState.isCharacterSheetOpen = false;
     uiState.isInventoryOpen = false;
     uiState.isTalentTreeOpen = false;
     uiState.selectedTalentId = undefined;
+    return true;
+  }
+
+  if (key === "escape" && uiState.isCraftShopOpen) {
+    uiState.isCraftShopOpen = false;
     return true;
   }
 
@@ -409,6 +583,55 @@ export function onExploreMouseMoved(uiState: ExploreUiState, x: number, y: numbe
 
 export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: number, button: number): ExploreUiAction {
   if (button !== 1) {
+    return undefined;
+  }
+
+  if (uiState.isCraftShopOpen) {
+    const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
+    const layout = getCraftShopLayout(uiState, dice);
+
+    if (isPointInRect(x, y, layout.closeButtonRect)) {
+      uiState.isCraftShopOpen = false;
+      return undefined;
+    }
+
+    for (const row of layout.craftsfolkRows) {
+      if (!isPointInRect(x, y, row.rect)) {
+        continue;
+      }
+
+      uiState.selectedCraftsfolkId = row.id as CraftsfolkId;
+      uiState.shopStatusText = `Selected craftsfolk: ${
+        uiState.availableCraftsfolk.find((entry) => entry.id === row.id)?.name ?? row.id
+      }`;
+      return undefined;
+    }
+
+    for (const row of layout.dieRows) {
+      if (!isPointInRect(x, y, row.rect)) {
+        continue;
+      }
+
+      uiState.selectedUpgradeDieId = row.id;
+      const selectedDie = dice.find((die) => die.id === row.id);
+      uiState.selectedUpgradeSideId = selectedDie?.sides[0]?.id;
+      uiState.selectedUpgradePropertyId = undefined;
+      uiState.shopStatusText = `Selected die: ${selectedDie?.name ?? row.id}`;
+      return undefined;
+    }
+
+    for (const row of layout.faceRows) {
+      if (!isPointInRect(x, y, row.rect)) {
+        continue;
+      }
+
+      uiState.selectedUpgradeSideId = row.id;
+      uiState.selectedUpgradePropertyId = undefined;
+      uiState.shopStatusText = "Selected die face.";
+      return undefined;
+    }
+
+    // Shop is modal and swallows all clicks behind it.
     return undefined;
   }
 
@@ -464,6 +687,17 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
     uiState.isInventoryOpen = !uiState.isInventoryOpen;
     if (uiState.isInventoryOpen) {
       uiState.isCharacterSheetOpen = false;
+    }
+    return undefined;
+  }
+
+  if (isPointInRect(x, y, uiState.craftShopButtonRect)) {
+    uiState.isCraftShopOpen = !uiState.isCraftShopOpen;
+    if (uiState.isCraftShopOpen) {
+      uiState.isCharacterSheetOpen = false;
+      uiState.isInventoryOpen = false;
+      uiState.isTalentTreeOpen = false;
+      uiState.selectedTalentId = undefined;
     }
     return undefined;
   }
@@ -657,6 +891,39 @@ function drawActionPanel(uiState: ExploreUiState): void {
     0.62,
   );
 
+  love.graphics.setColor(0.2, 0.28, 0.43, 0.96);
+  love.graphics.rectangle(
+    "fill",
+    uiState.craftShopButtonRect.x,
+    uiState.craftShopButtonRect.y,
+    uiState.craftShopButtonRect.width,
+    uiState.craftShopButtonRect.height,
+    8,
+    8,
+  );
+  love.graphics.setColor(0.73, 0.84, 0.98, 0.95);
+  love.graphics.rectangle(
+    "line",
+    uiState.craftShopButtonRect.x,
+    uiState.craftShopButtonRect.y,
+    uiState.craftShopButtonRect.width,
+    uiState.craftShopButtonRect.height,
+    8,
+    8,
+  );
+
+  love.graphics.setColor(1, 1, 1, 1);
+  love.graphics.printf(
+    uiState.isCraftShopOpen ? "Close Upgrade Shop (U)" : "Open Upgrade Shop (U)",
+    uiState.craftShopButtonRect.x,
+    uiState.craftShopButtonRect.y + 9,
+    uiState.craftShopButtonRect.width,
+    "center",
+    0,
+    0.62,
+    0.62,
+  );
+
   const currentTile = getCurrentTile(uiState.model);
   const playerKey = toCoordKey(uiState.model.playerCoord);
   love.graphics.setColor(0.81, 0.87, 0.97, 0.95);
@@ -715,7 +982,7 @@ function drawActionPanel(uiState: ExploreUiState): void {
 
   love.graphics.setColor(0.72, 0.8, 0.95, 0.86);
   love.graphics.printf(
-    "Movement: click neighboring hexes | Click XP bar or T: Talents | C: Character | I: Inventory | P: Planner Debug | R: Reroll Plan",
+    "Movement: click neighboring hexes | Click XP bar or T: Talents | C: Character | I: Inventory | U: Upgrade Shop | P: Planner Debug | R: Reroll Plan",
     panelX + 14,
     uiState.height - 62,
     panelWidth - 28,
@@ -1001,7 +1268,7 @@ function drawInventoryOverlay(uiState: ExploreUiState): void {
 
   love.graphics.setColor(0.74, 0.82, 0.94, 0.9);
   love.graphics.printf(
-    "Press I or Escape to close.",
+    "Press I or Escape to close. Press U for upgrade shop.",
     x + 20,
     y + height - 38,
     width - 40,
@@ -1010,6 +1277,179 @@ function drawInventoryOverlay(uiState: ExploreUiState): void {
     0.6,
     0.6,
   );
+}
+
+function drawCraftShopOverlay(uiState: ExploreUiState): void {
+  if (!uiState.isCraftShopOpen) {
+    return;
+  }
+
+  const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
+  const layout = getCraftShopLayout(uiState, dice);
+
+  const selectedDie =
+    dice.find((die) => die.id === uiState.selectedUpgradeDieId) ??
+    dice[0];
+
+  if (!uiState.selectedUpgradeDieId && selectedDie) {
+    uiState.selectedUpgradeDieId = selectedDie.id;
+  }
+
+  const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
+
+  love.graphics.setColor(0, 0, 0, 0.56);
+  love.graphics.rectangle("fill", 0, 0, uiState.width, uiState.height);
+
+  love.graphics.setColor(0.08, 0.1, 0.15, 0.98);
+  love.graphics.rectangle(
+    "fill",
+    layout.panelRect.x,
+    layout.panelRect.y,
+    layout.panelRect.width,
+    layout.panelRect.height,
+    10,
+    10,
+  );
+  love.graphics.setColor(0.92, 0.78, 0.45, 0.94);
+  love.graphics.rectangle(
+    "line",
+    layout.panelRect.x,
+    layout.panelRect.y,
+    layout.panelRect.width,
+    layout.panelRect.height,
+    10,
+    10,
+  );
+
+  love.graphics.setColor(0.98, 0.96, 0.9, 1);
+  love.graphics.printf("Craftsfolk Upgrade Shop", layout.panelRect.x + 20, layout.panelRect.y + 18, layout.panelRect.width - 180, "left", 0, 0.92, 0.92);
+
+  love.graphics.setColor(0.96, 0.88, 0.42, 0.98);
+  love.graphics.printf(
+    `Gold: ${uiState.playerProgression.gold}`,
+    layout.panelRect.x + 20,
+    layout.panelRect.y + 42,
+    layout.panelRect.width - 200,
+    "left",
+    0,
+    0.66,
+    0.66,
+  );
+
+  love.graphics.setColor(0.27, 0.19, 0.19, 0.95);
+  love.graphics.rectangle(
+    "fill",
+    layout.closeButtonRect.x,
+    layout.closeButtonRect.y,
+    layout.closeButtonRect.width,
+    layout.closeButtonRect.height,
+    6,
+    6,
+  );
+  love.graphics.setColor(0.95, 0.75, 0.75, 0.98);
+  love.graphics.rectangle(
+    "line",
+    layout.closeButtonRect.x,
+    layout.closeButtonRect.y,
+    layout.closeButtonRect.width,
+    layout.closeButtonRect.height,
+    6,
+    6,
+  );
+  love.graphics.setColor(1, 1, 1, 0.98);
+  love.graphics.printf("Close", layout.closeButtonRect.x, layout.closeButtonRect.y + 9, layout.closeButtonRect.width, "center", 0, 0.6, 0.6);
+
+  love.graphics.setColor(0.85, 0.9, 0.98, 0.94);
+  love.graphics.printf("Choose Craftsfolk", layout.panelRect.x + 20, layout.panelRect.y + 56, layout.panelRect.width - 40, "left", 0, 0.58, 0.58);
+
+  for (const row of layout.craftsfolkRows) {
+    const option = uiState.availableCraftsfolk.find((entry) => entry.id === row.id);
+    const isSelected = uiState.selectedCraftsfolkId === row.id;
+
+    love.graphics.setColor(isSelected ? 0.3 : 0.19, isSelected ? 0.29 : 0.2, isSelected ? 0.17 : 0.27, 0.95);
+    love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 7, 7);
+    love.graphics.setColor(isSelected ? 0.96 : 0.75, isSelected ? 0.84 : 0.8, isSelected ? 0.49 : 0.93, 0.96);
+    love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 7, 7);
+
+    love.graphics.setColor(0.98, 0.98, 1, 1);
+    love.graphics.printf(
+      `${option?.name ?? row.id} - ${option?.description ?? ""}`,
+      row.rect.x + 10,
+      row.rect.y + 12,
+      row.rect.width - 20,
+      "left",
+      0,
+      0.54,
+      0.54,
+    );
+  }
+
+  love.graphics.setColor(0.14, 0.16, 0.22, 0.95);
+  love.graphics.rectangle("fill", layout.dieListRect.x, layout.dieListRect.y, layout.dieListRect.width, layout.dieListRect.height, 8, 8);
+  love.graphics.setColor(0.75, 0.83, 0.96, 0.93);
+  love.graphics.rectangle("line", layout.dieListRect.x, layout.dieListRect.y, layout.dieListRect.width, layout.dieListRect.height, 8, 8);
+  love.graphics.setColor(0.95, 0.97, 1, 1);
+  love.graphics.printf("Current Dice", layout.dieListRect.x + 10, layout.dieListRect.y + 10, layout.dieListRect.width - 20, "left", 0, 0.62, 0.62);
+
+  for (const row of layout.dieRows) {
+    const die = dice.find((entry) => entry.id === row.id);
+    const isSelected = uiState.selectedUpgradeDieId === row.id;
+
+    love.graphics.setColor(isSelected ? 0.26 : 0.2, isSelected ? 0.34 : 0.25, isSelected ? 0.44 : 0.33, 0.95);
+    love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+    love.graphics.setColor(isSelected ? 0.85 : 0.7, isSelected ? 0.92 : 0.79, isSelected ? 1 : 0.94, 0.95);
+    love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+
+    love.graphics.setColor(1, 1, 1, 0.98);
+    love.graphics.printf(die?.name ?? row.id, row.rect.x + 8, row.rect.y + 8, row.rect.width - 16, "left", 0, 0.56, 0.56);
+  }
+
+  love.graphics.setColor(0.14, 0.16, 0.22, 0.95);
+  love.graphics.rectangle("fill", layout.faceListRect.x, layout.faceListRect.y, layout.faceListRect.width, layout.faceListRect.height, 8, 8);
+  love.graphics.setColor(0.75, 0.83, 0.96, 0.93);
+  love.graphics.rectangle("line", layout.faceListRect.x, layout.faceListRect.y, layout.faceListRect.width, layout.faceListRect.height, 8, 8);
+  love.graphics.setColor(0.95, 0.97, 1, 1);
+  love.graphics.printf("Die Faces", layout.faceListRect.x + 10, layout.faceListRect.y + 10, layout.faceListRect.width - 20, "left", 0, 0.62, 0.62);
+
+  for (const row of layout.faceRows) {
+    const side = selectedDie?.sides.find((entry) => entry.id === row.id);
+    const isSelected = uiState.selectedUpgradeSideId === row.id;
+    const details = side?.describe ? side.describe() : side?.label ?? row.id;
+
+    love.graphics.setColor(isSelected ? 0.28 : 0.22, isSelected ? 0.3 : 0.24, isSelected ? 0.17 : 0.31, 0.95);
+    love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+    love.graphics.setColor(isSelected ? 0.97 : 0.78, isSelected ? 0.87 : 0.82, isSelected ? 0.55 : 0.94, 0.95);
+    love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+
+    love.graphics.setColor(1, 1, 1, 0.98);
+    love.graphics.printf(details, row.rect.x + 8, row.rect.y + 8, row.rect.width - 16, "left", 0, 0.52, 0.52);
+  }
+
+  love.graphics.setColor(0.84, 0.89, 0.98, 0.92);
+  love.graphics.printf(
+    uiState.shopStatusText ?? "Select a craftsfolk, then choose a die and a face.",
+    layout.panelRect.x + 20,
+    layout.panelRect.y + layout.panelRect.height - 34,
+    layout.panelRect.width - 40,
+    "left",
+    0,
+    0.56,
+    0.56,
+  );
+
+  if (selectedSide) {
+    love.graphics.setColor(0.9, 0.94, 1, 0.95);
+    love.graphics.printf(
+      `Selected face: ${selectedSide.label}`,
+      layout.faceListRect.x + 10,
+      layout.faceListRect.y + layout.faceListRect.height - 28,
+      layout.faceListRect.width - 20,
+      "left",
+      0,
+      0.54,
+      0.54,
+    );
+  }
 }
 
 function drawPlannerDebugOverlay(uiState: ExploreUiState): void {
@@ -1130,4 +1570,5 @@ export function drawExploreUi(uiState: ExploreUiState, visitCount: number): void
   drawTalentTreeOverlay(uiState);
   drawCharacterSheetOverlay(uiState);
   drawInventoryOverlay(uiState);
+  drawCraftShopOverlay(uiState);
 }
