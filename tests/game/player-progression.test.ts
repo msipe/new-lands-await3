@@ -1,10 +1,13 @@
 import {
+  calculateCombatGoldReward,
   calculateCombatXpReward,
   createPlayerProgression,
+  grantPlayerGold,
   getXpRequiredForLevel,
   grantPlayerXp,
   recordCombatVictory,
   setPlayerIdentity,
+  spendPlayerGold,
 } from "../../src/game/player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "../../src/game/player-items";
 
@@ -19,6 +22,7 @@ describe("player progression", () => {
     expect(progression.raceName).toBe("Human");
     expect(progression.xp).toBe(0);
     expect(progression.totalXp).toBe(0);
+    expect(progression.gold).toBe(1000);
     expect(progression.xpToNextLevel).toBe(getXpRequiredForLevel(1));
     expect(progression.battlesWon).toBe(0);
     expect(progression.unspentTalentPoints).toBe(0);
@@ -66,6 +70,25 @@ describe("player progression", () => {
 
   it("still exposes the base level-scaled reward helper", () => {
     expect(calculateCombatXpReward(4)).toBe(34);
+    expect(calculateCombatGoldReward(4)).toBe(52);
+  });
+
+  it("grants and spends gold while enforcing affordability", () => {
+    const progression = createPlayerProgression();
+
+    const grantResult = grantPlayerGold(progression, 35);
+    expect(grantResult.changed).toBe(true);
+    expect(grantResult.amount).toBe(35);
+    expect(progression.gold).toBe(1035);
+
+    const spendResult = spendPlayerGold(progression, 20);
+    expect(spendResult.changed).toBe(true);
+    expect(spendResult.amount).toBe(20);
+    expect(progression.gold).toBe(1015);
+
+    const denied = spendPlayerGold(progression, 5000);
+    expect(denied.changed).toBe(false);
+    expect(progression.gold).toBe(1015);
   });
 
   it("persists chosen identity for character sheet", () => {

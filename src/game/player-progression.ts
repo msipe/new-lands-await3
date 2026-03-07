@@ -14,6 +14,7 @@ export type PlayerProgressionState = {
   xp: number;
   xpToNextLevel: number;
   totalXp: number;
+  gold: number;
   battlesWon: number;
   maxHp: number;
   diceSlots: number;
@@ -34,6 +35,12 @@ export type LevelUpResult = {
   gainedXp: number;
   levelsGained: number;
   didLevelUp: boolean;
+};
+
+export type GoldChangeResult = {
+  changed: boolean;
+  amount: number;
+  nextGold: number;
 };
 
 const BASE_XP_TO_LEVEL = 40;
@@ -67,6 +74,7 @@ export function createPlayerProgression(): PlayerProgressionState {
     xp: 0,
     xpToNextLevel: getXpRequiredForLevel(1),
     totalXp: 0,
+    gold: 1000,
     battlesWon: 0,
     maxHp: 20,
     diceSlots: 3,
@@ -112,6 +120,47 @@ export function setPlayerIdentity(
 export function calculateCombatXpReward(enemyLevel: number): number {
   const safeEnemyLevel = Math.max(1, Math.floor(enemyLevel));
   return 10 + safeEnemyLevel * 6;
+}
+
+export function calculateCombatGoldReward(enemyLevel: number): number {
+  const safeEnemyLevel = Math.max(1, Math.floor(enemyLevel));
+  return 20 + safeEnemyLevel * 8;
+}
+
+export function grantPlayerGold(state: PlayerProgressionState, amount: number): GoldChangeResult {
+  const safeAmount = Math.max(0, Math.floor(amount));
+  if (safeAmount <= 0) {
+    return {
+      changed: false,
+      amount: 0,
+      nextGold: state.gold,
+    };
+  }
+
+  state.gold += safeAmount;
+  return {
+    changed: true,
+    amount: safeAmount,
+    nextGold: state.gold,
+  };
+}
+
+export function spendPlayerGold(state: PlayerProgressionState, amount: number): GoldChangeResult {
+  const safeAmount = Math.max(0, Math.floor(amount));
+  if (safeAmount <= 0 || state.gold < safeAmount) {
+    return {
+      changed: false,
+      amount: 0,
+      nextGold: state.gold,
+    };
+  }
+
+  state.gold -= safeAmount;
+  return {
+    changed: true,
+    amount: safeAmount,
+    nextGold: state.gold,
+  };
 }
 
 export function grantPlayerXp(state: PlayerProgressionState, amount: number): LevelUpResult {

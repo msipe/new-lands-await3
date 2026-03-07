@@ -980,10 +980,13 @@ function drawInventoryOverlay(uiState: ExploreUiState): void {
   love.graphics.setColor(0.96, 0.98, 1, 1);
   love.graphics.printf("Inventory", x + 18, y + 18, width - 36, "left", 0, 0.9, 0.9);
 
-  love.graphics.setColor(0.82, 0.9, 1, 0.95);
-  love.graphics.printf("Carried Items (exploration access)", x + 20, y + 58, width - 40, "left", 0, 0.66, 0.66);
+  love.graphics.setColor(0.96, 0.87, 0.42, 0.98);
+  love.graphics.printf(`Gold: ${progression.gold}`, x + 18, y + 38, width - 36, "left", 0, 0.7, 0.7);
 
-  let textY = y + 84;
+  love.graphics.setColor(0.82, 0.9, 1, 0.95);
+  love.graphics.printf("Carried Items (exploration access)", x + 20, y + 64, width - 40, "left", 0, 0.66, 0.66);
+
+  let textY = y + 90;
   if (progression.items.inventory.length === 0) {
     love.graphics.setColor(0.72, 0.8, 0.94, 0.9);
     love.graphics.printf("No items in inventory yet.", x + 20, textY, width - 40, "left", 0, 0.62, 0.62);
