@@ -21,6 +21,8 @@ describe("player progression", () => {
     expect(progression.totalXp).toBe(0);
     expect(progression.xpToNextLevel).toBe(getXpRequiredForLevel(1));
     expect(progression.battlesWon).toBe(0);
+    expect(progression.unspentTalentPoints).toBe(0);
+    expect(progression.talents.length).toBeGreaterThan(0);
   });
 
   it("awards xp without leveling until threshold", () => {
@@ -44,16 +46,26 @@ describe("player progression", () => {
     expect(progression.xp).toBe(25);
     expect(progression.xpToNextLevel).toBe(getXpRequiredForLevel(3));
     expect(progression.maxHp).toBe(24);
+    expect(progression.unspentTalentPoints).toBe(2);
   });
 
-  it("records combat victories and grants level-scaled xp", () => {
+  it("records combat victories and temporarily guarantees one level per win", () => {
     const progression = createPlayerProgression();
-    const expectedReward = calculateCombatXpReward(4);
+    const expectedReward = progression.xpToNextLevel;
     const result = recordCombatVictory(progression, 4);
 
     expect(result.gainedXp).toBe(expectedReward);
+    expect(result.levelsGained).toBe(1);
+    expect(result.didLevelUp).toBe(true);
+    expect(progression.level).toBe(2);
+    expect(progression.xp).toBe(0);
     expect(progression.battlesWon).toBe(1);
     expect(progression.totalXp).toBe(expectedReward);
+    expect(progression.unspentTalentPoints).toBe(1);
+  });
+
+  it("still exposes the base level-scaled reward helper", () => {
+    expect(calculateCombatXpReward(4)).toBe(34);
   });
 
   it("persists chosen identity for character sheet", () => {

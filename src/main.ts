@@ -58,7 +58,6 @@ import {
     createInitialSceneState,
 } from "./game/scenes";
 import {
-    calculateCombatXpReward,
     createPlayerProgression,
     recordCombatVictory,
     setPlayerIdentity,
@@ -187,15 +186,14 @@ love.update = (dt: number) => {
 
         if (activeCombat.state.phase === "resolved") {
             if (!hasGrantedCombatProgression && activeCombat.state.enemy.hp <= 0 && activeCombat.state.player.hp > 0) {
-                const rewardXp = calculateCombatXpReward(activeCombat.state.enemy.level);
                 const levelResult = recordCombatVictory(playerProgression, activeCombat.state.enemy.level);
                 if (activeExploreUi) {
                     if (levelResult.didLevelUp) {
                         activeExploreUi.model.notice =
-                            `Victory! +${rewardXp} XP and ${levelResult.levelsGained} level gained. Continue to return.`;
+                            `Victory! +${levelResult.gainedXp} XP and ${levelResult.levelsGained} level gained. Continue to return.`;
                     } else {
                         activeExploreUi.model.notice =
-                            `Victory! +${rewardXp} XP earned. Continue to return.`;
+                            `Victory! +${levelResult.gainedXp} XP earned. Continue to return.`;
                     }
                 }
 

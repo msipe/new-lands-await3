@@ -17,7 +17,17 @@ export type PlayerProgressionState = {
   battlesWon: number;
   maxHp: number;
   diceSlots: number;
+  unspentTalentPoints: number;
+  talents: TalentNode[];
   items: PlayerInventoryState;
+};
+
+export type TalentNode = {
+  id: string;
+  name: string;
+  description: string;
+  rank: number;
+  maxRank: number;
 };
 
 export type LevelUpResult = {
@@ -60,6 +70,30 @@ export function createPlayerProgression(): PlayerProgressionState {
     battlesWon: 0,
     maxHp: 20,
     diceSlots: 3,
+    unspentTalentPoints: 0,
+    talents: [
+      {
+        id: "talent:unyielding-core",
+        name: "Unyielding Core",
+        description: "Stub: Future defensive scaling talent.",
+        rank: 0,
+        maxRank: 3,
+      },
+      {
+        id: "talent:blade-discipline",
+        name: "Blade Discipline",
+        description: "Stub: Future weapon consistency talent.",
+        rank: 0,
+        maxRank: 3,
+      },
+      {
+        id: "talent:battle-trance",
+        name: "Battle Trance",
+        description: "Stub: Future momentum talent.",
+        rank: 0,
+        maxRank: 2,
+      },
+    ],
     items,
   };
 }
@@ -98,6 +132,7 @@ export function grantPlayerXp(state: PlayerProgressionState, amount: number): Le
     state.xp -= state.xpToNextLevel;
     state.level += 1;
     state.maxHp += 2;
+    state.unspentTalentPoints += 1;
     levelsGained += 1;
     state.xpToNextLevel = getXpRequiredForLevel(state.level);
   }
@@ -114,5 +149,8 @@ export function recordCombatVictory(
   enemyLevel: number,
 ): LevelUpResult {
   state.battlesWon += 1;
-  return grantPlayerXp(state, calculateCombatXpReward(enemyLevel));
+
+  // Temporary testing mode: each combat victory guarantees one level-up.
+  const guaranteedLevelUpXp = Math.max(1, state.xpToNextLevel - state.xp);
+  return grantPlayerXp(state, guaranteedLevelUpXp);
 }
