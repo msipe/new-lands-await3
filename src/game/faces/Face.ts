@@ -59,6 +59,12 @@ export abstract class Face implements DieSide {
     return this.baseLabel;
   }
 
+  protected getBaseLabel(): string {
+    return this.baseLabel;
+  }
+
+  abstract cloneWithId(newId: string): Face;
+
   abstract applyUpgrade(upgrade: FaceUpgrade): boolean;
 
   getAdjustmentProperties(): FaceAdjustmentProperty[] {

@@ -48,6 +48,14 @@ export class DealDamage extends Face {
     return `${super.getLabel()} +${this.damage}`;
   }
 
+  cloneWithId(newId: string): DealDamage {
+    return new DealDamage(newId, this.getBaseLabel(), this.damage);
+  }
+
+  protected getDamageValue(): number {
+    return this.damage;
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {

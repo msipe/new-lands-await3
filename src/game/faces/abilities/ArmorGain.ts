@@ -43,6 +43,10 @@ export class ArmorGain extends Face {
     return `${super.getLabel()} +${this.armorGain} armor`;
   }
 
+  cloneWithId(newId: string): ArmorGain {
+    return new ArmorGain(newId, this.getBaseLabel(), this.armorGain);
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {

@@ -2,7 +2,13 @@ import { EffectType, type SideResolveContext } from "../../src/game/dice";
 import { FaceAdjustmentModalityType } from "../../src/game/faces";
 import { applyFaceAdjustmentEntry } from "../../src/game/face-adjustments";
 import { createPlayerCombatDiceLoadout } from "../../src/game/player-combat-dice";
-import { createPlayerProgression, recordFaceAdjustment } from "../../src/game/player-progression";
+import {
+  buildGeneratedFaceId,
+  createPlayerProgression,
+  recordAppendFaceCopy,
+  recordFaceAdjustment,
+  recordRemoveFace,
+} from "../../src/game/player-progression";
 
 const resolveContext: SideResolveContext = {
   source: "player",
@@ -58,5 +64,36 @@ describe("face adjustments", () => {
 
     expect(result.applied).toBe(false);
     expect(result.resourceDelta).toBe(0);
+  });
+
+  it("replays appended and removed face operations in loadout reconstruction", () => {
+    const progression = createPlayerProgression();
+    const baseline = createPlayerCombatDiceLoadout(progression);
+    const weaponDie = baseline.find((die) => die.name === "Rusty Sword Die");
+    if (!weaponDie) {
+      throw new Error("Expected Rusty Sword Die");
+    }
+
+    const sourceSideId = weaponDie.sides[0].id;
+    const copiedSideId = buildGeneratedFaceId(progression, weaponDie.id);
+    recordAppendFaceCopy(progression, {
+      dieId: weaponDie.id,
+      sourceSideId,
+      newSideId: copiedSideId,
+    });
+
+    recordRemoveFace(progression, {
+      dieId: weaponDie.id,
+      sideId: sourceSideId,
+    });
+
+    const rebuilt = createPlayerCombatDiceLoadout(progression);
+    const rebuiltWeaponDie = rebuilt.find((die) => die.id === weaponDie.id);
+    if (!rebuiltWeaponDie) {
+      throw new Error("Expected rebuilt Rusty Sword Die");
+    }
+
+    expect(rebuiltWeaponDie.sides.some((side) => side.id === copiedSideId)).toBe(true);
+    expect(rebuiltWeaponDie.sides.some((side) => side.id === sourceSideId)).toBe(false);
   });
 });

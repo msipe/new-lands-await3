@@ -45,6 +45,10 @@ export class Miss extends Face {
     };
   }
 
+  cloneWithId(newId: string): Miss {
+    return new Miss(newId);
+  }
+
   protected onResolve(_context: FaceResolveContext): CombatEvent[] {
     return [];
   }

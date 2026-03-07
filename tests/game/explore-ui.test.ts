@@ -101,7 +101,7 @@ describe("explore-ui talent tree", () => {
     expect(uiState.selectedCraftsfolkId).toBe("craft:up-down-smith");
 
     // Click first die row in 1120x620 test layout.
-    onExploreMouseReleased(uiState, 120, 212, 1);
+    onExploreMouseReleased(uiState, 120, 260, 1);
     expect(uiState.selectedUpgradeDieId).toBeDefined();
     expect(uiState.selectedUpgradeSideId).toBeDefined();
   });
@@ -113,7 +113,7 @@ describe("explore-ui talent tree", () => {
     // Select the only craftsfolk.
     onExploreMouseReleased(uiState, 120, 108, 1);
     // Select first die row.
-    onExploreMouseReleased(uiState, 120, 212, 1);
+    onExploreMouseReleased(uiState, 120, 260, 1);
 
     expect(uiState.playerProgression.gold).toBe(1000);
     expect(uiState.selectedUpgradePropertyId).toBeDefined();
@@ -138,6 +138,35 @@ describe("explore-ui talent tree", () => {
 
     expect(action).toBeUndefined();
     expect(uiState.isCraftShopOpen).toBe(true);
+  });
+
+  it("supports face-smith copying and removing selected faces", () => {
+    const uiState = createExploreUiState();
+    onExploreKeyPressed(uiState, "u");
+
+    // Select Face Smith (second craftsfolk row).
+    onExploreMouseReleased(uiState, 120, 158, 1);
+    expect(uiState.selectedCraftsfolkId).toBe("craft:face-smith");
+
+    // Select first die and its first face.
+    onExploreMouseReleased(uiState, 120, 260, 1);
+    onExploreMouseReleased(uiState, 520, 260, 1);
+
+    const startingGold = uiState.playerProgression.gold;
+
+    // Copy Face button.
+    onExploreMouseReleased(uiState, 840, 530, 1);
+    expect(uiState.playerProgression.gold).toBe(startingGold - 12);
+    expect(
+      uiState.playerProgression.dieFaceOperations.some((entry) => entry.kind === "append-copy"),
+    ).toBe(true);
+
+    // Remove Face button.
+    onExploreMouseReleased(uiState, 930, 530, 1);
+    expect(uiState.playerProgression.gold).toBe(startingGold - 8);
+    expect(
+      uiState.playerProgression.dieFaceOperations.some((entry) => entry.kind === "remove"),
+    ).toBe(true);
   });
 
   it("applies confirm and cancel for selected talents", () => {

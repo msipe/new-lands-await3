@@ -8,7 +8,8 @@ import {
   rollNextPlayerDie,
 } from "../../src/game/combat-encounter";
 import { EffectType } from "../../src/game/dice";
-import { createPlayerProgression } from "../../src/game/player-progression";
+import { createPlayerCombatDiceLoadout } from "../../src/game/player-combat-dice";
+import { createPlayerProgression, recordRemoveFace } from "../../src/game/player-progression";
 
 function fixedRandomSource() {
   return {
@@ -94,6 +95,38 @@ describe("combat encounter", () => {
 
     expect(state.player.dice).toHaveLength(4);
     expect(state.player.dice.some((die) => die.id.includes("equipped-weapon-1"))).toBe(true);
+  });
+
+  it("removes persisted faces from dice used in combat rolls", () => {
+    const progression = createPlayerProgression();
+    const baselineLoadout = createPlayerCombatDiceLoadout(progression);
+    const weaponDie = baselineLoadout.find((die) => die.name === "Rusty Sword Die");
+    if (!weaponDie) {
+      throw new Error("Expected Rusty Sword Die");
+    }
+
+    const baselineSideCount = weaponDie.sides.length;
+    const removedSideId = weaponDie.sides[0]?.id;
+    if (!removedSideId) {
+      throw new Error("Expected Rusty Sword Die to have at least one side");
+    }
+
+    recordRemoveFace(progression, {
+      dieId: weaponDie.id,
+      sideId: removedSideId,
+    });
+
+    const encounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerProgression: progression,
+    });
+    const combatWeaponDie = encounter.state.player.dice.find((die) => die.id === weaponDie.id);
+    if (!combatWeaponDie) {
+      throw new Error("Expected Rusty Sword Die in combat loadout");
+    }
+
+    expect(combatWeaponDie.sides).toHaveLength(baselineSideCount - 1);
+    expect(combatWeaponDie.sides.some((side) => side.id === removedSideId)).toBe(false);
   });
 
   it("rolls enemy dice first and exposes pending intent", () => {

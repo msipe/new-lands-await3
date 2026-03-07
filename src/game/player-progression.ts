@@ -3,7 +3,12 @@ import {
   type EquipmentSlotId,
   type PlayerInventoryState,
 } from "./player-items";
-import type { FaceAdjustmentEntry } from "./face-adjustments";
+import type {
+  DieFaceOperation,
+  FaceAdjustmentEntry,
+  AppendFaceCopyEntry,
+  RemoveFaceEntry,
+} from "./face-adjustments";
 import { getItemById } from "../planning/content-registry";
 
 export type PlayerProgressionState = {
@@ -17,6 +22,8 @@ export type PlayerProgressionState = {
   totalXp: number;
   gold: number;
   faceAdjustments: FaceAdjustmentEntry[];
+  dieFaceOperations: DieFaceOperation[];
+  nextGeneratedFaceId: number;
   battlesWon: number;
   maxHp: number;
   diceSlots: number;
@@ -78,6 +85,8 @@ export function createPlayerProgression(): PlayerProgressionState {
     totalXp: 0,
     gold: 1000,
     faceAdjustments: [],
+    dieFaceOperations: [],
+    nextGeneratedFaceId: 1,
     battlesWon: 0,
     maxHp: 20,
     diceSlots: 3,
@@ -170,9 +179,41 @@ export function recordFaceAdjustment(
   state: PlayerProgressionState,
   entry: FaceAdjustmentEntry,
 ): void {
-  state.faceAdjustments.push({
+  const clonedEntry = {
     ...entry,
     operation: { ...entry.operation },
+  };
+
+  state.faceAdjustments.push(clonedEntry);
+  state.dieFaceOperations.push({
+    kind: "adjust",
+    entry: clonedEntry,
+  });
+}
+
+export function buildGeneratedFaceId(state: PlayerProgressionState, dieId: string): string {
+  const generatedId = `${dieId}-extra-side-${state.nextGeneratedFaceId}`;
+  state.nextGeneratedFaceId += 1;
+  return generatedId;
+}
+
+export function recordAppendFaceCopy(
+  state: PlayerProgressionState,
+  entry: AppendFaceCopyEntry,
+): void {
+  state.dieFaceOperations.push({
+    kind: "append-copy",
+    entry: { ...entry },
+  });
+}
+
+export function recordRemoveFace(
+  state: PlayerProgressionState,
+  entry: RemoveFaceEntry,
+): void {
+  state.dieFaceOperations.push({
+    kind: "remove",
+    entry: { ...entry },
   });
 }
 

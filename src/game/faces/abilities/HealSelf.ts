@@ -48,6 +48,10 @@ export class HealSelf extends Face {
     return `${super.getLabel()} +${this.heal}`;
   }
 
+  cloneWithId(newId: string): HealSelf {
+    return new HealSelf(newId, this.getBaseLabel(), this.heal);
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {

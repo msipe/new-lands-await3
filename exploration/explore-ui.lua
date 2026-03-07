@@ -23,12 +23,17 @@ local validateWorldAgainstSpec = ____world_2Dvalidator.validateWorldAgainstSpec
 local ____world_2Dgenerator = require("exploration.world-generator")
 local applyWorldSpecToExploreState = ____world_2Dgenerator.applyWorldSpecToExploreState
 local ____player_2Dprogression = require("game.player-progression")
+local buildGeneratedFaceId = ____player_2Dprogression.buildGeneratedFaceId
+local recordAppendFaceCopy = ____player_2Dprogression.recordAppendFaceCopy
 local recordFaceAdjustment = ____player_2Dprogression.recordFaceAdjustment
+local recordRemoveFace = ____player_2Dprogression.recordRemoveFace
 local createPlayerProgression = ____player_2Dprogression.createPlayerProgression
 local ____player_2Dcombat_2Ddice = require("game.player-combat-dice")
 local createPlayerCombatDiceLoadout = ____player_2Dcombat_2Ddice.createPlayerCombatDiceLoadout
 local ____face_2Dadjustments = require("game.face-adjustments")
+local appendCopiedFaceEntry = ____face_2Dadjustments.appendCopiedFaceEntry
 local applyFaceAdjustmentEntry = ____face_2Dadjustments.applyFaceAdjustmentEntry
+local removeFaceEntry = ____face_2Dadjustments.removeFaceEntry
 local ____player_2Ditems = require("game.player-items")
 local EQUIPMENT_SLOT_LABELS = ____player_2Ditems.EQUIPMENT_SLOT_LABELS
 local EQUIPMENT_SLOT_ORDER = ____player_2Ditems.EQUIPMENT_SLOT_ORDER
@@ -131,7 +136,7 @@ local function createCraftShopButtonRect(self)
     return {x = 404, y = 52, width = 200, height = 34}
 end
 local function createCraftsfolkOptions(self)
-    return {{id = "craft:up-down-smith", name = "Up/Down Smith", description = "Simple face tuning specialist for upgrade and downgrade work."}}
+    return {{id = "craft:up-down-smith", name = "Up/Down Smith", description = "Simple face tuning specialist for upgrade and downgrade work."}, {id = "craft:face-smith", name = "Face Smith", description = "Copies an existing face onto a die or removes a selected face."}}
 end
 local function getActionLabel(self, branch, currentTile)
     if branch == "combat" then
@@ -252,16 +257,16 @@ local function getCraftShopLayout(self, uiState, dice)
         math.floor((propertyListRect.width - 30) * 0.5)
     )
     local actionButtonY = propertyListRect.y + propertyListRect.height - 42
-    local upgradeButtonRect = {x = propertyListRect.x + 10, y = actionButtonY, width = actionButtonWidth, height = 28}
-    local downgradeButtonRect = {x = propertyListRect.x + propertyListRect.width - actionButtonWidth - 10, y = actionButtonY, width = actionButtonWidth, height = 28}
+    local primaryActionButtonRect = {x = propertyListRect.x + 10, y = actionButtonY, width = actionButtonWidth, height = 28}
+    local secondaryActionButtonRect = {x = propertyListRect.x + propertyListRect.width - actionButtonWidth - 10, y = actionButtonY, width = actionButtonWidth, height = 28}
     return {
         panelRect = {x = panelX, y = panelY, width = panelWidth, height = panelHeight},
         closeButtonRect = {x = panelX + panelWidth - 126, y = panelY + 14, width = 106, height = 34},
         dieListRect = dieListRect,
         faceListRect = faceListRect,
         propertyListRect = propertyListRect,
-        upgradeButtonRect = upgradeButtonRect,
-        downgradeButtonRect = downgradeButtonRect,
+        primaryActionButtonRect = primaryActionButtonRect,
+        secondaryActionButtonRect = secondaryActionButtonRect,
         craftsfolkRows = craftsfolkRows,
         dieRows = dieRows,
         faceRows = faceRows,
@@ -275,9 +280,17 @@ local function formatGold(self, value)
     end
     return __TS__NumberToFixed(roundedToTenth, 1)
 end
+local FACE_APPEND_COST = 12
+local FACE_REMOVE_REFUND = 4
+local function isUpDownSmithSelected(self, uiState)
+    return uiState.selectedCraftsfolkId == "craft:up-down-smith"
+end
+local function isFaceSmithSelected(self, uiState)
+    return uiState.selectedCraftsfolkId == "craft:face-smith"
+end
 local function applyShopPropertyAdjustment(self, uiState, dice, operationType)
-    if not uiState.selectedCraftsfolkId then
-        uiState.shopStatusText = "Select a craftsfolk before adjusting a face."
+    if not isUpDownSmithSelected(nil, uiState) then
+        uiState.shopStatusText = "Select the Up/Down Smith to adjust face properties."
         return
     end
     local selectedDie = __TS__ArrayFind(
@@ -320,6 +333,79 @@ local function applyShopPropertyAdjustment(self, uiState, dice, operationType)
         math.abs(result.resourceDelta)
     )) .. " gold." or ("Refunded " .. formatGold(nil, result.resourceDelta)) .. " gold."
     uiState.shopStatusText = ((deltaText .. " Gold now ") .. formatGold(nil, uiState.playerProgression.gold)) .. "."
+end
+local function appendCopiedFaceInShop(self, uiState, dice)
+    if not isFaceSmithSelected(nil, uiState) then
+        uiState.shopStatusText = "Select the Face Smith to copy or remove die faces."
+        return
+    end
+    local selectedDie = __TS__ArrayFind(
+        dice,
+        function(____, die) return die.id == uiState.selectedUpgradeDieId end
+    )
+    local ____opt_8 = selectedDie
+    local selectedSide = ____opt_8 and __TS__ArrayFind(
+        selectedDie and selectedDie.sides,
+        function(____, side) return side.id == uiState.selectedUpgradeSideId end
+    )
+    if not selectedDie or not selectedSide then
+        uiState.shopStatusText = "Select a die and face to copy first."
+        return
+    end
+    if uiState.playerProgression.gold < FACE_APPEND_COST then
+        uiState.shopStatusText = "Not enough gold to copy that face."
+        return
+    end
+    local newSideId = buildGeneratedFaceId(nil, uiState.playerProgression, selectedDie.id)
+    local result = appendCopiedFaceEntry(nil, dice, {dieId = selectedDie.id, sourceSideId = selectedSide.id, newSideId = newSideId})
+    if not result.applied then
+        uiState.shopStatusText = result.reason or "Could not copy selected face."
+        return
+    end
+    local ____uiState_playerProgression_12, ____gold_13 = uiState.playerProgression, "gold"
+    ____uiState_playerProgression_12[____gold_13] = ____uiState_playerProgression_12[____gold_13] - FACE_APPEND_COST
+    recordAppendFaceCopy(nil, uiState.playerProgression, {dieId = selectedDie.id, sourceSideId = selectedSide.id, newSideId = newSideId})
+    uiState.selectedUpgradeSideId = newSideId
+    uiState.selectedUpgradePropertyId = nil
+    uiState.shopStatusText = ((("Copied face onto die. Spent " .. tostring(FACE_APPEND_COST)) .. " gold. Gold now ") .. formatGold(nil, uiState.playerProgression.gold)) .. "."
+end
+local function removeFaceInShop(self, uiState, dice)
+    if not isFaceSmithSelected(nil, uiState) then
+        uiState.shopStatusText = "Select the Face Smith to copy or remove die faces."
+        return
+    end
+    local selectedDie = __TS__ArrayFind(
+        dice,
+        function(____, die) return die.id == uiState.selectedUpgradeDieId end
+    )
+    local ____opt_14 = selectedDie
+    local selectedSide = ____opt_14 and __TS__ArrayFind(
+        selectedDie and selectedDie.sides,
+        function(____, side) return side.id == uiState.selectedUpgradeSideId end
+    )
+    if not selectedDie or not selectedSide then
+        uiState.shopStatusText = "Select a die face to remove."
+        return
+    end
+    if #selectedDie.sides <= 1 then
+        uiState.shopStatusText = "A die must keep at least one face."
+        return
+    end
+    local result = removeFaceEntry(nil, dice, {dieId = selectedDie.id, sideId = selectedSide.id})
+    if not result.applied then
+        uiState.shopStatusText = result.reason or "Could not remove selected face."
+        return
+    end
+    local ____uiState_playerProgression_18, ____gold_19 = uiState.playerProgression, "gold"
+    ____uiState_playerProgression_18[____gold_19] = ____uiState_playerProgression_18[____gold_19] + FACE_REMOVE_REFUND
+    recordRemoveFace(nil, uiState.playerProgression, {dieId = selectedDie.id, sideId = selectedSide.id})
+    local remainingSide = selectedDie.sides[1]
+    uiState.selectedUpgradeSideId = remainingSide and remainingSide.id
+    local adjustableSide = asAdjustableShopSide(nil, remainingSide)
+    local ____uiState_26 = uiState
+    local ____opt_22 = adjustableSide and adjustableSide:getAdjustmentProperties()[1]
+    ____uiState_26.selectedUpgradePropertyId = ____opt_22 and ____opt_22.id
+    uiState.shopStatusText = ((("Removed face. Refunded " .. tostring(FACE_REMOVE_REFUND)) .. " gold. Gold now ") .. formatGold(nil, uiState.playerProgression.gold)) .. "."
 end
 local function getTileAt(self, uiState, x, y)
     local bestTile
@@ -501,78 +587,86 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, row in ipairs(layout.craftsfolkRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue89
+                    goto __continue105
                 end
                 uiState.selectedCraftsfolkId = row.id
-                local ____uiState_12 = uiState
-                local ____opt_10 = __TS__ArrayFind(
+                local ____uiState_31 = uiState
+                local ____opt_29 = __TS__ArrayFind(
                     uiState.availableCraftsfolk,
                     function(____, entry) return entry.id == row.id end
                 )
-                ____uiState_12.shopStatusText = "Selected craftsfolk: " .. (____opt_10 and ____opt_10.name or row.id)
+                ____uiState_31.shopStatusText = "Selected craftsfolk: " .. (____opt_29 and ____opt_29.name or row.id)
                 return nil
             end
-            ::__continue89::
+            ::__continue105::
         end
         for ____, row in ipairs(layout.dieRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue93
+                    goto __continue109
                 end
                 uiState.selectedUpgradeDieId = row.id
                 local clickedDie = __TS__ArrayFind(
                     dice,
                     function(____, die) return die.id == row.id end
                 )
-                local ____uiState_17 = uiState
-                local ____opt_13 = clickedDie and clickedDie.sides[1]
-                ____uiState_17.selectedUpgradeSideId = ____opt_13 and ____opt_13.id
+                local ____uiState_36 = uiState
+                local ____opt_32 = clickedDie and clickedDie.sides[1]
+                ____uiState_36.selectedUpgradeSideId = ____opt_32 and ____opt_32.id
                 local initialAdjustableSide = asAdjustableShopSide(nil, clickedDie and clickedDie.sides[1])
-                local ____uiState_24 = uiState
-                local ____opt_20 = initialAdjustableSide and initialAdjustableSide:getAdjustmentProperties()[1]
-                ____uiState_24.selectedUpgradePropertyId = ____opt_20 and ____opt_20.id
+                local ____uiState_43 = uiState
+                local ____opt_39 = initialAdjustableSide and initialAdjustableSide:getAdjustmentProperties()[1]
+                ____uiState_43.selectedUpgradePropertyId = ____opt_39 and ____opt_39.id
                 uiState.shopStatusText = "Selected die: " .. (clickedDie and clickedDie.name or row.id)
                 return nil
             end
-            ::__continue93::
+            ::__continue109::
         end
         for ____, row in ipairs(layout.faceRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue97
+                    goto __continue113
                 end
                 uiState.selectedUpgradeSideId = row.id
-                local ____opt_27 = selectedDie
-                local selectedSide = ____opt_27 and __TS__ArrayFind(
+                local ____opt_46 = selectedDie
+                local selectedSide = ____opt_46 and __TS__ArrayFind(
                     selectedDie and selectedDie.sides,
                     function(____, side) return side.id == row.id end
                 )
                 local adjustableSide = asAdjustableShopSide(nil, selectedSide)
-                local ____uiState_35 = uiState
-                local ____opt_31 = adjustableSide and adjustableSide:getAdjustmentProperties()[1]
-                ____uiState_35.selectedUpgradePropertyId = ____opt_31 and ____opt_31.id
+                local ____uiState_54 = uiState
+                local ____opt_50 = adjustableSide and adjustableSide:getAdjustmentProperties()[1]
+                ____uiState_54.selectedUpgradePropertyId = ____opt_50 and ____opt_50.id
                 uiState.shopStatusText = "Selected die face."
                 return nil
             end
-            ::__continue97::
+            ::__continue113::
         end
         for ____, row in ipairs(layout.propertyRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue101
+                    goto __continue117
                 end
                 uiState.selectedUpgradePropertyId = row.id
                 uiState.shopStatusText = "Selected face property."
                 return nil
             end
-            ::__continue101::
+            ::__continue117::
         end
-        if isPointInRect(nil, x, y, layout.upgradeButtonRect) then
-            applyShopPropertyAdjustment(nil, uiState, dice, FaceAdjustmentModalityType.Improve)
+        if isPointInRect(nil, x, y, layout.primaryActionButtonRect) then
+            if isFaceSmithSelected(nil, uiState) then
+                appendCopiedFaceInShop(nil, uiState, dice)
+            else
+                applyShopPropertyAdjustment(nil, uiState, dice, FaceAdjustmentModalityType.Improve)
+            end
             return nil
         end
-        if isPointInRect(nil, x, y, layout.downgradeButtonRect) then
-            applyShopPropertyAdjustment(nil, uiState, dice, FaceAdjustmentModalityType.Reduce)
+        if isPointInRect(nil, x, y, layout.secondaryActionButtonRect) then
+            if isFaceSmithSelected(nil, uiState) then
+                removeFaceInShop(nil, uiState, dice)
+            else
+                applyShopPropertyAdjustment(nil, uiState, dice, FaceAdjustmentModalityType.Reduce)
+            end
             return nil
         end
         return nil
@@ -601,12 +695,12 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, row in ipairs(layout.talentRowRects) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue111
+                    goto __continue131
                 end
                 uiState.selectedTalentId = row.talentId
                 return nil
             end
-            ::__continue111::
+            ::__continue131::
         end
         return nil
     end
@@ -1057,7 +1151,7 @@ local function drawTalentTreeOverlay(self, uiState)
                 function(____, entry) return entry.id == row.talentId end
             )
             if not talent then
-                goto __continue133
+                goto __continue153
             end
             local isSelected = uiState.selectedTalentId == talent.id
             if isSelected then
@@ -1122,7 +1216,7 @@ local function drawTalentTreeOverlay(self, uiState)
                 0.56
             )
         end
-        ::__continue133::
+        ::__continue153::
     end
     local canConfirm = canConfirmSelectedTalent(nil, uiState)
     love.graphics.setColor(canConfirm and 0.26 or 0.2, canConfirm and 0.5 or 0.22, canConfirm and 0.31 or 0.25, canConfirm and 0.95 or 0.72)
@@ -1452,8 +1546,8 @@ local function drawCraftShopOverlay(self, uiState)
     if not uiState.selectedUpgradeDieId and selectedDie then
         uiState.selectedUpgradeDieId = selectedDie.id
     end
-    local ____opt_38 = selectedDie
-    local selectedSide = ____opt_38 and __TS__ArrayFind(
+    local ____opt_57 = selectedDie
+    local selectedSide = ____opt_57 and __TS__ArrayFind(
         selectedDie and selectedDie.sides,
         function(____, side) return side.id == uiState.selectedUpgradeSideId end
     )
@@ -1688,8 +1782,8 @@ local function drawCraftShopOverlay(self, uiState)
         0.62
     )
     for ____, row in ipairs(layout.faceRows) do
-        local ____opt_48 = selectedDie
-        local side = ____opt_48 and __TS__ArrayFind(
+        local ____opt_67 = selectedDie
+        local side = ____opt_67 and __TS__ArrayFind(
             selectedDie and selectedDie.sides,
             function(____, entry) return entry.id == row.id end
         )
@@ -1749,7 +1843,7 @@ local function drawCraftShopOverlay(self, uiState)
     )
     love.graphics.setColor(0.95, 0.97, 1, 1)
     love.graphics.printf(
-        "Adjustable Properties",
+        isFaceSmithSelected(nil, uiState) and "Face Operations" or "Adjustable Properties",
         layout.propertyListRect.x + 10,
         layout.propertyListRect.y + 10,
         layout.propertyListRect.width - 20,
@@ -1759,85 +1853,116 @@ local function drawCraftShopOverlay(self, uiState)
         0.62
     )
     local selectedAdjustableSide = asAdjustableShopSide(nil, selectedSide)
-    for ____, row in ipairs(layout.propertyRows) do
-        local ____opt_56 = selectedAdjustableSide
-        local property = ____opt_56 and __TS__ArrayFind(
-            selectedAdjustableSide and selectedAdjustableSide:getAdjustmentProperties(),
-            function(____, entry) return entry.id == row.id end
-        )
-        local isSelected = uiState.selectedUpgradePropertyId == row.id
-        love.graphics.setColor(isSelected and 0.29 or 0.22, isSelected and 0.32 or 0.25, isSelected and 0.16 or 0.31, 0.95)
-        love.graphics.rectangle(
-            "fill",
-            row.rect.x,
-            row.rect.y,
-            row.rect.width,
-            row.rect.height,
-            6,
-            6
-        )
-        love.graphics.setColor(isSelected and 0.97 or 0.78, isSelected and 0.87 or 0.82, isSelected and 0.55 or 0.94, 0.95)
-        love.graphics.rectangle(
-            "line",
-            row.rect.x,
-            row.rect.y,
-            row.rect.width,
-            row.rect.height,
-            6,
-            6
-        )
-        love.graphics.setColor(1, 1, 1, 0.98)
+    if isFaceSmithSelected(nil, uiState) then
+        love.graphics.setColor(0.87, 0.91, 0.98, 0.94)
         love.graphics.printf(
-            ((property and property.label or row.id) .. ": ") .. tostring(property and property.value or "?"),
-            row.rect.x + 8,
-            row.rect.y + 8,
-            row.rect.width - 16,
+            "Copy duplicates the selected face onto this die. Remove deletes the selected face.",
+            layout.propertyListRect.x + 10,
+            layout.propertyListRect.y + 42,
+            layout.propertyListRect.width - 20,
             "left",
             0,
             0.5,
             0.5
         )
-        if property and property.description then
-            love.graphics.setColor(0.78, 0.84, 0.95, 0.9)
+        love.graphics.setColor(0.79, 0.85, 0.95, 0.92)
+        love.graphics.printf(
+            ((("Copy Cost: " .. tostring(FACE_APPEND_COST)) .. " gold | Remove Refund: ") .. tostring(FACE_REMOVE_REFUND)) .. " gold",
+            layout.propertyListRect.x + 10,
+            layout.propertyListRect.y + 70,
+            layout.propertyListRect.width - 20,
+            "left",
+            0,
+            0.5,
+            0.5
+        )
+    else
+        for ____, row in ipairs(layout.propertyRows) do
+            local ____opt_75 = selectedAdjustableSide
+            local property = ____opt_75 and __TS__ArrayFind(
+                selectedAdjustableSide and selectedAdjustableSide:getAdjustmentProperties(),
+                function(____, entry) return entry.id == row.id end
+            )
+            local isSelected = uiState.selectedUpgradePropertyId == row.id
+            love.graphics.setColor(isSelected and 0.29 or 0.22, isSelected and 0.32 or 0.25, isSelected and 0.16 or 0.31, 0.95)
+            love.graphics.rectangle(
+                "fill",
+                row.rect.x,
+                row.rect.y,
+                row.rect.width,
+                row.rect.height,
+                6,
+                6
+            )
+            love.graphics.setColor(isSelected and 0.97 or 0.78, isSelected and 0.87 or 0.82, isSelected and 0.55 or 0.94, 0.95)
+            love.graphics.rectangle(
+                "line",
+                row.rect.x,
+                row.rect.y,
+                row.rect.width,
+                row.rect.height,
+                6,
+                6
+            )
+            love.graphics.setColor(1, 1, 1, 0.98)
             love.graphics.printf(
-                property.description,
+                ((property and property.label or row.id) .. ": ") .. tostring(property and property.value or "?"),
                 row.rect.x + 8,
-                row.rect.y + 24,
+                row.rect.y + 8,
                 row.rect.width - 16,
                 "left",
                 0,
-                0.44,
-                0.44
+                0.5,
+                0.5
             )
+            if property and property.description then
+                love.graphics.setColor(0.78, 0.84, 0.95, 0.9)
+                love.graphics.printf(
+                    property.description,
+                    row.rect.x + 8,
+                    row.rect.y + 24,
+                    row.rect.width - 16,
+                    "left",
+                    0,
+                    0.44,
+                    0.44
+                )
+            end
         end
     end
-    local canAdjust = uiState.selectedUpgradePropertyId ~= nil
+    local ____isFaceSmithSelected_result_85
+    if isFaceSmithSelected(nil, uiState) then
+        ____isFaceSmithSelected_result_85 = selectedDie ~= nil and selectedSide ~= nil
+    else
+        ____isFaceSmithSelected_result_85 = uiState.selectedUpgradePropertyId ~= nil
+    end
+    local canAdjust = ____isFaceSmithSelected_result_85
     love.graphics.setColor(canAdjust and 0.22 or 0.2, canAdjust and 0.43 or 0.22, canAdjust and 0.26 or 0.24, canAdjust and 0.95 or 0.7)
     love.graphics.rectangle(
         "fill",
-        layout.upgradeButtonRect.x,
-        layout.upgradeButtonRect.y,
-        layout.upgradeButtonRect.width,
-        layout.upgradeButtonRect.height,
+        layout.primaryActionButtonRect.x,
+        layout.primaryActionButtonRect.y,
+        layout.primaryActionButtonRect.width,
+        layout.primaryActionButtonRect.height,
         6,
         6
     )
     love.graphics.setColor(canAdjust and 0.73 or 0.6, canAdjust and 0.95 or 0.7, canAdjust and 0.78 or 0.72, 0.95)
     love.graphics.rectangle(
         "line",
-        layout.upgradeButtonRect.x,
-        layout.upgradeButtonRect.y,
-        layout.upgradeButtonRect.width,
-        layout.upgradeButtonRect.height,
+        layout.primaryActionButtonRect.x,
+        layout.primaryActionButtonRect.y,
+        layout.primaryActionButtonRect.width,
+        layout.primaryActionButtonRect.height,
         6,
         6
     )
     love.graphics.setColor(1, 1, 1, canAdjust and 1 or 0.74)
     love.graphics.printf(
-        "Upgrade",
-        layout.upgradeButtonRect.x,
-        layout.upgradeButtonRect.y + 8,
-        layout.upgradeButtonRect.width,
+        isFaceSmithSelected(nil, uiState) and "Copy Face" or "Upgrade",
+        layout.primaryActionButtonRect.x,
+        layout.primaryActionButtonRect.y + 8,
+        layout.primaryActionButtonRect.width,
         "center",
         0,
         0.52,
@@ -1846,29 +1971,29 @@ local function drawCraftShopOverlay(self, uiState)
     love.graphics.setColor(canAdjust and 0.26 or 0.2, canAdjust and 0.25 or 0.22, canAdjust and 0.16 or 0.24, canAdjust and 0.95 or 0.7)
     love.graphics.rectangle(
         "fill",
-        layout.downgradeButtonRect.x,
-        layout.downgradeButtonRect.y,
-        layout.downgradeButtonRect.width,
-        layout.downgradeButtonRect.height,
+        layout.secondaryActionButtonRect.x,
+        layout.secondaryActionButtonRect.y,
+        layout.secondaryActionButtonRect.width,
+        layout.secondaryActionButtonRect.height,
         6,
         6
     )
     love.graphics.setColor(canAdjust and 0.96 or 0.6, canAdjust and 0.86 or 0.7, canAdjust and 0.6 or 0.72, 0.95)
     love.graphics.rectangle(
         "line",
-        layout.downgradeButtonRect.x,
-        layout.downgradeButtonRect.y,
-        layout.downgradeButtonRect.width,
-        layout.downgradeButtonRect.height,
+        layout.secondaryActionButtonRect.x,
+        layout.secondaryActionButtonRect.y,
+        layout.secondaryActionButtonRect.width,
+        layout.secondaryActionButtonRect.height,
         6,
         6
     )
     love.graphics.setColor(1, 1, 1, canAdjust and 1 or 0.74)
     love.graphics.printf(
-        "Downgrade",
-        layout.downgradeButtonRect.x,
-        layout.downgradeButtonRect.y + 8,
-        layout.downgradeButtonRect.width,
+        isFaceSmithSelected(nil, uiState) and "Remove Face" or "Downgrade",
+        layout.secondaryActionButtonRect.x,
+        layout.secondaryActionButtonRect.y + 8,
+        layout.secondaryActionButtonRect.width,
         "center",
         0,
         0.52,

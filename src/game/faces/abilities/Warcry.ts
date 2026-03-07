@@ -32,6 +32,10 @@ export class Warcry extends Face {
     return `Warcry ${this.attackModifier >= 0 ? "+" : ""}${this.attackModifier}`;
   }
 
+  cloneWithId(newId: string): Warcry {
+    return new Warcry(newId, this.attackModifier);
+  }
+
   applyUpgrade(upgrade: FaceUpgrade): boolean {
     if (upgrade.type === "numeric-plus-1") {
       this.attackModifier += 1;

@@ -48,6 +48,10 @@ export class DealSelfDamage extends Face {
     return `${super.getLabel()} -${this.damage}`;
   }
 
+  cloneWithId(newId: string): DealSelfDamage {
+    return new DealSelfDamage(newId, this.getBaseLabel(), this.damage);
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {

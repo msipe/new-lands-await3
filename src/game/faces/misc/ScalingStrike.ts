@@ -36,6 +36,15 @@ export class ScalingStrike extends DealDamage {
     return `${super.describe()} Every ${this.rollThreshold} rolls, gain +${this.scalingStep} damage permanently.`;
   }
 
+  cloneWithId(newId: string): ScalingStrike {
+    return new ScalingStrike(
+      newId,
+      this.getDamageValue(),
+      this.rollThreshold,
+      this.scalingStep,
+    );
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       ...super.getAdjustmentProperties(),

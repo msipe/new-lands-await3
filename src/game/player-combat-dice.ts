@@ -1,7 +1,10 @@
 import { Die } from "./dice";
 import { getDieConstructById } from "./dice-constructs";
 import { createDieFromConstruct } from "./dice-factory";
-import { applyRecordedFaceAdjustments } from "./face-adjustments";
+import {
+  applyRecordedDieFaceOperations,
+  applyRecordedFaceAdjustments,
+} from "./face-adjustments";
 import type { PlayerProgressionState } from "./player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "./player-items";
 import { Ironhide, Miss, WildStrike, Warcry } from "./faces";
@@ -96,7 +99,11 @@ export function createPlayerCombatDiceLoadout(progression?: PlayerProgressionSta
   ];
 
   if (progression) {
-    applyRecordedFaceAdjustments(dice, progression.faceAdjustments);
+    if (progression.dieFaceOperations.length > 0) {
+      applyRecordedDieFaceOperations(dice, progression.dieFaceOperations);
+    } else {
+      applyRecordedFaceAdjustments(dice, progression.faceAdjustments);
+    }
   }
 
   return dice;

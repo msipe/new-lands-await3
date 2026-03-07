@@ -142,6 +142,7 @@ export class WildStrike extends Face {
   private attackCount = 1;
   private weaponChoice: WildStrikeWeaponChoice = "mainhand";
   private bonusDamage: number;
+  private readonly mainhandWeaponConstructId?: string;
   private readonly resolveTransientWeaponEvents: ResolveTransientWeaponEvents;
   private lastTransientPopupData?: TransientDiePopupData;
 
@@ -153,6 +154,7 @@ export class WildStrike extends Face {
   ) {
     super(id, label, "abilities");
     this.bonusDamage = Math.max(0, Math.floor(bonusDamage));
+    this.mainhandWeaponConstructId = mainhandWeaponConstructId;
     this.resolveTransientWeaponEvents = createMainhandTransientResolver(mainhandWeaponConstructId);
   }
 
@@ -176,6 +178,18 @@ export class WildStrike extends Face {
 
   protected getLabel(): string {
     return `Wild Strike ${this.attackCount}x ${this.weaponChoice.replace("_", " ")} +${this.bonusDamage}`;
+  }
+
+  cloneWithId(newId: string): WildStrike {
+    const clone = new WildStrike(
+      newId,
+      this.bonusDamage,
+      this.mainhandWeaponConstructId,
+      this.getBaseLabel(),
+    );
+    clone.attackCount = this.attackCount;
+    clone.weaponChoice = this.weaponChoice;
+    return clone;
   }
 
   getResolvePopupText(): string {

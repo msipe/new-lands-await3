@@ -18,12 +18,19 @@ import { createWorldSpecFromPlan, type WorldSpec } from "../planning/world-spec-
 import { validateWorldAgainstSpec, type WorldValidationResult } from "../planning/world-validator";
 import { applyWorldSpecToExploreState } from "./world-generator";
 import {
+  buildGeneratedFaceId,
+  recordAppendFaceCopy,
   recordFaceAdjustment,
+  recordRemoveFace,
   createPlayerProgression,
   type PlayerProgressionState,
 } from "../game/player-progression";
 import { createPlayerCombatDiceLoadout } from "../game/player-combat-dice";
-import { applyFaceAdjustmentEntry } from "../game/face-adjustments";
+import {
+  appendCopiedFaceEntry,
+  applyFaceAdjustmentEntry,
+  removeFaceEntry,
+} from "../game/face-adjustments";
 import {
   EQUIPMENT_SLOT_LABELS,
   EQUIPMENT_SLOT_ORDER,
@@ -48,7 +55,7 @@ type ActionButton = {
   rect: Rect;
 };
 
-type CraftsfolkId = "craft:up-down-smith";
+type CraftsfolkId = "craft:up-down-smith" | "craft:face-smith";
 
 type CraftsfolkOption = {
   id: CraftsfolkId;
@@ -67,8 +74,8 @@ type ShopLayout = {
   dieListRect: Rect;
   faceListRect: Rect;
   propertyListRect: Rect;
-  upgradeButtonRect: Rect;
-  downgradeButtonRect: Rect;
+  primaryActionButtonRect: Rect;
+  secondaryActionButtonRect: Rect;
   craftsfolkRows: ShopRowRect[];
   dieRows: ShopRowRect[];
   faceRows: ShopRowRect[];
@@ -282,6 +289,11 @@ function createCraftsfolkOptions(): CraftsfolkOption[] {
       name: "Up/Down Smith",
       description: "Simple face tuning specialist for upgrade and downgrade work.",
     },
+    {
+      id: "craft:face-smith",
+      name: "Face Smith",
+      description: "Copies an existing face onto a die or removes a selected face.",
+    },
   ];
 }
 
@@ -438,13 +450,13 @@ function getCraftShopLayout(uiState: ExploreUiState, dice: Die[]): ShopLayout {
 
   const actionButtonWidth = Math.max(90, Math.floor((propertyListRect.width - 30) * 0.5));
   const actionButtonY = propertyListRect.y + propertyListRect.height - 42;
-  const upgradeButtonRect: Rect = {
+  const primaryActionButtonRect: Rect = {
     x: propertyListRect.x + 10,
     y: actionButtonY,
     width: actionButtonWidth,
     height: 28,
   };
-  const downgradeButtonRect: Rect = {
+  const secondaryActionButtonRect: Rect = {
     x: propertyListRect.x + propertyListRect.width - actionButtonWidth - 10,
     y: actionButtonY,
     width: actionButtonWidth,
@@ -467,8 +479,8 @@ function getCraftShopLayout(uiState: ExploreUiState, dice: Die[]): ShopLayout {
     dieListRect,
     faceListRect,
     propertyListRect,
-    upgradeButtonRect,
-    downgradeButtonRect,
+    primaryActionButtonRect,
+    secondaryActionButtonRect,
     craftsfolkRows,
     dieRows,
     faceRows,
@@ -502,13 +514,24 @@ function formatGold(value: number): string {
   return roundedToTenth.toFixed(1);
 }
 
+const FACE_APPEND_COST = 12;
+const FACE_REMOVE_REFUND = 4;
+
+function isUpDownSmithSelected(uiState: ExploreUiState): boolean {
+  return uiState.selectedCraftsfolkId === "craft:up-down-smith";
+}
+
+function isFaceSmithSelected(uiState: ExploreUiState): boolean {
+  return uiState.selectedCraftsfolkId === "craft:face-smith";
+}
+
 function applyShopPropertyAdjustment(
   uiState: ExploreUiState,
   dice: Die[],
   operationType: FaceAdjustmentModalityType.Improve | FaceAdjustmentModalityType.Reduce,
 ): void {
-  if (!uiState.selectedCraftsfolkId) {
-    uiState.shopStatusText = "Select a craftsfolk before adjusting a face.";
+  if (!isUpDownSmithSelected(uiState)) {
+    uiState.shopStatusText = "Select the Up/Down Smith to adjust face properties.";
     return;
   }
 
@@ -562,6 +585,86 @@ function applyShopPropertyAdjustment(
     ? `Spent ${formatGold(Math.abs(result.resourceDelta))} gold.`
     : `Refunded ${formatGold(result.resourceDelta)} gold.`;
   uiState.shopStatusText = `${deltaText} Gold now ${formatGold(uiState.playerProgression.gold)}.`;
+}
+
+function appendCopiedFaceInShop(uiState: ExploreUiState, dice: Die[]): void {
+  if (!isFaceSmithSelected(uiState)) {
+    uiState.shopStatusText = "Select the Face Smith to copy or remove die faces.";
+    return;
+  }
+
+  const selectedDie = dice.find((die) => die.id === uiState.selectedUpgradeDieId);
+  const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
+  if (!selectedDie || !selectedSide) {
+    uiState.shopStatusText = "Select a die and face to copy first.";
+    return;
+  }
+
+  if (uiState.playerProgression.gold < FACE_APPEND_COST) {
+    uiState.shopStatusText = "Not enough gold to copy that face.";
+    return;
+  }
+
+  const newSideId = buildGeneratedFaceId(uiState.playerProgression, selectedDie.id);
+  const result = appendCopiedFaceEntry(dice, {
+    dieId: selectedDie.id,
+    sourceSideId: selectedSide.id,
+    newSideId,
+  });
+  if (!result.applied) {
+    uiState.shopStatusText = result.reason ?? "Could not copy selected face.";
+    return;
+  }
+
+  uiState.playerProgression.gold -= FACE_APPEND_COST;
+  recordAppendFaceCopy(uiState.playerProgression, {
+    dieId: selectedDie.id,
+    sourceSideId: selectedSide.id,
+    newSideId,
+  });
+  uiState.selectedUpgradeSideId = newSideId;
+  uiState.selectedUpgradePropertyId = undefined;
+  uiState.shopStatusText = `Copied face onto die. Spent ${FACE_APPEND_COST} gold. Gold now ${formatGold(uiState.playerProgression.gold)}.`;
+}
+
+function removeFaceInShop(uiState: ExploreUiState, dice: Die[]): void {
+  if (!isFaceSmithSelected(uiState)) {
+    uiState.shopStatusText = "Select the Face Smith to copy or remove die faces.";
+    return;
+  }
+
+  const selectedDie = dice.find((die) => die.id === uiState.selectedUpgradeDieId);
+  const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
+  if (!selectedDie || !selectedSide) {
+    uiState.shopStatusText = "Select a die face to remove.";
+    return;
+  }
+
+  if (selectedDie.sides.length <= 1) {
+    uiState.shopStatusText = "A die must keep at least one face.";
+    return;
+  }
+
+  const result = removeFaceEntry(dice, {
+    dieId: selectedDie.id,
+    sideId: selectedSide.id,
+  });
+  if (!result.applied) {
+    uiState.shopStatusText = result.reason ?? "Could not remove selected face.";
+    return;
+  }
+
+  uiState.playerProgression.gold += FACE_REMOVE_REFUND;
+  recordRemoveFace(uiState.playerProgression, {
+    dieId: selectedDie.id,
+    sideId: selectedSide.id,
+  });
+
+  const remainingSide = selectedDie.sides[0];
+  uiState.selectedUpgradeSideId = remainingSide?.id;
+  const adjustableSide = asAdjustableShopSide(remainingSide);
+  uiState.selectedUpgradePropertyId = adjustableSide?.getAdjustmentProperties()[0]?.id;
+  uiState.shopStatusText = `Removed face. Refunded ${FACE_REMOVE_REFUND} gold. Gold now ${formatGold(uiState.playerProgression.gold)}.`;
 }
 
 function getTileAt(uiState: ExploreUiState, x: number, y: number): ExploreTile | undefined {
@@ -795,13 +898,21 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
       return undefined;
     }
 
-    if (isPointInRect(x, y, layout.upgradeButtonRect)) {
-      applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Improve);
+    if (isPointInRect(x, y, layout.primaryActionButtonRect)) {
+      if (isFaceSmithSelected(uiState)) {
+        appendCopiedFaceInShop(uiState, dice);
+      } else {
+        applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Improve);
+      }
       return undefined;
     }
 
-    if (isPointInRect(x, y, layout.downgradeButtonRect)) {
-      applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Reduce);
+    if (isPointInRect(x, y, layout.secondaryActionButtonRect)) {
+      if (isFaceSmithSelected(uiState)) {
+        removeFaceInShop(uiState, dice);
+      } else {
+        applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Reduce);
+      }
       return undefined;
     }
 
@@ -1621,7 +1732,7 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
   );
   love.graphics.setColor(0.95, 0.97, 1, 1);
   love.graphics.printf(
-    "Adjustable Properties",
+    isFaceSmithSelected(uiState) ? "Face Operations" : "Adjustable Properties",
     layout.propertyListRect.x + 10,
     layout.propertyListRect.y + 10,
     layout.propertyListRect.width - 20,
@@ -1632,71 +1743,98 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
   );
 
   const selectedAdjustableSide = asAdjustableShopSide(selectedSide);
-  for (const row of layout.propertyRows) {
-    const property = selectedAdjustableSide
-      ?.getAdjustmentProperties()
-      .find((entry) => entry.id === row.id);
-    const isSelected = uiState.selectedUpgradePropertyId === row.id;
-
-    love.graphics.setColor(isSelected ? 0.29 : 0.22, isSelected ? 0.32 : 0.25, isSelected ? 0.16 : 0.31, 0.95);
-    love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
-    love.graphics.setColor(isSelected ? 0.97 : 0.78, isSelected ? 0.87 : 0.82, isSelected ? 0.55 : 0.94, 0.95);
-    love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
-
-    love.graphics.setColor(1, 1, 1, 0.98);
+  if (isFaceSmithSelected(uiState)) {
+    love.graphics.setColor(0.87, 0.91, 0.98, 0.94);
     love.graphics.printf(
-      `${property?.label ?? row.id}: ${property?.value ?? "?"}`,
-      row.rect.x + 8,
-      row.rect.y + 8,
-      row.rect.width - 16,
+      "Copy duplicates the selected face onto this die. Remove deletes the selected face.",
+      layout.propertyListRect.x + 10,
+      layout.propertyListRect.y + 42,
+      layout.propertyListRect.width - 20,
       "left",
       0,
       0.5,
       0.5,
     );
+    love.graphics.setColor(0.79, 0.85, 0.95, 0.92);
+    love.graphics.printf(
+      `Copy Cost: ${FACE_APPEND_COST} gold | Remove Refund: ${FACE_REMOVE_REFUND} gold`,
+      layout.propertyListRect.x + 10,
+      layout.propertyListRect.y + 70,
+      layout.propertyListRect.width - 20,
+      "left",
+      0,
+      0.5,
+      0.5,
+    );
+  } else {
+    for (const row of layout.propertyRows) {
+      const property = selectedAdjustableSide
+        ?.getAdjustmentProperties()
+        .find((entry) => entry.id === row.id);
+      const isSelected = uiState.selectedUpgradePropertyId === row.id;
 
-    if (property?.description) {
-      love.graphics.setColor(0.78, 0.84, 0.95, 0.9);
+      love.graphics.setColor(isSelected ? 0.29 : 0.22, isSelected ? 0.32 : 0.25, isSelected ? 0.16 : 0.31, 0.95);
+      love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+      love.graphics.setColor(isSelected ? 0.97 : 0.78, isSelected ? 0.87 : 0.82, isSelected ? 0.55 : 0.94, 0.95);
+      love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+
+      love.graphics.setColor(1, 1, 1, 0.98);
       love.graphics.printf(
-        property.description,
+        `${property?.label ?? row.id}: ${property?.value ?? "?"}`,
         row.rect.x + 8,
-        row.rect.y + 24,
+        row.rect.y + 8,
         row.rect.width - 16,
         "left",
         0,
-        0.44,
-        0.44,
+        0.5,
+        0.5,
       );
+
+      if (property?.description) {
+        love.graphics.setColor(0.78, 0.84, 0.95, 0.9);
+        love.graphics.printf(
+          property.description,
+          row.rect.x + 8,
+          row.rect.y + 24,
+          row.rect.width - 16,
+          "left",
+          0,
+          0.44,
+          0.44,
+        );
+      }
     }
   }
 
-  const canAdjust = uiState.selectedUpgradePropertyId !== undefined;
+  const canAdjust = isFaceSmithSelected(uiState)
+    ? selectedDie !== undefined && selectedSide !== undefined
+    : uiState.selectedUpgradePropertyId !== undefined;
   love.graphics.setColor(canAdjust ? 0.22 : 0.2, canAdjust ? 0.43 : 0.22, canAdjust ? 0.26 : 0.24, canAdjust ? 0.95 : 0.7);
   love.graphics.rectangle(
     "fill",
-    layout.upgradeButtonRect.x,
-    layout.upgradeButtonRect.y,
-    layout.upgradeButtonRect.width,
-    layout.upgradeButtonRect.height,
+    layout.primaryActionButtonRect.x,
+    layout.primaryActionButtonRect.y,
+    layout.primaryActionButtonRect.width,
+    layout.primaryActionButtonRect.height,
     6,
     6,
   );
   love.graphics.setColor(canAdjust ? 0.73 : 0.6, canAdjust ? 0.95 : 0.7, canAdjust ? 0.78 : 0.72, 0.95);
   love.graphics.rectangle(
     "line",
-    layout.upgradeButtonRect.x,
-    layout.upgradeButtonRect.y,
-    layout.upgradeButtonRect.width,
-    layout.upgradeButtonRect.height,
+    layout.primaryActionButtonRect.x,
+    layout.primaryActionButtonRect.y,
+    layout.primaryActionButtonRect.width,
+    layout.primaryActionButtonRect.height,
     6,
     6,
   );
   love.graphics.setColor(1, 1, 1, canAdjust ? 1 : 0.74);
   love.graphics.printf(
-    "Upgrade",
-    layout.upgradeButtonRect.x,
-    layout.upgradeButtonRect.y + 8,
-    layout.upgradeButtonRect.width,
+    isFaceSmithSelected(uiState) ? "Copy Face" : "Upgrade",
+    layout.primaryActionButtonRect.x,
+    layout.primaryActionButtonRect.y + 8,
+    layout.primaryActionButtonRect.width,
     "center",
     0,
     0.52,
@@ -1706,29 +1844,29 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
   love.graphics.setColor(canAdjust ? 0.26 : 0.2, canAdjust ? 0.25 : 0.22, canAdjust ? 0.16 : 0.24, canAdjust ? 0.95 : 0.7);
   love.graphics.rectangle(
     "fill",
-    layout.downgradeButtonRect.x,
-    layout.downgradeButtonRect.y,
-    layout.downgradeButtonRect.width,
-    layout.downgradeButtonRect.height,
+    layout.secondaryActionButtonRect.x,
+    layout.secondaryActionButtonRect.y,
+    layout.secondaryActionButtonRect.width,
+    layout.secondaryActionButtonRect.height,
     6,
     6,
   );
   love.graphics.setColor(canAdjust ? 0.96 : 0.6, canAdjust ? 0.86 : 0.7, canAdjust ? 0.6 : 0.72, 0.95);
   love.graphics.rectangle(
     "line",
-    layout.downgradeButtonRect.x,
-    layout.downgradeButtonRect.y,
-    layout.downgradeButtonRect.width,
-    layout.downgradeButtonRect.height,
+    layout.secondaryActionButtonRect.x,
+    layout.secondaryActionButtonRect.y,
+    layout.secondaryActionButtonRect.width,
+    layout.secondaryActionButtonRect.height,
     6,
     6,
   );
   love.graphics.setColor(1, 1, 1, canAdjust ? 1 : 0.74);
   love.graphics.printf(
-    "Downgrade",
-    layout.downgradeButtonRect.x,
-    layout.downgradeButtonRect.y + 8,
-    layout.downgradeButtonRect.width,
+    isFaceSmithSelected(uiState) ? "Remove Face" : "Downgrade",
+    layout.secondaryActionButtonRect.x,
+    layout.secondaryActionButtonRect.y + 8,
+    layout.secondaryActionButtonRect.width,
     "center",
     0,
     0.52,
