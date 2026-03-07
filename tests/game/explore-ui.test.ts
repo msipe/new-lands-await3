@@ -119,12 +119,12 @@ describe("explore-ui talent tree", () => {
     expect(uiState.selectedUpgradePropertyId).toBeDefined();
 
     // Upgrade button in 1120x620 test layout.
-    onExploreMouseReleased(uiState, 840, 530, 1);
+    onExploreMouseReleased(uiState, 840, 486, 1);
     expect(uiState.playerProgression.gold).toBe(999);
     expect(uiState.playerProgression.faceAdjustments.length).toBe(1);
 
     // Downgrade button in 1120x620 test layout.
-    onExploreMouseReleased(uiState, 930, 530, 1);
+    onExploreMouseReleased(uiState, 930, 486, 1);
     expect(uiState.playerProgression.gold).toBe(999.5);
     expect(uiState.playerProgression.faceAdjustments.length).toBe(2);
   });
@@ -155,14 +155,17 @@ describe("explore-ui talent tree", () => {
     const startingGold = uiState.playerProgression.gold;
 
     // Copy Face button.
-    onExploreMouseReleased(uiState, 840, 530, 1);
+    onExploreMouseReleased(uiState, 840, 486, 1);
     expect(uiState.playerProgression.gold).toBe(startingGold - 12);
     expect(
       uiState.playerProgression.dieFaceOperations.some((entry) => entry.kind === "append-copy"),
     ).toBe(true);
 
-    // Remove Face button.
-    onExploreMouseReleased(uiState, 930, 530, 1);
+    // Remove Face now requires confirm click.
+    onExploreMouseReleased(uiState, 930, 486, 1);
+    expect(uiState.playerProgression.gold).toBe(startingGold - 12);
+
+    onExploreMouseReleased(uiState, 930, 486, 1);
     expect(uiState.playerProgression.gold).toBe(startingGold - 8);
     expect(
       uiState.playerProgression.dieFaceOperations.some((entry) => entry.kind === "remove"),

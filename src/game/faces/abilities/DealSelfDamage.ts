@@ -4,6 +4,7 @@ import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 import type {
   FaceAdjustmentOperation,
+  FaceAdjustmentPointDeltaInput,
   FaceAdjustmentProperty,
   FaceAdjustmentResult,
   FaceAdjustmentTextTemplate,
@@ -14,6 +15,7 @@ export class DealSelfDamage extends Face {
   private static readonly minDamage = 0;
   static readonly damageImproveRate = 1;
   static readonly damageReduceRate = 0.5;
+  static readonly selfDamagePointPenaltyPerDamage = -1;
 
   private damage: number;
 
@@ -52,6 +54,38 @@ export class DealSelfDamage extends Face {
     return new DealSelfDamage(newId, this.getBaseLabel(), this.damage);
   }
 
+  private getSelfDamagePointValue(): number {
+    return DealSelfDamage.getPointValueAtDamage(this.damage);
+  }
+
+  private static getPointValueAtDamage(damage: number): number {
+    const safeDamage = Math.max(DealSelfDamage.minDamage, damage);
+    return safeDamage * DealSelfDamage.selfDamagePointPenaltyPerDamage;
+  }
+
+  private static calculateSelfDamagePointDelta(input: FaceAdjustmentPointDeltaInput): number {
+    if (typeof input.propertyValue !== "number") {
+      return 0;
+    }
+
+    const steps = Math.max(1, Math.floor(input.steps));
+    const currentDamage = Math.max(DealSelfDamage.minDamage, input.propertyValue);
+    const currentPoints = DealSelfDamage.getPointValueAtDamage(currentDamage);
+
+    switch (input.operationType) {
+      case FaceAdjustmentModalityType.Improve: {
+        const nextDamage = currentDamage + steps;
+        return DealSelfDamage.getPointValueAtDamage(nextDamage) - currentPoints;
+      }
+      case FaceAdjustmentModalityType.Reduce: {
+        const nextDamage = Math.max(DealSelfDamage.minDamage, currentDamage - steps);
+        return DealSelfDamage.getPointValueAtDamage(nextDamage) - currentPoints;
+      }
+      default:
+        return 0;
+    }
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {
@@ -59,6 +93,8 @@ export class DealSelfDamage extends Face {
         label: "Self Damage",
         description: "How much damage this face deals to self.",
         value: this.damage,
+        pointValue: this.getSelfDamagePointValue(),
+        pointDeltaCalculator: DealSelfDamage.calculateSelfDamagePointDelta,
         improvementRate: DealSelfDamage.damageImproveRate,
         reductionRate: DealSelfDamage.damageReduceRate,
         modalities: [

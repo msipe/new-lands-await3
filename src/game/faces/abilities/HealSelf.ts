@@ -4,6 +4,7 @@ import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 import type {
   FaceAdjustmentOperation,
+  FaceAdjustmentPointDeltaInput,
   FaceAdjustmentProperty,
   FaceAdjustmentResult,
   FaceAdjustmentTextTemplate,
@@ -14,6 +15,7 @@ export class HealSelf extends Face {
   private static readonly minHeal = 0;
   static readonly healImproveRate = 1;
   static readonly healReduceRate = 0.5;
+  static readonly healPointExponent = 1;
 
   private heal: number;
 
@@ -52,6 +54,38 @@ export class HealSelf extends Face {
     return new HealSelf(newId, this.getBaseLabel(), this.heal);
   }
 
+  private getHealPointValue(): number {
+    return HealSelf.getPointValueAtHeal(this.heal);
+  }
+
+  private static getPointValueAtHeal(heal: number): number {
+    const safeHeal = Math.max(HealSelf.minHeal, heal);
+    return safeHeal ** HealSelf.healPointExponent;
+  }
+
+  private static calculateHealPointDelta(input: FaceAdjustmentPointDeltaInput): number {
+    if (typeof input.propertyValue !== "number") {
+      return 0;
+    }
+
+    const steps = Math.max(1, Math.floor(input.steps));
+    const currentHeal = Math.max(HealSelf.minHeal, input.propertyValue);
+    const currentPoints = HealSelf.getPointValueAtHeal(currentHeal);
+
+    switch (input.operationType) {
+      case FaceAdjustmentModalityType.Improve: {
+        const nextHeal = currentHeal + steps;
+        return HealSelf.getPointValueAtHeal(nextHeal) - currentPoints;
+      }
+      case FaceAdjustmentModalityType.Reduce: {
+        const nextHeal = Math.max(HealSelf.minHeal, currentHeal - steps);
+        return HealSelf.getPointValueAtHeal(nextHeal) - currentPoints;
+      }
+      default:
+        return 0;
+    }
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {
@@ -59,6 +93,8 @@ export class HealSelf extends Face {
         label: "Heal",
         description: "How much HP this face restores.",
         value: this.heal,
+        pointValue: this.getHealPointValue(),
+        pointDeltaCalculator: HealSelf.calculateHealPointDelta,
         improvementRate: HealSelf.healImproveRate,
         reductionRate: HealSelf.healReduceRate,
         modalities: [

@@ -68,6 +68,14 @@ type ShopRowRect = {
   rect: Rect;
 };
 
+type ShopVisualDie = {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  size: number;
+};
+
 type ShopLayout = {
   panelRect: Rect;
   closeButtonRect: Rect;
@@ -76,11 +84,23 @@ type ShopLayout = {
   propertyListRect: Rect;
   primaryActionButtonRect: Rect;
   secondaryActionButtonRect: Rect;
+  visibleDieCount: number;
+  visibleFaceCount: number;
+  visiblePropertyCount: number;
+  totalDieCount: number;
+  totalFaceCount: number;
+  totalPropertyCount: number;
+  dieStartIndex: number;
+  faceStartIndex: number;
+  propertyStartIndex: number;
   craftsfolkRows: ShopRowRect[];
   dieRows: ShopRowRect[];
   faceRows: ShopRowRect[];
   propertyRows: ShopRowRect[];
 };
+
+type ShopFocusColumn = "craftsfolk" | "dice" | "faces" | "properties" | "actions";
+type ShopHoveredAction = "close" | "primary" | "secondary";
 
 export type CreateExploreUiStateOptions = {
   initialSeedIndex?: number;
@@ -122,6 +142,19 @@ export type ExploreUiState = {
   selectedUpgradeSideId?: string;
   selectedUpgradePropertyId?: string;
   shopStatusText?: string;
+  shopHoveredCraftsfolkId?: string;
+  shopHoveredDieId?: string;
+  shopHoveredFaceId?: string;
+  shopHoveredPropertyId?: string;
+  shopHoveredAction?: ShopHoveredAction;
+  shopFocusedColumn: ShopFocusColumn;
+  shopFocusedAction: "primary" | "secondary";
+  shopDieScrollIndex: number;
+  shopFaceScrollIndex: number;
+  shopPropertyScrollIndex: number;
+  shopGoldPulseTimer: number;
+  shopAwaitingRemoveConfirm: boolean;
+  shopVisualDice: ShopVisualDie[];
 };
 
 type TalentTreeLayout = {
@@ -384,83 +417,129 @@ function getCraftShopLayout(uiState: ExploreUiState, dice: Die[]): ShopLayout {
     height: faceListRect.height,
   };
 
-  const dieRows: ShopRowRect[] = [];
-  let dieY = dieListRect.y + 36;
-  for (const die of dice) {
-    if (dieY > dieListRect.y + dieListRect.height - 32) {
-      break;
-    }
+  const rowTopInset = 36;
+  const rowBottomInset = 10;
+  const dieRowHeight = 28;
+  const dieRowGap = 4;
+  const faceRowHeight = 28;
+  const faceRowGap = 4;
+  const propertyRowHeight = 46;
+  const propertyRowGap = 6;
 
+  const dieVisibleCount = Math.max(
+    1,
+    Math.floor((dieListRect.height - rowTopInset - rowBottomInset) / (dieRowHeight + dieRowGap)),
+  );
+  const clampedDieStart = Math.max(0, Math.min(uiState.shopDieScrollIndex, Math.max(0, dice.length - dieVisibleCount)));
+  uiState.shopDieScrollIndex = clampedDieStart;
+
+  const dieRows: ShopRowRect[] = [];
+  let dieY = dieListRect.y + rowTopInset;
+  for (let index = clampedDieStart; index < dice.length && dieRows.length < dieVisibleCount; index += 1) {
+    const die = dice[index];
     dieRows.push({
       id: die.id,
       rect: {
         x: dieListRect.x + 10,
         y: dieY,
         width: dieListRect.width - 20,
-        height: 28,
+        height: dieRowHeight,
       },
     });
-    dieY += 32;
+    dieY += dieRowHeight + dieRowGap;
   }
 
   const selectedDie = dice.find((die) => die.id === uiState.selectedUpgradeDieId) ?? dice[0];
   const faceRows: ShopRowRect[] = [];
-  let faceY = faceListRect.y + 36;
+  let faceY = faceListRect.y + rowTopInset;
+  const totalFaceCount = selectedDie?.sides.length ?? 0;
+  const faceVisibleCount = Math.max(
+    1,
+    Math.floor((faceListRect.height - rowTopInset - rowBottomInset) / (faceRowHeight + faceRowGap)),
+  );
+  const clampedFaceStart = Math.max(
+    0,
+    Math.min(uiState.shopFaceScrollIndex, Math.max(0, totalFaceCount - faceVisibleCount)),
+  );
+  uiState.shopFaceScrollIndex = clampedFaceStart;
   if (selectedDie !== undefined) {
-    for (const side of selectedDie.sides) {
-      if (faceY > faceListRect.y + faceListRect.height - 32) {
-        break;
-      }
-
+    for (
+      let index = clampedFaceStart;
+      index < selectedDie.sides.length && faceRows.length < faceVisibleCount;
+      index += 1
+    ) {
+      const side = selectedDie.sides[index];
       faceRows.push({
         id: side.id,
         rect: {
           x: faceListRect.x + 10,
           y: faceY,
           width: faceListRect.width - 20,
-          height: 28,
+          height: faceRowHeight,
         },
       });
-      faceY += 32;
+      faceY += faceRowHeight + faceRowGap;
     }
   }
 
   const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
   const adjustableSide = asAdjustableShopSide(selectedSide);
   const propertyRows: ShopRowRect[] = [];
-  let propertyY = propertyListRect.y + 36;
-  if (adjustableSide !== undefined) {
-    for (const property of adjustableSide.getAdjustmentProperties()) {
-      if (propertyY > propertyListRect.y + propertyListRect.height - 90) {
-        break;
-      }
+  let propertyY = propertyListRect.y + rowTopInset;
+  const properties = adjustableSide?.getAdjustmentProperties() ?? [];
+  const actionButtonHeight = 28;
+  const actionRowGap = 8;
+  const footerHeight = 58;
+  const footerBottomInset = 16;
+  const actionAndFooterReservedHeight =
+    actionButtonHeight + actionRowGap + footerHeight + footerBottomInset;
 
+  const propertyVisibleCount = Math.max(
+    1,
+    Math.floor(
+      (propertyListRect.height - rowTopInset - actionAndFooterReservedHeight) /
+        (propertyRowHeight + propertyRowGap),
+    ),
+  );
+  const clampedPropertyStart = Math.max(
+    0,
+    Math.min(uiState.shopPropertyScrollIndex, Math.max(0, properties.length - propertyVisibleCount)),
+  );
+  uiState.shopPropertyScrollIndex = clampedPropertyStart;
+  if (adjustableSide !== undefined) {
+    for (
+      let index = clampedPropertyStart;
+      index < properties.length && propertyRows.length < propertyVisibleCount;
+      index += 1
+    ) {
+      const property = properties[index];
       propertyRows.push({
         id: property.id,
         rect: {
           x: propertyListRect.x + 10,
           y: propertyY,
           width: propertyListRect.width - 20,
-          height: 46,
+          height: propertyRowHeight,
         },
       });
-      propertyY += 52;
+      propertyY += propertyRowHeight + propertyRowGap;
     }
   }
 
   const actionButtonWidth = Math.max(90, Math.floor((propertyListRect.width - 30) * 0.5));
-  const actionButtonY = propertyListRect.y + propertyListRect.height - 42;
+  const footerTopY = panelY + panelHeight - footerHeight - footerBottomInset;
+  const actionButtonY = footerTopY - actionButtonHeight - actionRowGap;
   const primaryActionButtonRect: Rect = {
     x: propertyListRect.x + 10,
     y: actionButtonY,
     width: actionButtonWidth,
-    height: 28,
+    height: actionButtonHeight,
   };
   const secondaryActionButtonRect: Rect = {
     x: propertyListRect.x + propertyListRect.width - actionButtonWidth - 10,
     y: actionButtonY,
     width: actionButtonWidth,
-    height: 28,
+    height: actionButtonHeight,
   };
 
   return {
@@ -481,6 +560,15 @@ function getCraftShopLayout(uiState: ExploreUiState, dice: Die[]): ShopLayout {
     propertyListRect,
     primaryActionButtonRect,
     secondaryActionButtonRect,
+    visibleDieCount: dieVisibleCount,
+    visibleFaceCount: faceVisibleCount,
+    visiblePropertyCount: propertyVisibleCount,
+    totalDieCount: dice.length,
+    totalFaceCount,
+    totalPropertyCount: properties.length,
+    dieStartIndex: clampedDieStart,
+    faceStartIndex: clampedFaceStart,
+    propertyStartIndex: clampedPropertyStart,
     craftsfolkRows,
     dieRows,
     faceRows,
@@ -570,11 +658,28 @@ function applyShopPropertyAdjustment(
 
   const nextGold = uiState.playerProgression.gold + result.resourceDelta;
   if (nextGold < 0) {
+    // Revert optimistic in-memory mutation when affordability check fails.
+    const rollbackType =
+      operationType === FaceAdjustmentModalityType.Improve
+        ? FaceAdjustmentModalityType.Reduce
+        : FaceAdjustmentModalityType.Improve;
+    applyFaceAdjustmentEntry(dice, {
+      dieId: selectedDie.id,
+      sideId: selectedSide.id,
+      operation: {
+        propertyId: selectedProperty.id,
+        type: rollbackType,
+        steps: 1,
+      },
+    });
+
     uiState.shopStatusText = "Not enough gold for that adjustment.";
     return;
   }
 
   uiState.playerProgression.gold = nextGold;
+  uiState.shopGoldPulseTimer = 0.55;
+  uiState.shopAwaitingRemoveConfirm = false;
   recordFaceAdjustment(uiState.playerProgression, {
     dieId: selectedDie.id,
     sideId: selectedSide.id,
@@ -617,6 +722,8 @@ function appendCopiedFaceInShop(uiState: ExploreUiState, dice: Die[]): void {
   }
 
   uiState.playerProgression.gold -= FACE_APPEND_COST;
+  uiState.shopGoldPulseTimer = 0.55;
+  uiState.shopAwaitingRemoveConfirm = false;
   recordAppendFaceCopy(uiState.playerProgression, {
     dieId: selectedDie.id,
     sourceSideId: selectedSide.id,
@@ -655,6 +762,8 @@ function removeFaceInShop(uiState: ExploreUiState, dice: Die[]): void {
   }
 
   uiState.playerProgression.gold += FACE_REMOVE_REFUND;
+  uiState.shopGoldPulseTimer = 0.55;
+  uiState.shopAwaitingRemoveConfirm = false;
   recordRemoveFace(uiState.playerProgression, {
     dieId: selectedDie.id,
     sideId: selectedSide.id,
@@ -665,6 +774,395 @@ function removeFaceInShop(uiState: ExploreUiState, dice: Die[]): void {
   const adjustableSide = asAdjustableShopSide(remainingSide);
   uiState.selectedUpgradePropertyId = adjustableSide?.getAdjustmentProperties()[0]?.id;
   uiState.shopStatusText = `Removed face. Refunded ${FACE_REMOVE_REFUND} gold. Gold now ${formatGold(uiState.playerProgression.gold)}.`;
+}
+
+function clearShopHoverState(uiState: ExploreUiState): void {
+  uiState.shopHoveredCraftsfolkId = undefined;
+  uiState.shopHoveredDieId = undefined;
+  uiState.shopHoveredFaceId = undefined;
+  uiState.shopHoveredPropertyId = undefined;
+  uiState.shopHoveredAction = undefined;
+}
+
+function openCraftShop(uiState: ExploreUiState): void {
+  uiState.isCraftShopOpen = true;
+  uiState.isCharacterSheetOpen = false;
+  uiState.isInventoryOpen = false;
+  uiState.isTalentTreeOpen = false;
+  uiState.selectedTalentId = undefined;
+  uiState.shopFocusedColumn = "craftsfolk";
+  uiState.shopFocusedAction = "primary";
+  uiState.shopAwaitingRemoveConfirm = false;
+  uiState.selectedCraftsfolkId = uiState.selectedCraftsfolkId ?? uiState.availableCraftsfolk[0]?.id;
+
+  const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
+  const selectedDie = dice.find((die) => die.id === uiState.selectedUpgradeDieId) ?? dice[0];
+  uiState.selectedUpgradeDieId = selectedDie?.id;
+  uiState.selectedUpgradeSideId = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId)?.id ?? selectedDie?.sides[0]?.id;
+  const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
+  const selectedAdjustableSide = asAdjustableShopSide(selectedSide);
+  uiState.selectedUpgradePropertyId = selectedAdjustableSide
+    ?.getAdjustmentProperties()
+    .find((entry) => entry.id === uiState.selectedUpgradePropertyId)?.id ?? selectedAdjustableSide?.getAdjustmentProperties()[0]?.id;
+
+  const layout = getCraftShopLayout(uiState, dice);
+  syncShopVisualDice(uiState, dice, layout, true);
+}
+
+function closeCraftShop(uiState: ExploreUiState): void {
+  uiState.isCraftShopOpen = false;
+  uiState.shopAwaitingRemoveConfirm = false;
+  uiState.shopVisualDice = [];
+  clearShopHoverState(uiState);
+}
+
+function getShopActionState(uiState: ExploreUiState, dice: Die[]): {
+  canPrimary: boolean;
+  canSecondary: boolean;
+  primaryReason?: string;
+  secondaryReason?: string;
+} {
+  const selectedDie = dice.find((die) => die.id === uiState.selectedUpgradeDieId);
+  const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
+
+  if (isFaceSmithSelected(uiState)) {
+    if (!selectedDie || !selectedSide) {
+      return {
+        canPrimary: false,
+        canSecondary: false,
+        primaryReason: "Select a die face to copy.",
+        secondaryReason: "Select a die face to remove.",
+      };
+    }
+
+    return {
+      canPrimary: uiState.playerProgression.gold >= FACE_APPEND_COST,
+      canSecondary: selectedDie.sides.length > 1,
+      primaryReason:
+        uiState.playerProgression.gold >= FACE_APPEND_COST
+          ? undefined
+          : `Need ${FACE_APPEND_COST} gold to copy a face.`,
+      secondaryReason:
+        selectedDie.sides.length > 1 ? undefined : "A die must keep at least one face.",
+    };
+  }
+
+  if (!isUpDownSmithSelected(uiState)) {
+    return {
+      canPrimary: false,
+      canSecondary: false,
+      primaryReason: "Select the Up/Down Smith.",
+      secondaryReason: "Select the Up/Down Smith.",
+    };
+  }
+
+  const canAdjust = uiState.selectedUpgradePropertyId !== undefined;
+  return {
+    canPrimary: canAdjust,
+    canSecondary: canAdjust,
+    primaryReason: canAdjust ? undefined : "Select a face property first.",
+    secondaryReason: canAdjust ? undefined : "Select a face property first.",
+  };
+}
+
+function triggerPrimaryShopAction(uiState: ExploreUiState, dice: Die[]): void {
+  const actionState = getShopActionState(uiState, dice);
+  if (!actionState.canPrimary) {
+    uiState.shopStatusText = actionState.primaryReason ?? "Action unavailable.";
+    return;
+  }
+
+  if (isFaceSmithSelected(uiState)) {
+    appendCopiedFaceInShop(uiState, dice);
+    return;
+  }
+
+  applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Improve);
+}
+
+function triggerSecondaryShopAction(uiState: ExploreUiState, dice: Die[]): void {
+  const actionState = getShopActionState(uiState, dice);
+  if (!actionState.canSecondary) {
+    uiState.shopStatusText = actionState.secondaryReason ?? "Action unavailable.";
+    return;
+  }
+
+  if (isFaceSmithSelected(uiState)) {
+    if (!uiState.shopAwaitingRemoveConfirm) {
+      uiState.shopAwaitingRemoveConfirm = true;
+      uiState.shopStatusText = "Press Remove Face again to confirm.";
+      return;
+    }
+
+    removeFaceInShop(uiState, dice);
+    return;
+  }
+
+  applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Reduce);
+}
+
+function setShopHoverFromPoint(uiState: ExploreUiState, layout: ShopLayout, dice: Die[], x: number, y: number): void {
+  clearShopHoverState(uiState);
+
+  const selectedDie = dice.find((entry) => entry.id === uiState.selectedUpgradeDieId) ?? dice[0];
+
+  if (isPointInRect(x, y, layout.closeButtonRect)) {
+    uiState.shopHoveredAction = "close";
+    return;
+  }
+
+  for (const row of layout.craftsfolkRows) {
+    if (isPointInRect(x, y, row.rect)) {
+      uiState.shopHoveredCraftsfolkId = row.id;
+      return;
+    }
+  }
+
+  const hoveredVisualDie = getShopVisualDieAt(uiState, x, y);
+  if (hoveredVisualDie) {
+    uiState.shopHoveredDieId = hoveredVisualDie.id;
+    return;
+  }
+
+  const hoveredFaceTile = getShopFaceTileAt(layout, selectedDie, x, y);
+  if (hoveredFaceTile) {
+    uiState.shopHoveredFaceId = hoveredFaceTile.id;
+    return;
+  }
+
+  for (const row of layout.propertyRows) {
+    if (isPointInRect(x, y, row.rect)) {
+      uiState.shopHoveredPropertyId = row.id;
+      return;
+    }
+  }
+
+  if (isPointInRect(x, y, layout.primaryActionButtonRect)) {
+    uiState.shopHoveredAction = "primary";
+    return;
+  }
+
+  if (isPointInRect(x, y, layout.secondaryActionButtonRect)) {
+    uiState.shopHoveredAction = "secondary";
+  }
+}
+
+function changeShopSelectionByStep(currentId: string | undefined, ids: string[], direction: -1 | 1): string | undefined {
+  if (ids.length === 0) {
+    return undefined;
+  }
+
+  if (!currentId) {
+    return ids[0];
+  }
+
+  const currentIndex = ids.findIndex((id) => id === currentId);
+  if (currentIndex === -1) {
+    return ids[0];
+  }
+
+  const nextIndex = Math.max(0, Math.min(ids.length - 1, currentIndex + direction));
+  return ids[nextIndex];
+}
+
+function clampShopScrollAfterSelection(uiState: ExploreUiState, layout: ShopLayout, dice: Die[]): void {
+  const dieIndex = Math.max(0, dice.findIndex((entry) => entry.id === uiState.selectedUpgradeDieId));
+  if (dieIndex < layout.dieStartIndex) {
+    uiState.shopDieScrollIndex = dieIndex;
+  } else if (dieIndex >= layout.dieStartIndex + layout.visibleDieCount) {
+    uiState.shopDieScrollIndex = dieIndex - layout.visibleDieCount + 1;
+  }
+
+  const selectedDie = dice.find((entry) => entry.id === uiState.selectedUpgradeDieId);
+  const faces = selectedDie?.sides ?? [];
+  const faceIndex = Math.max(0, faces.findIndex((entry) => entry.id === uiState.selectedUpgradeSideId));
+  if (faceIndex < layout.faceStartIndex) {
+    uiState.shopFaceScrollIndex = faceIndex;
+  } else if (faceIndex >= layout.faceStartIndex + layout.visibleFaceCount) {
+    uiState.shopFaceScrollIndex = faceIndex - layout.visibleFaceCount + 1;
+  }
+
+  const selectedAdjustableSide = asAdjustableShopSide(selectedDie?.sides.find((entry) => entry.id === uiState.selectedUpgradeSideId));
+  const properties = selectedAdjustableSide?.getAdjustmentProperties() ?? [];
+  const propertyIndex = Math.max(
+    0,
+    properties.findIndex((entry) => entry.id === uiState.selectedUpgradePropertyId),
+  );
+  if (propertyIndex < layout.propertyStartIndex) {
+    uiState.shopPropertyScrollIndex = propertyIndex;
+  } else if (propertyIndex >= layout.propertyStartIndex + layout.visiblePropertyCount) {
+    uiState.shopPropertyScrollIndex = propertyIndex - layout.visiblePropertyCount + 1;
+  }
+}
+
+function drawShopScrollIndicator(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  startIndex: number,
+  visibleCount: number,
+  totalCount: number,
+): void {
+  if (totalCount <= visibleCount) {
+    return;
+  }
+
+  const trackX = x + width - 7;
+  const trackY = y + 34;
+  const trackHeight = Math.max(20, height - 44);
+  const handleHeight = Math.max(18, Math.floor((visibleCount / totalCount) * trackHeight));
+  const maxStart = Math.max(1, totalCount - visibleCount);
+  const ratio = Math.max(0, Math.min(1, startIndex / maxStart));
+  const handleY = trackY + Math.floor((trackHeight - handleHeight) * ratio);
+
+  love.graphics.setColor(0.22, 0.26, 0.34, 0.85);
+  love.graphics.rectangle("fill", trackX, trackY, 3, trackHeight, 2, 2);
+  love.graphics.setColor(0.82, 0.88, 0.98, 0.92);
+  love.graphics.rectangle("fill", trackX, handleY, 3, handleHeight, 2, 2);
+}
+
+function getShopDieTargetRects(layout: ShopLayout, dice: Die[]): ShopRowRect[] {
+  const listRect = layout.dieListRect;
+  const count = dice.length;
+  if (count <= 0) {
+    return [];
+  }
+
+  const horizontalPadding = 16;
+  const topPadding = 56;
+  const bottomPadding = 28;
+  const gap = 14;
+  const availableWidth = Math.max(80, listRect.width - horizontalPadding * 2);
+  const availableHeight = Math.max(80, listRect.height - topPadding - bottomPadding);
+  const columns = count <= 3 ? count : count <= 6 ? 3 : 4;
+  const rows = Math.max(1, Math.ceil(count / columns));
+
+  const tileSize = Math.max(
+    38,
+    Math.min(
+      78,
+      Math.floor((availableWidth - gap * Math.max(0, columns - 1)) / Math.max(1, columns)),
+      Math.floor((availableHeight - gap * Math.max(0, rows - 1)) / rows),
+    ),
+  );
+
+  const usedWidth = tileSize * columns + gap * Math.max(0, columns - 1);
+  const usedHeight = tileSize * rows + gap * Math.max(0, rows - 1);
+  const startX = listRect.x + Math.floor((listRect.width - usedWidth) * 0.5);
+  const startY = listRect.y + topPadding + Math.floor((availableHeight - usedHeight) * 0.5);
+
+  return dice.map((die, index) => {
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const rectX = startX + col * (tileSize + gap);
+    const rectY = startY + row * (tileSize + gap);
+
+    return {
+      id: die.id,
+      rect: {
+        x: rectX,
+        y: rectY,
+        width: tileSize,
+        height: tileSize,
+      },
+    };
+  });
+}
+
+function syncShopVisualDice(uiState: ExploreUiState, dice: Die[], layout: ShopLayout, _forceRespawn = false): void {
+  const targetRects = getShopDieTargetRects(layout, dice);
+
+  const nextVisuals: ShopVisualDie[] = [];
+  for (const target of targetRects) {
+    const die = dice.find((entry) => entry.id === target.id);
+    if (!die) {
+      continue;
+    }
+
+    const targetX = target.rect.x + target.rect.width * 0.5;
+    const targetY = target.rect.y + target.rect.height * 0.5;
+    nextVisuals.push({
+      id: target.id,
+      label: die.name,
+      x: targetX,
+      y: targetY,
+      size: target.rect.width,
+    });
+  }
+
+  uiState.shopVisualDice = nextVisuals;
+}
+function updateShopVisualDice(_uiState: ExploreUiState, _layout: ShopLayout, _dt: number): void {
+  // Static ordered grid style: no per-frame motion.
+}
+
+function getShopVisualDieAt(uiState: ExploreUiState, x: number, y: number): ShopVisualDie | undefined {
+  for (let index = uiState.shopVisualDice.length - 1; index >= 0; index -= 1) {
+    const die = uiState.shopVisualDice[index];
+    const half = die.size * 0.5;
+    if (x >= die.x - half && x <= die.x + half && y >= die.y - half && y <= die.y + half) {
+      return die;
+    }
+  }
+
+  return undefined;
+}
+
+function getShopFaceTiles(layout: ShopLayout, selectedDie: Die | undefined): ShopRowRect[] {
+  if (!selectedDie || selectedDie.sides.length <= 0) {
+    return [];
+  }
+
+  const count = selectedDie.sides.length;
+  const listRect = layout.faceListRect;
+  const topPadding = 56;
+  const bottomPadding = 36;
+  const horizontalPadding = 14;
+  const gap = 10;
+  const availableWidth = Math.max(80, listRect.width - horizontalPadding * 2);
+  const availableHeight = Math.max(80, listRect.height - topPadding - bottomPadding);
+  const columns = count <= 3 ? 1 : count <= 8 ? 2 : 3;
+  const rows = Math.max(1, Math.ceil(count / columns));
+
+  const tileSize = Math.max(
+    34,
+    Math.min(
+      64,
+      Math.floor((availableWidth - gap * Math.max(0, columns - 1)) / Math.max(1, columns)),
+      Math.floor((availableHeight - gap * Math.max(0, rows - 1)) / rows),
+    ),
+  );
+
+  const usedWidth = tileSize * columns + gap * Math.max(0, columns - 1);
+  const usedHeight = tileSize * rows + gap * Math.max(0, rows - 1);
+  const startX = listRect.x + Math.floor((listRect.width - usedWidth) * 0.5);
+  const startY = listRect.y + topPadding + Math.floor((availableHeight - usedHeight) * 0.5);
+
+  return selectedDie.sides.map((side, index) => {
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    return {
+      id: side.id,
+      rect: {
+        x: startX + col * (tileSize + gap),
+        y: startY + row * (tileSize + gap),
+        width: tileSize,
+        height: tileSize,
+      },
+    };
+  });
+}
+
+function getShopFaceTileAt(layout: ShopLayout, selectedDie: Die | undefined, x: number, y: number): ShopRowRect | undefined {
+  const tiles = getShopFaceTiles(layout, selectedDie);
+  for (const tile of tiles) {
+    if (isPointInRect(x, y, tile.rect)) {
+      return tile;
+    }
+  }
+
+  return undefined;
 }
 
 function getTileAt(uiState: ExploreUiState, x: number, y: number): ExploreTile | undefined {
@@ -736,6 +1234,19 @@ export function createExploreUiState(input?: number | CreateExploreUiStateOption
     selectedUpgradeSideId: undefined,
     selectedUpgradePropertyId: undefined,
     shopStatusText: undefined,
+    shopHoveredCraftsfolkId: undefined,
+    shopHoveredDieId: undefined,
+    shopHoveredFaceId: undefined,
+    shopHoveredPropertyId: undefined,
+    shopHoveredAction: undefined,
+    shopFocusedColumn: "craftsfolk",
+    shopFocusedAction: "primary",
+    shopDieScrollIndex: 0,
+    shopFaceScrollIndex: 0,
+    shopPropertyScrollIndex: 0,
+    shopGoldPulseTimer: 0,
+    shopAwaitingRemoveConfirm: false,
+    shopVisualDice: [],
   };
 }
 
@@ -749,6 +1260,125 @@ function regeneratePlannerSpec(uiState: ExploreUiState): void {
 }
 
 export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boolean {
+  if (uiState.isCraftShopOpen) {
+    if (key === "escape" || key === "u") {
+      closeCraftShop(uiState);
+      return true;
+    }
+
+    const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
+    const selectedDie = dice.find((die) => die.id === uiState.selectedUpgradeDieId) ?? dice[0];
+    const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
+    const selectedAdjustableSide = asAdjustableShopSide(selectedSide);
+    const craftsfolkIds = uiState.availableCraftsfolk.map((entry) => entry.id);
+    const dieIds = dice.map((entry) => entry.id);
+    const faceIds = selectedDie?.sides.map((entry) => entry.id) ?? [];
+    const propertyIds = selectedAdjustableSide?.getAdjustmentProperties().map((entry) => entry.id) ?? [];
+    const layout = getCraftShopLayout(uiState, dice);
+
+    if (key === "left") {
+      if (uiState.shopFocusedColumn === "actions") {
+        uiState.shopFocusedColumn = "properties";
+      } else if (uiState.shopFocusedColumn === "properties") {
+        uiState.shopFocusedColumn = "faces";
+      } else if (uiState.shopFocusedColumn === "faces") {
+        uiState.shopFocusedColumn = "dice";
+      } else if (uiState.shopFocusedColumn === "dice") {
+        uiState.shopFocusedColumn = "craftsfolk";
+      }
+      return true;
+    }
+
+    if (key === "right") {
+      if (uiState.shopFocusedColumn === "craftsfolk") {
+        uiState.shopFocusedColumn = "dice";
+      } else if (uiState.shopFocusedColumn === "dice") {
+        uiState.shopFocusedColumn = "faces";
+      } else if (uiState.shopFocusedColumn === "faces") {
+        uiState.shopFocusedColumn = "properties";
+      } else if (uiState.shopFocusedColumn === "properties") {
+        uiState.shopFocusedColumn = "actions";
+      }
+      return true;
+    }
+
+    if (key === "tab") {
+      if (uiState.shopFocusedColumn === "craftsfolk") {
+        uiState.shopFocusedColumn = "dice";
+      } else if (uiState.shopFocusedColumn === "dice") {
+        uiState.shopFocusedColumn = "faces";
+      } else if (uiState.shopFocusedColumn === "faces") {
+        uiState.shopFocusedColumn = "properties";
+      } else if (uiState.shopFocusedColumn === "properties") {
+        uiState.shopFocusedColumn = "actions";
+      } else {
+        uiState.shopFocusedColumn = "craftsfolk";
+      }
+      return true;
+    }
+
+    if (key === "up" || key === "down") {
+      const direction: -1 | 1 = key === "up" ? -1 : 1;
+
+      if (uiState.shopFocusedColumn === "actions") {
+        uiState.shopFocusedAction = uiState.shopFocusedAction === "primary" ? "secondary" : "primary";
+        return true;
+      }
+
+      if (uiState.shopFocusedColumn === "craftsfolk") {
+        uiState.selectedCraftsfolkId = changeShopSelectionByStep(uiState.selectedCraftsfolkId, craftsfolkIds, direction) as CraftsfolkId | undefined;
+      } else if (uiState.shopFocusedColumn === "dice") {
+        const nextDieId = changeShopSelectionByStep(uiState.selectedUpgradeDieId, dieIds, direction);
+        if (nextDieId && nextDieId !== uiState.selectedUpgradeDieId) {
+          uiState.selectedUpgradeDieId = nextDieId;
+          const nextDie = dice.find((entry) => entry.id === nextDieId);
+          uiState.selectedUpgradeSideId = nextDie?.sides[0]?.id;
+          const nextAdjustableSide = asAdjustableShopSide(nextDie?.sides[0]);
+          uiState.selectedUpgradePropertyId = nextAdjustableSide?.getAdjustmentProperties()[0]?.id;
+          uiState.shopAwaitingRemoveConfirm = false;
+        }
+      } else if (uiState.shopFocusedColumn === "faces") {
+        const nextFaceId = changeShopSelectionByStep(uiState.selectedUpgradeSideId, faceIds, direction);
+        if (nextFaceId && nextFaceId !== uiState.selectedUpgradeSideId) {
+          uiState.selectedUpgradeSideId = nextFaceId;
+          const nextSide = selectedDie?.sides.find((entry) => entry.id === nextFaceId);
+          const nextAdjustableSide = asAdjustableShopSide(nextSide);
+          uiState.selectedUpgradePropertyId = nextAdjustableSide?.getAdjustmentProperties()[0]?.id;
+          uiState.shopAwaitingRemoveConfirm = false;
+        }
+      } else if (uiState.shopFocusedColumn === "properties") {
+        uiState.selectedUpgradePropertyId = changeShopSelectionByStep(
+          uiState.selectedUpgradePropertyId,
+          propertyIds,
+          direction,
+        );
+      }
+
+      clampShopScrollAfterSelection(uiState, layout, dice);
+      return true;
+    }
+
+    if (key === "return" || key === "kpenter" || key === "space") {
+      if (uiState.shopFocusedColumn === "actions") {
+        if (uiState.shopFocusedAction === "primary") {
+          triggerPrimaryShopAction(uiState, dice);
+        } else {
+          triggerSecondaryShopAction(uiState, dice);
+        }
+      } else {
+        triggerPrimaryShopAction(uiState, dice);
+      }
+      return true;
+    }
+
+    if (key === "backspace" || key === "delete") {
+      triggerSecondaryShopAction(uiState, dice);
+      return true;
+    }
+
+    return true;
+  }
+
   if (key === "c") {
     uiState.isCharacterSheetOpen = !uiState.isCharacterSheetOpen;
     if (uiState.isCharacterSheetOpen) {
@@ -770,12 +1400,10 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
   }
 
   if (key === "u") {
-    uiState.isCraftShopOpen = !uiState.isCraftShopOpen;
     if (uiState.isCraftShopOpen) {
-      uiState.isCharacterSheetOpen = false;
-      uiState.isInventoryOpen = false;
-      uiState.isTalentTreeOpen = false;
-      uiState.selectedTalentId = undefined;
+      closeCraftShop(uiState);
+    } else {
+      openCraftShop(uiState);
     }
     return true;
   }
@@ -789,7 +1417,7 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
   }
 
   if (key === "escape" && uiState.isCraftShopOpen) {
-    uiState.isCraftShopOpen = false;
+    closeCraftShop(uiState);
     return true;
   }
 
@@ -820,10 +1448,28 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
 export function updateExploreUiState(uiState: ExploreUiState, dt: number): void {
   refreshLayoutIfNeeded(uiState);
   uiState.time += dt;
+  if (uiState.shopGoldPulseTimer > 0) {
+    uiState.shopGoldPulseTimer = Math.max(0, uiState.shopGoldPulseTimer - dt);
+  }
+
+  if (uiState.isCraftShopOpen) {
+    const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
+    const layout = getCraftShopLayout(uiState, dice);
+    syncShopVisualDice(uiState, dice, layout);
+    updateShopVisualDice(uiState, layout, dt);
+  }
 }
 
 export function onExploreMouseMoved(uiState: ExploreUiState, x: number, y: number): void {
   refreshLayoutIfNeeded(uiState);
+  if (uiState.isCraftShopOpen) {
+    const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
+    const layout = getCraftShopLayout(uiState, dice);
+    syncShopVisualDice(uiState, dice, layout);
+    setShopHoverFromPoint(uiState, layout, dice, x, y);
+    return;
+  }
+
   if (uiState.isTalentTreeOpen) {
     return;
   }
@@ -840,12 +1486,13 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
   if (uiState.isCraftShopOpen) {
     const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
     const layout = getCraftShopLayout(uiState, dice);
+    syncShopVisualDice(uiState, dice, layout);
     const selectedDie =
       dice.find((die) => die.id === uiState.selectedUpgradeDieId) ??
       dice[0];
 
     if (isPointInRect(x, y, layout.closeButtonRect)) {
-      uiState.isCraftShopOpen = false;
+      closeCraftShop(uiState);
       return undefined;
     }
 
@@ -855,35 +1502,32 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
       }
 
       uiState.selectedCraftsfolkId = row.id as CraftsfolkId;
+      uiState.shopAwaitingRemoveConfirm = false;
       uiState.shopStatusText = `Selected craftsfolk: ${
         uiState.availableCraftsfolk.find((entry) => entry.id === row.id)?.name ?? row.id
       }`;
       return undefined;
     }
 
-    for (const row of layout.dieRows) {
-      if (!isPointInRect(x, y, row.rect)) {
-        continue;
-      }
-
-      uiState.selectedUpgradeDieId = row.id;
-      const clickedDie = dice.find((die) => die.id === row.id);
+    const clickedVisualDie = getShopVisualDieAt(uiState, x, y);
+    if (clickedVisualDie) {
+      uiState.selectedUpgradeDieId = clickedVisualDie.id;
+      const clickedDie = dice.find((die) => die.id === clickedVisualDie.id);
       uiState.selectedUpgradeSideId = clickedDie?.sides[0]?.id;
       const initialAdjustableSide = asAdjustableShopSide(clickedDie?.sides[0]);
       uiState.selectedUpgradePropertyId = initialAdjustableSide?.getAdjustmentProperties()[0]?.id;
-      uiState.shopStatusText = `Selected die: ${clickedDie?.name ?? row.id}`;
+      uiState.shopAwaitingRemoveConfirm = false;
+      uiState.shopStatusText = `Selected die: ${clickedDie?.name ?? clickedVisualDie.id}`;
       return undefined;
     }
 
-    for (const row of layout.faceRows) {
-      if (!isPointInRect(x, y, row.rect)) {
-        continue;
-      }
-
-      uiState.selectedUpgradeSideId = row.id;
-      const selectedSide = selectedDie?.sides.find((side) => side.id === row.id);
+    const selectedFaceTile = getShopFaceTileAt(layout, selectedDie, x, y);
+    if (selectedFaceTile) {
+      uiState.selectedUpgradeSideId = selectedFaceTile.id;
+      const selectedSide = selectedDie?.sides.find((side) => side.id === selectedFaceTile.id);
       const adjustableSide = asAdjustableShopSide(selectedSide);
       uiState.selectedUpgradePropertyId = adjustableSide?.getAdjustmentProperties()[0]?.id;
+      uiState.shopAwaitingRemoveConfirm = false;
       uiState.shopStatusText = "Selected die face.";
       return undefined;
     }
@@ -894,25 +1538,20 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
       }
 
       uiState.selectedUpgradePropertyId = row.id;
+      uiState.shopAwaitingRemoveConfirm = false;
       uiState.shopStatusText = "Selected face property.";
       return undefined;
     }
 
     if (isPointInRect(x, y, layout.primaryActionButtonRect)) {
-      if (isFaceSmithSelected(uiState)) {
-        appendCopiedFaceInShop(uiState, dice);
-      } else {
-        applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Improve);
-      }
+      uiState.shopFocusedAction = "primary";
+      triggerPrimaryShopAction(uiState, dice);
       return undefined;
     }
 
     if (isPointInRect(x, y, layout.secondaryActionButtonRect)) {
-      if (isFaceSmithSelected(uiState)) {
-        removeFaceInShop(uiState, dice);
-      } else {
-        applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Reduce);
-      }
+      uiState.shopFocusedAction = "secondary";
+      triggerSecondaryShopAction(uiState, dice);
       return undefined;
     }
 
@@ -977,12 +1616,10 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
   }
 
   if (isPointInRect(x, y, uiState.craftShopButtonRect)) {
-    uiState.isCraftShopOpen = !uiState.isCraftShopOpen;
     if (uiState.isCraftShopOpen) {
-      uiState.isCharacterSheetOpen = false;
-      uiState.isInventoryOpen = false;
-      uiState.isTalentTreeOpen = false;
-      uiState.selectedTalentId = undefined;
+      closeCraftShop(uiState);
+    } else {
+      openCraftShop(uiState);
     }
     return undefined;
   }
@@ -1012,6 +1649,25 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
   }
 
   return undefined;
+}
+
+export function onExploreWheelMoved(uiState: ExploreUiState, wheelY: number): boolean {
+  if (!uiState.isCraftShopOpen || wheelY === 0) {
+    return false;
+  }
+
+  const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
+  const layout = getCraftShopLayout(uiState, dice);
+  const [mouseX, mouseY] = love.mouse.getPosition();
+  const scrollStep = wheelY > 0 ? -1 : 1;
+
+  if (isPointInRect(mouseX, mouseY, layout.propertyListRect)) {
+    const maxStart = Math.max(0, layout.totalPropertyCount - layout.visiblePropertyCount);
+    uiState.shopPropertyScrollIndex = Math.max(0, Math.min(maxStart, uiState.shopPropertyScrollIndex + scrollStep));
+    return true;
+  }
+
+  return false;
 }
 
 function drawPlayerProgressHud(uiState: ExploreUiState): void {
@@ -1581,6 +2237,7 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
   }
 
   const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
+  const actionState = getShopActionState(uiState, dice);
 
   love.graphics.setColor(0, 0, 0, 0.56);
   love.graphics.rectangle("fill", 0, 0, uiState.width, uiState.height);
@@ -1609,6 +2266,17 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
   love.graphics.setColor(0.98, 0.96, 0.9, 1);
   love.graphics.printf("Craftsfolk Upgrade Shop", layout.panelRect.x + 20, layout.panelRect.y + 18, layout.panelRect.width - 180, "left", 0, 0.92, 0.92);
 
+  // Subtle texture bands help the modal feel layered without adding heavy assets.
+  for (let stripe = 0; stripe < 8; stripe += 1) {
+    const stripeY = layout.panelRect.y + 66 + stripe * 14;
+    love.graphics.setColor(0.15, 0.18, 0.26, stripe % 2 === 0 ? 0.18 : 0.09);
+    love.graphics.rectangle("fill", layout.panelRect.x + 12, stripeY, layout.panelRect.width - 24, 8, 4, 4);
+  }
+
+  const goldPulse = uiState.shopGoldPulseTimer > 0
+    ? 1 + 0.12 * Math.sin((0.55 - uiState.shopGoldPulseTimer) * 24)
+    : 1;
+
   love.graphics.setColor(0.96, 0.88, 0.42, 0.98);
   love.graphics.printf(
     `Gold: ${formatGold(uiState.playerProgression.gold)}`,
@@ -1617,11 +2285,12 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     layout.panelRect.width - 200,
     "left",
     0,
-    0.66,
-    0.66,
+    0.66 * goldPulse,
+    0.66 * goldPulse,
   );
 
-  love.graphics.setColor(0.27, 0.19, 0.19, 0.95);
+  const isCloseHovered = uiState.shopHoveredAction === "close";
+  love.graphics.setColor(isCloseHovered ? 0.34 : 0.27, isCloseHovered ? 0.22 : 0.19, isCloseHovered ? 0.2 : 0.19, 0.95);
   love.graphics.rectangle(
     "fill",
     layout.closeButtonRect.x,
@@ -1631,7 +2300,7 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     6,
     6,
   );
-  love.graphics.setColor(0.95, 0.75, 0.75, 0.98);
+  love.graphics.setColor(isCloseHovered ? 1 : 0.95, isCloseHovered ? 0.85 : 0.75, isCloseHovered ? 0.85 : 0.75, 0.98);
   love.graphics.rectangle(
     "line",
     layout.closeButtonRect.x,
@@ -1645,16 +2314,33 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
   love.graphics.printf("Close", layout.closeButtonRect.x, layout.closeButtonRect.y + 9, layout.closeButtonRect.width, "center", 0, 0.6, 0.6);
 
   love.graphics.setColor(0.85, 0.9, 0.98, 0.94);
-  love.graphics.printf("Choose Craftsfolk", layout.panelRect.x + 20, layout.panelRect.y + 56, layout.panelRect.width - 40, "left", 0, 0.58, 0.58);
+  love.graphics.printf("[I] Choose Craftsfolk", layout.panelRect.x + 20, layout.panelRect.y + 56, layout.panelRect.width - 40, "left", 0, 0.58, 0.58);
 
   for (const row of layout.craftsfolkRows) {
     const option = uiState.availableCraftsfolk.find((entry) => entry.id === row.id);
     const isSelected = uiState.selectedCraftsfolkId === row.id;
+    const isHovered = uiState.shopHoveredCraftsfolkId === row.id;
+    const isFocused = uiState.shopFocusedColumn === "craftsfolk";
 
-    love.graphics.setColor(isSelected ? 0.3 : 0.19, isSelected ? 0.29 : 0.2, isSelected ? 0.17 : 0.27, 0.95);
+    love.graphics.setColor(
+      isSelected ? 0.3 : isHovered ? 0.25 : 0.19,
+      isSelected ? 0.29 : isHovered ? 0.25 : 0.2,
+      isSelected ? 0.17 : isHovered ? 0.2 : 0.27,
+      0.95,
+    );
     love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 7, 7);
-    love.graphics.setColor(isSelected ? 0.96 : 0.75, isSelected ? 0.84 : 0.8, isSelected ? 0.49 : 0.93, 0.96);
+    love.graphics.setColor(
+      isSelected ? 0.96 : isHovered ? 0.88 : 0.75,
+      isSelected ? 0.84 : isHovered ? 0.86 : 0.8,
+      isSelected ? 0.49 : isHovered ? 0.98 : 0.93,
+      0.96,
+    );
     love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 7, 7);
+
+    if (isFocused) {
+      love.graphics.setColor(0.96, 0.91, 0.62, isSelected ? 0.35 : 0.2);
+      love.graphics.rectangle("line", row.rect.x - 2, row.rect.y - 2, row.rect.width + 4, row.rect.height + 4, 8, 8);
+    }
 
     love.graphics.setColor(0.98, 0.98, 1, 1);
     love.graphics.printf(
@@ -1673,41 +2359,88 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
   love.graphics.rectangle("fill", layout.dieListRect.x, layout.dieListRect.y, layout.dieListRect.width, layout.dieListRect.height, 8, 8);
   love.graphics.setColor(0.75, 0.83, 0.96, 0.93);
   love.graphics.rectangle("line", layout.dieListRect.x, layout.dieListRect.y, layout.dieListRect.width, layout.dieListRect.height, 8, 8);
+  if (uiState.shopFocusedColumn === "dice") {
+    love.graphics.setColor(0.95, 0.89, 0.62, 0.46);
+    love.graphics.rectangle("line", layout.dieListRect.x - 2, layout.dieListRect.y - 2, layout.dieListRect.width + 4, layout.dieListRect.height + 4, 9, 9);
+  }
   love.graphics.setColor(0.95, 0.97, 1, 1);
-  love.graphics.printf("Current Dice", layout.dieListRect.x + 10, layout.dieListRect.y + 10, layout.dieListRect.width - 20, "left", 0, 0.62, 0.62);
+  love.graphics.printf("[II] Current Dice", layout.dieListRect.x + 10, layout.dieListRect.y + 10, layout.dieListRect.width - 20, "left", 0, 0.62, 0.62);
 
-  for (const row of layout.dieRows) {
-    const die = dice.find((entry) => entry.id === row.id);
-    const isSelected = uiState.selectedUpgradeDieId === row.id;
+  for (const visualDie of uiState.shopVisualDice) {
+    const half = visualDie.size * 0.5;
+    const isSelected = uiState.selectedUpgradeDieId === visualDie.id;
+    const isHovered = uiState.shopHoveredDieId === visualDie.id;
+    const dieLabelScale = Math.max(0.54, Math.min(0.72, visualDie.size / 92));
 
-    love.graphics.setColor(isSelected ? 0.26 : 0.2, isSelected ? 0.34 : 0.25, isSelected ? 0.44 : 0.33, 0.95);
-    love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
-    love.graphics.setColor(isSelected ? 0.85 : 0.7, isSelected ? 0.92 : 0.79, isSelected ? 1 : 0.94, 0.95);
-    love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+    love.graphics.setColor(
+      isSelected ? 0.96 : isHovered ? 0.9 : 0.93,
+      isSelected ? 0.93 : isHovered ? 0.93 : 0.95,
+      isSelected ? 0.82 : isHovered ? 0.87 : 0.98,
+      0.98,
+    );
+    love.graphics.rectangle("fill", visualDie.x - half, visualDie.y - half, visualDie.size, visualDie.size, 6, 6);
+    love.graphics.setColor(isSelected ? 0.98 : 0.1, isSelected ? 0.88 : 0.12, isSelected ? 0.58 : 0.16, 0.98);
+    love.graphics.rectangle("line", visualDie.x - half, visualDie.y - half, visualDie.size, visualDie.size, 6, 6);
 
-    love.graphics.setColor(1, 1, 1, 0.98);
-    love.graphics.printf(die?.name ?? row.id, row.rect.x + 8, row.rect.y + 8, row.rect.width - 16, "left", 0, 0.56, 0.56);
+    love.graphics.setColor(0.08, 0.1, 0.14, 0.98);
+    love.graphics.printf(
+      visualDie.label,
+      visualDie.x - half + 4,
+      visualDie.y - 10,
+      visualDie.size - 8,
+      "center",
+      0,
+      dieLabelScale,
+      dieLabelScale,
+    );
+
+    if (isSelected) {
+      love.graphics.setColor(0.98, 0.9, 0.6, 0.62);
+      love.graphics.circle("line", visualDie.x, visualDie.y, half + 7);
+      love.graphics.setColor(0.98, 0.9, 0.6, 0.24);
+      love.graphics.circle("line", visualDie.x, visualDie.y, half + 11);
+    }
   }
 
   love.graphics.setColor(0.14, 0.16, 0.22, 0.95);
   love.graphics.rectangle("fill", layout.faceListRect.x, layout.faceListRect.y, layout.faceListRect.width, layout.faceListRect.height, 8, 8);
   love.graphics.setColor(0.75, 0.83, 0.96, 0.93);
   love.graphics.rectangle("line", layout.faceListRect.x, layout.faceListRect.y, layout.faceListRect.width, layout.faceListRect.height, 8, 8);
+  if (uiState.shopFocusedColumn === "faces") {
+    love.graphics.setColor(0.95, 0.89, 0.62, 0.46);
+    love.graphics.rectangle("line", layout.faceListRect.x - 2, layout.faceListRect.y - 2, layout.faceListRect.width + 4, layout.faceListRect.height + 4, 9, 9);
+  }
   love.graphics.setColor(0.95, 0.97, 1, 1);
-  love.graphics.printf("Die Faces", layout.faceListRect.x + 10, layout.faceListRect.y + 10, layout.faceListRect.width - 20, "left", 0, 0.62, 0.62);
+  love.graphics.printf("[III] Die Faces (Unfolded)", layout.faceListRect.x + 10, layout.faceListRect.y + 10, layout.faceListRect.width - 20, "left", 0, 0.62, 0.62);
 
-  for (const row of layout.faceRows) {
-    const side = selectedDie?.sides.find((entry) => entry.id === row.id);
-    const isSelected = uiState.selectedUpgradeSideId === row.id;
-    const details = side?.describe ? side.describe() : side?.label ?? row.id;
+  const faceTiles = getShopFaceTiles(layout, selectedDie);
+  for (const tile of faceTiles) {
+    const side = selectedDie?.sides.find((entry) => entry.id === tile.id);
+    const isSelected = uiState.selectedUpgradeSideId === tile.id;
+    const isHovered = uiState.shopHoveredFaceId === tile.id;
+    const faceLabelScale = Math.max(0.52, Math.min(0.68, tile.rect.width / 86));
 
-    love.graphics.setColor(isSelected ? 0.28 : 0.22, isSelected ? 0.3 : 0.24, isSelected ? 0.17 : 0.31, 0.95);
-    love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
-    love.graphics.setColor(isSelected ? 0.97 : 0.78, isSelected ? 0.87 : 0.82, isSelected ? 0.55 : 0.94, 0.95);
-    love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+    love.graphics.setColor(
+      isSelected ? 0.97 : isHovered ? 0.91 : 0.93,
+      isSelected ? 0.9 : isHovered ? 0.92 : 0.95,
+      isSelected ? 0.74 : isHovered ? 0.82 : 0.98,
+      0.98,
+    );
+    love.graphics.rectangle("fill", tile.rect.x, tile.rect.y, tile.rect.width, tile.rect.height, 6, 6);
+    love.graphics.setColor(isSelected ? 0.98 : 0.12, isSelected ? 0.86 : 0.14, isSelected ? 0.56 : 0.2, 0.98);
+    love.graphics.rectangle("line", tile.rect.x, tile.rect.y, tile.rect.width, tile.rect.height, 6, 6);
 
-    love.graphics.setColor(1, 1, 1, 0.98);
-    love.graphics.printf(details, row.rect.x + 8, row.rect.y + 8, row.rect.width - 16, "left", 0, 0.52, 0.52);
+    love.graphics.setColor(0.08, 0.1, 0.14, 0.98);
+    love.graphics.printf(
+      side?.label ?? tile.id,
+      tile.rect.x + 4,
+      tile.rect.y + tile.rect.height * 0.34,
+      tile.rect.width - 8,
+      "center",
+      0,
+      faceLabelScale,
+      faceLabelScale,
+    );
   }
 
   love.graphics.setColor(0.14, 0.16, 0.22, 0.95);
@@ -1732,7 +2465,7 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
   );
   love.graphics.setColor(0.95, 0.97, 1, 1);
   love.graphics.printf(
-    isFaceSmithSelected(uiState) ? "Face Operations" : "Adjustable Properties",
+    isFaceSmithSelected(uiState) ? "[IV] Face Operations" : "[IV] Adjustable Properties",
     layout.propertyListRect.x + 10,
     layout.propertyListRect.y + 10,
     layout.propertyListRect.width - 20,
@@ -1740,6 +2473,40 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     0,
     0.62,
     0.62,
+  );
+  if (uiState.shopFocusedColumn === "properties") {
+    love.graphics.setColor(0.95, 0.89, 0.62, 0.46);
+    love.graphics.rectangle(
+      "line",
+      layout.propertyListRect.x - 2,
+      layout.propertyListRect.y - 2,
+      layout.propertyListRect.width + 4,
+      layout.propertyListRect.height + 4,
+      9,
+      9,
+    );
+  }
+  if (!isFaceSmithSelected(uiState)) {
+    love.graphics.setColor(0.72, 0.8, 0.93, 0.86);
+    love.graphics.printf(
+      `${Math.min(layout.totalPropertyCount, layout.propertyStartIndex + 1)}-${Math.min(layout.totalPropertyCount, layout.propertyStartIndex + layout.visiblePropertyCount)} / ${layout.totalPropertyCount}`,
+      layout.propertyListRect.x + 10,
+      layout.propertyListRect.y + layout.propertyListRect.height - 20,
+      layout.propertyListRect.width - 20,
+      "right",
+      0,
+      0.44,
+      0.44,
+    );
+  }
+  drawShopScrollIndicator(
+    layout.propertyListRect.x,
+    layout.propertyListRect.y,
+    layout.propertyListRect.width,
+    layout.propertyListRect.height,
+    layout.propertyStartIndex,
+    layout.visiblePropertyCount,
+    layout.totalPropertyCount,
   );
 
   const selectedAdjustableSide = asAdjustableShopSide(selectedSide);
@@ -1772,15 +2539,30 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
         ?.getAdjustmentProperties()
         .find((entry) => entry.id === row.id);
       const isSelected = uiState.selectedUpgradePropertyId === row.id;
+      const isHovered = uiState.shopHoveredPropertyId === row.id;
 
-      love.graphics.setColor(isSelected ? 0.29 : 0.22, isSelected ? 0.32 : 0.25, isSelected ? 0.16 : 0.31, 0.95);
+      love.graphics.setColor(
+        isSelected ? 0.29 : isHovered ? 0.25 : 0.22,
+        isSelected ? 0.32 : isHovered ? 0.29 : 0.25,
+        isSelected ? 0.16 : isHovered ? 0.2 : 0.31,
+        0.95,
+      );
       love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
-      love.graphics.setColor(isSelected ? 0.97 : 0.78, isSelected ? 0.87 : 0.82, isSelected ? 0.55 : 0.94, 0.95);
+      love.graphics.setColor(
+        isSelected ? 0.97 : isHovered ? 0.88 : 0.78,
+        isSelected ? 0.87 : isHovered ? 0.86 : 0.82,
+        isSelected ? 0.55 : isHovered ? 0.98 : 0.94,
+        0.95,
+      );
       love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
 
       love.graphics.setColor(1, 1, 1, 0.98);
+      const pointSuffix =
+        property?.pointValue !== undefined
+          ? ` | Pts ${formatGold(property.pointValue)}`
+          : "";
       love.graphics.printf(
-        `${property?.label ?? row.id}: ${property?.value ?? "?"}`,
+        `${property?.label ?? row.id}: ${property?.value ?? "?"}${pointSuffix}`,
         row.rect.x + 8,
         row.rect.y + 8,
         row.rect.width - 16,
@@ -1806,10 +2588,15 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     }
   }
 
-  const canAdjust = isFaceSmithSelected(uiState)
-    ? selectedDie !== undefined && selectedSide !== undefined
-    : uiState.selectedUpgradePropertyId !== undefined;
-  love.graphics.setColor(canAdjust ? 0.22 : 0.2, canAdjust ? 0.43 : 0.22, canAdjust ? 0.26 : 0.24, canAdjust ? 0.95 : 0.7);
+  const isPrimaryHovered = uiState.shopHoveredAction === "primary";
+  const isSecondaryHovered = uiState.shopHoveredAction === "secondary";
+  const isActionFocused = uiState.shopFocusedColumn === "actions";
+  love.graphics.setColor(
+    actionState.canPrimary ? (isPrimaryHovered ? 0.27 : 0.22) : 0.2,
+    actionState.canPrimary ? (isPrimaryHovered ? 0.51 : 0.43) : 0.22,
+    actionState.canPrimary ? (isPrimaryHovered ? 0.33 : 0.26) : 0.24,
+    actionState.canPrimary ? 0.95 : 0.7,
+  );
   love.graphics.rectangle(
     "fill",
     layout.primaryActionButtonRect.x,
@@ -1819,7 +2606,7 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     6,
     6,
   );
-  love.graphics.setColor(canAdjust ? 0.73 : 0.6, canAdjust ? 0.95 : 0.7, canAdjust ? 0.78 : 0.72, 0.95);
+  love.graphics.setColor(actionState.canPrimary ? 0.73 : 0.6, actionState.canPrimary ? 0.95 : 0.7, actionState.canPrimary ? 0.78 : 0.72, 0.95);
   love.graphics.rectangle(
     "line",
     layout.primaryActionButtonRect.x,
@@ -1829,7 +2616,19 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     6,
     6,
   );
-  love.graphics.setColor(1, 1, 1, canAdjust ? 1 : 0.74);
+  if (isActionFocused && uiState.shopFocusedAction === "primary") {
+    love.graphics.setColor(0.98, 0.92, 0.64, 0.46);
+    love.graphics.rectangle(
+      "line",
+      layout.primaryActionButtonRect.x - 2,
+      layout.primaryActionButtonRect.y - 2,
+      layout.primaryActionButtonRect.width + 4,
+      layout.primaryActionButtonRect.height + 4,
+      8,
+      8,
+    );
+  }
+  love.graphics.setColor(1, 1, 1, actionState.canPrimary ? 1 : 0.74);
   love.graphics.printf(
     isFaceSmithSelected(uiState) ? "Copy Face" : "Upgrade",
     layout.primaryActionButtonRect.x,
@@ -1841,7 +2640,12 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     0.52,
   );
 
-  love.graphics.setColor(canAdjust ? 0.26 : 0.2, canAdjust ? 0.25 : 0.22, canAdjust ? 0.16 : 0.24, canAdjust ? 0.95 : 0.7);
+  love.graphics.setColor(
+    actionState.canSecondary ? (isSecondaryHovered ? 0.32 : 0.26) : 0.2,
+    actionState.canSecondary ? (isSecondaryHovered ? 0.29 : 0.25) : 0.22,
+    actionState.canSecondary ? (isSecondaryHovered ? 0.2 : 0.16) : 0.24,
+    actionState.canSecondary ? 0.95 : 0.7,
+  );
   love.graphics.rectangle(
     "fill",
     layout.secondaryActionButtonRect.x,
@@ -1851,7 +2655,7 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     6,
     6,
   );
-  love.graphics.setColor(canAdjust ? 0.96 : 0.6, canAdjust ? 0.86 : 0.7, canAdjust ? 0.6 : 0.72, 0.95);
+  love.graphics.setColor(actionState.canSecondary ? 0.96 : 0.6, actionState.canSecondary ? 0.86 : 0.7, actionState.canSecondary ? 0.6 : 0.72, 0.95);
   love.graphics.rectangle(
     "line",
     layout.secondaryActionButtonRect.x,
@@ -1861,9 +2665,25 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     6,
     6,
   );
-  love.graphics.setColor(1, 1, 1, canAdjust ? 1 : 0.74);
+  if (isActionFocused && uiState.shopFocusedAction === "secondary") {
+    love.graphics.setColor(0.98, 0.92, 0.64, 0.46);
+    love.graphics.rectangle(
+      "line",
+      layout.secondaryActionButtonRect.x - 2,
+      layout.secondaryActionButtonRect.y - 2,
+      layout.secondaryActionButtonRect.width + 4,
+      layout.secondaryActionButtonRect.height + 4,
+      8,
+      8,
+    );
+  }
+  love.graphics.setColor(1, 1, 1, actionState.canSecondary ? 1 : 0.74);
   love.graphics.printf(
-    isFaceSmithSelected(uiState) ? "Remove Face" : "Downgrade",
+    isFaceSmithSelected(uiState)
+      ? uiState.shopAwaitingRemoveConfirm
+        ? "Confirm Remove"
+        : "Remove Face"
+      : "Downgrade",
     layout.secondaryActionButtonRect.x,
     layout.secondaryActionButtonRect.y + 8,
     layout.secondaryActionButtonRect.width,
@@ -1873,31 +2693,58 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     0.52,
   );
 
-  love.graphics.setColor(0.84, 0.89, 0.98, 0.92);
+  const footerRect: Rect = {
+    x: layout.panelRect.x + 16,
+    y: layout.panelRect.y + layout.panelRect.height - 74,
+    width: layout.panelRect.width - 32,
+    height: 58,
+  };
+  const statusText =
+    uiState.shopStatusText ??
+    actionState.primaryReason ??
+    actionState.secondaryReason ??
+    "Select a craftsfolk, then choose a die and a face.";
+
+  love.graphics.setColor(0.08, 0.11, 0.18, 0.96);
+  love.graphics.rectangle("fill", footerRect.x, footerRect.y, footerRect.width, footerRect.height, 7, 7);
+  love.graphics.setColor(0.82, 0.89, 0.99, 0.92);
+  love.graphics.rectangle("line", footerRect.x, footerRect.y, footerRect.width, footerRect.height, 7, 7);
+
+  love.graphics.setColor(0.95, 0.98, 1, 0.98);
   love.graphics.printf(
-    uiState.shopStatusText ?? "Select a craftsfolk, then choose a die and a face.",
-    layout.panelRect.x + 20,
-    layout.panelRect.y + layout.panelRect.height - 34,
-    layout.panelRect.width - 40,
+    `Status: ${statusText}`,
+    footerRect.x + 10,
+    footerRect.y + 7,
+    footerRect.width - 20,
     "left",
     0,
-    0.56,
-    0.56,
+    0.58,
+    0.58,
   );
 
-  if (selectedSide) {
-    love.graphics.setColor(0.9, 0.94, 1, 0.95);
-    love.graphics.printf(
-      `Selected face: ${selectedSide.label}`,
-      layout.faceListRect.x + 10,
-      layout.faceListRect.y + layout.faceListRect.height - 28,
-      layout.faceListRect.width - 20,
-      "left",
-      0,
-      0.54,
-      0.54,
-    );
-  }
+  love.graphics.setColor(0.9, 0.94, 1, 0.96);
+  love.graphics.printf(
+    `Selected Face: ${selectedSide?.label ?? "none"}`,
+    footerRect.x + 10,
+    footerRect.y + 25,
+    footerRect.width - 20,
+    "left",
+    0,
+    0.54,
+    0.54,
+  );
+
+  love.graphics.setColor(0.8, 0.87, 0.99, 0.92);
+  love.graphics.printf(
+    "Keyboard: Left/Right columns | Up/Down move | Enter primary | Backspace secondary | Esc close",
+    footerRect.x + 10,
+    footerRect.y + 41,
+    footerRect.width - 20,
+    "left",
+    0,
+    0.46,
+    0.46,
+  );
 }
 
 function drawPlannerDebugOverlay(uiState: ExploreUiState): void {

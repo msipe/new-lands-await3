@@ -39,6 +39,7 @@ import {
     onExploreKeyPressed,
     onExploreMouseMoved,
     onExploreMouseReleased,
+    onExploreWheelMoved,
     type ExploreUiState,
     updateExploreUiState,
 } from "./exploration/explore-ui";
@@ -510,4 +511,16 @@ love.draw = () => {
     love.graphics.print(`Encounter: ${sceneState.visitCounts.encounter}`, 40, 206);
     love.graphics.print(`Post Combat: ${sceneState.visitCounts["post-combat"]}`, 40, 230);
     love.graphics.print(`End Game: ${sceneState.visitCounts["end-game"]}`, 40, 254);
+};
+
+love.wheelmoved = (_x, y) => {
+    if (sceneState.current !== "explore") {
+        return;
+    }
+
+    if (!activeExploreUi) {
+        activeExploreUi = createExploreUiState({ playerProgression });
+    }
+
+    onExploreWheelMoved(activeExploreUi, y);
 };

@@ -81,6 +81,39 @@ describe("WildStrike", () => {
     });
   });
 
+  it("captures one spawned popup entry per extra attack", () => {
+    mockedResolveTransientDieFromConstruct.mockImplementation((options) => {
+      options.onResolvedTransientDie?.({
+        constructId: "rusty-sword-die",
+        dieLabel: "Rusty Sword Die",
+        sideLabel: "Whiff!",
+        popupText: "Miss",
+      });
+      return [];
+    });
+
+    const face = new WildStrike("wild-strike-face", 1, "rusty-sword-die");
+    face.applyAdjustment({
+      propertyId: "attack_times",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 2,
+    });
+
+    face.resolve({
+      source: "player",
+      cause: "player-roll",
+      dieId: "player-die-1",
+    });
+
+    expect(face.getSpawnedDicePopupData()).toHaveLength(3);
+    expect(face.getSpawnedDiePopupData()).toEqual({
+      constructId: "rusty-sword-die",
+      dieLabel: "Rusty Sword Die",
+      sideLabel: "Whiff!",
+      popupText: "Miss",
+    });
+  });
+
   it("exposes upgradeable properties for attack count, weapon choice, and extra damage", () => {
     mockedResolveTransientDieFromConstruct.mockReturnValue([]);
     const face = new WildStrike("wild-strike-face", 2, "rusty-sword-die");

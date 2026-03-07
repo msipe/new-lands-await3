@@ -10,6 +10,7 @@ import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 import type {
   FaceAdjustmentOperation,
+  FaceAdjustmentPointDeltaInput,
   FaceAdjustmentProperty,
   FaceAdjustmentResult,
   FaceAdjustmentTextTemplate,
@@ -20,6 +21,7 @@ export class Warcry extends Face {
   private static readonly minAttackModifier = 0;
   static readonly attackModifierImproveRate = 1;
   static readonly attackModifierReduceRate = 0.5;
+  static readonly attackModifierPointExponent = 1;
 
   private attackModifier: number;
 
@@ -66,6 +68,38 @@ export class Warcry extends Face {
     return this.attackModifier;
   }
 
+  private getAttackModifierPointValue(): number {
+    return Warcry.getPointValueAtAttackModifier(this.attackModifier);
+  }
+
+  private static getPointValueAtAttackModifier(modifier: number): number {
+    const safeModifier = Math.max(Warcry.minAttackModifier, modifier);
+    return safeModifier ** Warcry.attackModifierPointExponent;
+  }
+
+  private static calculateAttackModifierPointDelta(input: FaceAdjustmentPointDeltaInput): number {
+    if (typeof input.propertyValue !== "number") {
+      return 0;
+    }
+
+    const steps = Math.max(1, Math.floor(input.steps));
+    const currentModifier = Math.max(Warcry.minAttackModifier, input.propertyValue);
+    const currentPoints = Warcry.getPointValueAtAttackModifier(currentModifier);
+
+    switch (input.operationType) {
+      case FaceAdjustmentModalityType.Improve: {
+        const nextModifier = currentModifier + steps;
+        return Warcry.getPointValueAtAttackModifier(nextModifier) - currentPoints;
+      }
+      case FaceAdjustmentModalityType.Reduce: {
+        const nextModifier = Math.max(Warcry.minAttackModifier, currentModifier - steps);
+        return Warcry.getPointValueAtAttackModifier(nextModifier) - currentPoints;
+      }
+      default:
+        return 0;
+    }
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {
@@ -73,6 +107,8 @@ export class Warcry extends Face {
         label: "Attack Modifier",
         description: "How much this face adds to attack damage this turn.",
         value: this.attackModifier,
+        pointValue: this.getAttackModifierPointValue(),
+        pointDeltaCalculator: Warcry.calculateAttackModifierPointDelta,
         improvementRate: Warcry.attackModifierImproveRate,
         reductionRate: Warcry.attackModifierReduceRate,
         modalities: [

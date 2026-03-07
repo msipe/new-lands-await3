@@ -123,26 +123,36 @@ function queueSpawnedDiePopupFromEvents(
   events: CombatEvent[],
   side?: DieSide,
 ): void {
-  const transientPopup =
-    getTransientDiePopupDataFromEvents(events) ??
-    (side as SpawnedDiePopupSide | undefined)?.getSpawnedDiePopupData?.();
-  if (!transientPopup) {
+  const spawnedPopupSide = side as SpawnedDiePopupSide | undefined;
+  const transientPopups = spawnedPopupSide?.getSpawnedDicePopupData?.() ?? [];
+
+  const popupsToQueue =
+    transientPopups.length > 0
+      ? transientPopups
+      : [
+          getTransientDiePopupDataFromEvents(events) ??
+            spawnedPopupSide?.getSpawnedDiePopupData?.(),
+        ].filter((popup): popup is NonNullable<typeof popup> => popup !== undefined);
+
+  if (popupsToQueue.length === 0) {
     return;
   }
 
-  state.pendingResolutionPopups.push({
-    source,
-    dieId,
-    text:
-      typeof transientPopup.popupText === "string" && transientPopup.popupText.length > 0
-        ? `Transient ${transientPopup.popupText}`
-        : `Transient ${transientPopup.sideLabel}`,
-    spawnedDie: {
-      constructId: transientPopup.constructId,
-      dieLabel: transientPopup.dieLabel,
-      sideLabel: transientPopup.sideLabel,
-    },
-  });
+  for (const transientPopup of popupsToQueue) {
+    state.pendingResolutionPopups.push({
+      source,
+      dieId,
+      text:
+        typeof transientPopup.popupText === "string" && transientPopup.popupText.length > 0
+          ? `Transient ${transientPopup.popupText}`
+          : `Transient ${transientPopup.sideLabel}`,
+      spawnedDie: {
+        constructId: transientPopup.constructId,
+        dieLabel: transientPopup.dieLabel,
+        sideLabel: transientPopup.sideLabel,
+      },
+    });
+  }
 }
 
 function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void {
@@ -190,6 +200,12 @@ type SpawnedDiePopupSide = DieSide & {
     sideLabel: string;
     popupText?: string;
   } | undefined;
+  getSpawnedDicePopupData?: () => Array<{
+    constructId: string;
+    dieLabel: string;
+    sideLabel: string;
+    popupText?: string;
+  }>;
 };
 
 function resolveImmediateEvents(

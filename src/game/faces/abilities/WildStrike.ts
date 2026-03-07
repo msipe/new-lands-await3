@@ -15,6 +15,7 @@ import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 import type {
   FaceAdjustmentOperation,
+  FaceAdjustmentPointDeltaInput,
   FaceAdjustmentProperty,
   FaceAdjustmentResult,
   FaceAdjustmentTextTemplate,
@@ -138,6 +139,9 @@ export class WildStrike extends Face {
   static readonly bonusDamageUpgradeRate = 1;
   static readonly bonusDamageReductionRate = 0.5;
   static readonly weaponChoiceChangeRate = 5;
+  static readonly attackTimesPointWeight = 2;
+  static readonly extraDamagePointWeight = 1;
+  static readonly attackTimesBonusSynergyWeight = 0.5;
 
   private attackCount = 1;
   private weaponChoice: WildStrikeWeaponChoice = "mainhand";
@@ -145,6 +149,7 @@ export class WildStrike extends Face {
   private readonly mainhandWeaponConstructId?: string;
   private readonly resolveTransientWeaponEvents: ResolveTransientWeaponEvents;
   private lastTransientPopupData?: TransientDiePopupData;
+  private lastTransientPopupDataList: TransientDiePopupData[] = [];
 
   constructor(
     id: string,
@@ -200,6 +205,130 @@ export class WildStrike extends Face {
     return this.lastTransientPopupData;
   }
 
+  getSpawnedDicePopupData(): TransientDiePopupData[] {
+    return [...this.lastTransientPopupDataList];
+  }
+
+  private getAttackTimesPointValue(): number {
+    return WildStrike.computeAttackTimesPointValue(this.attackCount, this.bonusDamage);
+  }
+
+  private getWeaponChoicePointValue(): number {
+    return WildStrike.getWeaponChoicePointValue(this.weaponChoice);
+  }
+
+  private getExtraDamagePointValue(): number {
+    return WildStrike.computeExtraDamagePointValue(this.bonusDamage, this.attackCount);
+  }
+
+  private static getNumericProperty(properties: FaceAdjustmentProperty[], id: string, fallback: number): number {
+    const value = properties.find((entry) => entry.id === id)?.value;
+    return typeof value === "number" ? value : fallback;
+  }
+
+  private static getWeaponChoiceProperty(
+    properties: FaceAdjustmentProperty[],
+    fallback: WildStrikeWeaponChoice,
+  ): WildStrikeWeaponChoice {
+    const value = properties.find((entry) => entry.id === "weapon_choice")?.value;
+    if (value === "mainhand" || value === "offhand" || value === "both_hands") {
+      return value;
+    }
+
+    return fallback;
+  }
+
+  private static getWeaponChoicePointValue(choice: WildStrikeWeaponChoice): number {
+    switch (choice) {
+      case "both_hands":
+        return 2;
+      case "offhand":
+        return 0.5;
+      case "mainhand":
+      default:
+        return 0;
+    }
+  }
+
+  private static computeAttackTimesPointValue(attackTimes: number, extraDamage: number): number {
+    const safeAttackTimes = Math.max(WildStrike.minAttackCount, Math.floor(attackTimes));
+    const safeExtraDamage = Math.max(WildStrike.minExtraDamage, Math.floor(extraDamage));
+    return (
+      safeAttackTimes * WildStrike.attackTimesPointWeight +
+      safeAttackTimes * safeExtraDamage * WildStrike.attackTimesBonusSynergyWeight
+    );
+  }
+
+  private static computeExtraDamagePointValue(extraDamage: number, attackTimes: number): number {
+    const safeExtraDamage = Math.max(WildStrike.minExtraDamage, Math.floor(extraDamage));
+    const safeAttackTimes = Math.max(WildStrike.minAttackCount, Math.floor(attackTimes));
+    return (
+      safeExtraDamage * WildStrike.extraDamagePointWeight +
+      safeAttackTimes * safeExtraDamage * WildStrike.attackTimesBonusSynergyWeight
+    );
+  }
+
+  private static calculateAttackTimesPointDelta(input: FaceAdjustmentPointDeltaInput): number {
+    if (typeof input.propertyValue !== "number") {
+      return 0;
+    }
+
+    const steps = Math.max(1, Math.floor(input.steps));
+    const currentAttackTimes = Math.max(WildStrike.minAttackCount, Math.floor(input.propertyValue));
+    const extraDamage = WildStrike.getNumericProperty(input.properties, "extra_damage", 0);
+    const currentPoints = WildStrike.computeAttackTimesPointValue(currentAttackTimes, extraDamage);
+
+    switch (input.operationType) {
+      case FaceAdjustmentModalityType.Improve: {
+        const nextAttackTimes = currentAttackTimes + steps;
+        return WildStrike.computeAttackTimesPointValue(nextAttackTimes, extraDamage) - currentPoints;
+      }
+      case FaceAdjustmentModalityType.Reduce: {
+        const nextAttackTimes = Math.max(WildStrike.minAttackCount, currentAttackTimes - steps);
+        return WildStrike.computeAttackTimesPointValue(nextAttackTimes, extraDamage) - currentPoints;
+      }
+      default:
+        return 0;
+    }
+  }
+
+  private static calculateWeaponChoicePointDelta(input: FaceAdjustmentPointDeltaInput): number {
+    if (input.operationType !== FaceAdjustmentModalityType.Select || typeof input.propertyValue !== "string") {
+      return 0;
+    }
+
+    const currentChoice = WildStrike.getWeaponChoiceProperty(
+      input.properties,
+      input.propertyValue as WildStrikeWeaponChoice,
+    );
+    const nextChoice = input.propertyValue as WildStrikeWeaponChoice;
+    return WildStrike.getWeaponChoicePointValue(nextChoice) - WildStrike.getWeaponChoicePointValue(currentChoice);
+  }
+
+  private static calculateExtraDamagePointDelta(input: FaceAdjustmentPointDeltaInput): number {
+    if (typeof input.propertyValue !== "number") {
+      return 0;
+    }
+
+    const steps = Math.max(1, Math.floor(input.steps));
+    const currentExtraDamage = Math.max(WildStrike.minExtraDamage, Math.floor(input.propertyValue));
+    const attackTimes = WildStrike.getNumericProperty(input.properties, "attack_times", 1);
+    const currentPoints = WildStrike.computeExtraDamagePointValue(currentExtraDamage, attackTimes);
+
+    switch (input.operationType) {
+      case FaceAdjustmentModalityType.Improve: {
+        const nextExtraDamage = currentExtraDamage + steps;
+        return WildStrike.computeExtraDamagePointValue(nextExtraDamage, attackTimes) - currentPoints;
+      }
+      case FaceAdjustmentModalityType.Reduce: {
+        const nextExtraDamage = Math.max(WildStrike.minExtraDamage, currentExtraDamage - steps);
+        return WildStrike.computeExtraDamagePointValue(nextExtraDamage, attackTimes) - currentPoints;
+      }
+      default:
+        return 0;
+    }
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {
@@ -207,6 +336,8 @@ export class WildStrike extends Face {
         label: "Attack Times",
         description: "How many extra attacks Wild Strike triggers.",
         value: this.attackCount,
+        pointValue: this.getAttackTimesPointValue(),
+        pointDeltaCalculator: WildStrike.calculateAttackTimesPointDelta,
         improvementRate: WildStrike.attackCountUpgradeRate,
         reductionRate: WildStrike.attackCountReductionRate,
         modalities: [
@@ -229,6 +360,8 @@ export class WildStrike extends Face {
         label: "Weapon Choice",
         description: "Which equipped weapon slot Wild Strike should use.",
         value: this.weaponChoice,
+        pointValue: this.getWeaponChoicePointValue(),
+        pointDeltaCalculator: WildStrike.calculateWeaponChoicePointDelta,
         improvementRate: WildStrike.weaponChoiceChangeRate,
         modalities: [
           {
@@ -244,6 +377,8 @@ export class WildStrike extends Face {
         label: "Extra Damage",
         description: "Bonus damage applied when the transient strike hits.",
         value: this.bonusDamage,
+        pointValue: this.getExtraDamagePointValue(),
+        pointDeltaCalculator: WildStrike.calculateExtraDamagePointDelta,
         improvementRate: WildStrike.bonusDamageUpgradeRate,
         reductionRate: WildStrike.bonusDamageReductionRate,
         modalities: [
@@ -447,34 +582,28 @@ export class WildStrike extends Face {
   }
 
   getCombatLogLines(context: CombatLogRollContext): string[] {
-    const summary = summarizeWildStrikeRoll(context.events);
     const lines: string[] = ["Player rolls Wild Strike."];
 
-    if (summary.outcome === "miss") {
-      lines.push(`  > Miss (Wild Strike +${summary.variantBonus})`);
+    if (this.lastTransientPopupDataList.length === 0) {
+      lines.push(`  > Miss (Wild Strike +${getWildStrikeVariantBonus(context.events)})`);
       return lines;
     }
 
-    if (summary.outcome === "success") {
-      lines.push(`  > Success (Wild Strike +${summary.variantBonus})`);
-      if (summary.weaponLabel) {
-        lines.push(`${normalizeWildStrikeWeaponLabel(summary.weaponLabel)} (from Wild Strike):`);
-      }
-      lines.push(`  > ${summary.combinedDamage} damage`);
-      return lines;
+    for (const popupData of this.lastTransientPopupDataList) {
+      const transientLines =
+        popupData.combatLogLines && popupData.combatLogLines.length > 0
+          ? popupData.combatLogLines
+          : [`Player rolls ${popupData.dieLabel}: ${popupData.sideLabel}.`];
+      lines.push(...transientLines);
     }
 
-    lines.push(`  > Backfire (Wild Strike +${summary.variantBonus})`);
-    if (summary.weaponLabel) {
-      lines.push(`${normalizeWildStrikeWeaponLabel(summary.weaponLabel)} (from Wild Strike):`);
-    }
-    lines.push(`  > ${summary.popupText ?? "No effect"}`);
     return lines;
   }
 
   protected onResolve(context: FaceResolveContext): CombatEvent[] {
     const randomSource = context.randomSource ?? defaultRandomSource;
     this.lastTransientPopupData = undefined;
+    this.lastTransientPopupDataList = [];
 
     const transientEvents: CombatEvent[] = [];
     for (let attackIndex = 0; attackIndex < this.attackCount; attackIndex += 1) {
@@ -482,7 +611,8 @@ export class WildStrike extends Face {
         context,
         randomSource,
         (popupData) => {
-          // Keep last popup data for compatibility with existing popup plumbing.
+          // Keep full popup history for multi-attack faces and preserve legacy single-popup access.
+          this.lastTransientPopupDataList.push(popupData);
           this.lastTransientPopupData = popupData;
         },
       );

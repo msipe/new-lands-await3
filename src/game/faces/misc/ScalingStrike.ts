@@ -3,6 +3,7 @@ import type { FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 import type {
   FaceAdjustmentOperation,
+  FaceAdjustmentPointDeltaInput,
   FaceAdjustmentProperty,
   FaceAdjustmentResult,
   FaceAdjustmentTextTemplate,
@@ -13,6 +14,7 @@ export class ScalingStrike extends DealDamage {
   private static readonly minScalingStep = 1;
   static readonly scalingStepImproveRate = 2;
   static readonly scalingStepReduceRate = 1;
+  static readonly scalingStepPointWeight = 1;
 
   private readonly rollThreshold: number;
   private scalingStep: number;
@@ -45,6 +47,39 @@ export class ScalingStrike extends DealDamage {
     );
   }
 
+  private getScalingStepPointValue(): number {
+    return ScalingStrike.getPointValueAtScalingStep(this.scalingStep, this.rollThreshold);
+  }
+
+  private static getPointValueAtScalingStep(scalingStep: number, rollThreshold: number): number {
+    const safeScalingStep = Math.max(ScalingStrike.minScalingStep, scalingStep);
+    const tempoWeight = Math.max(1, Math.floor(6 / Math.max(1, rollThreshold)));
+    return safeScalingStep * ScalingStrike.scalingStepPointWeight * tempoWeight;
+  }
+
+  private calculateScalingStepPointDelta(input: FaceAdjustmentPointDeltaInput): number {
+    if (typeof input.propertyValue !== "number") {
+      return 0;
+    }
+
+    const requestedSteps = Math.max(1, Math.floor(input.steps));
+    const currentStep = Math.max(ScalingStrike.minScalingStep, input.propertyValue);
+    const currentPoints = ScalingStrike.getPointValueAtScalingStep(currentStep, this.rollThreshold);
+
+    switch (input.operationType) {
+      case FaceAdjustmentModalityType.Improve: {
+        const nextStep = currentStep + requestedSteps;
+        return ScalingStrike.getPointValueAtScalingStep(nextStep, this.rollThreshold) - currentPoints;
+      }
+      case FaceAdjustmentModalityType.Reduce: {
+        const nextStep = Math.max(ScalingStrike.minScalingStep, currentStep - requestedSteps);
+        return ScalingStrike.getPointValueAtScalingStep(nextStep, this.rollThreshold) - currentPoints;
+      }
+      default:
+        return 0;
+    }
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       ...super.getAdjustmentProperties(),
@@ -53,6 +88,8 @@ export class ScalingStrike extends DealDamage {
         label: "Scaling Step",
         description: "Damage gained when the scaling threshold is reached.",
         value: this.scalingStep,
+        pointValue: this.getScalingStepPointValue(),
+        pointDeltaCalculator: (input) => this.calculateScalingStepPointDelta(input),
         improvementRate: ScalingStrike.scalingStepImproveRate,
         reductionRate: ScalingStrike.scalingStepReduceRate,
         modalities: [

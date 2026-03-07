@@ -4,6 +4,7 @@ import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 import type {
   FaceAdjustmentOperation,
+  FaceAdjustmentPointDeltaInput,
   FaceAdjustmentProperty,
   FaceAdjustmentResult,
   FaceAdjustmentTextTemplate,
@@ -14,6 +15,7 @@ export class DealDamage extends Face {
   private static readonly minDamage = 0;
   static readonly damageImproveRate = 1;
   static readonly damageReduceRate = 0.5;
+  static readonly damagePointExponent = 1;
 
   private damage: number;
 
@@ -56,6 +58,38 @@ export class DealDamage extends Face {
     return this.damage;
   }
 
+  private getDamagePointValue(): number {
+    return DealDamage.getPointValueAtDamage(this.damage);
+  }
+
+  private static getPointValueAtDamage(damage: number): number {
+    const safeDamage = Math.max(DealDamage.minDamage, damage);
+    return safeDamage ** DealDamage.damagePointExponent;
+  }
+
+  private static calculateDamagePointDelta(input: FaceAdjustmentPointDeltaInput): number {
+    if (typeof input.propertyValue !== "number") {
+      return 0;
+    }
+
+    const steps = Math.max(1, Math.floor(input.steps));
+    const currentDamage = Math.max(DealDamage.minDamage, input.propertyValue);
+    const currentPoints = DealDamage.getPointValueAtDamage(currentDamage);
+
+    switch (input.operationType) {
+      case FaceAdjustmentModalityType.Improve: {
+        const nextDamage = currentDamage + steps;
+        return DealDamage.getPointValueAtDamage(nextDamage) - currentPoints;
+      }
+      case FaceAdjustmentModalityType.Reduce: {
+        const nextDamage = Math.max(DealDamage.minDamage, currentDamage - steps);
+        return DealDamage.getPointValueAtDamage(nextDamage) - currentPoints;
+      }
+      default:
+        return 0;
+    }
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {
@@ -63,6 +97,8 @@ export class DealDamage extends Face {
         label: "Damage",
         description: "How much damage this face deals.",
         value: this.damage,
+        pointValue: this.getDamagePointValue(),
+        pointDeltaCalculator: DealDamage.calculateDamagePointDelta,
         improvementRate: DealDamage.damageImproveRate,
         reductionRate: DealDamage.damageReduceRate,
         modalities: [

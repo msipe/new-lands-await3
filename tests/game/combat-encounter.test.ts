@@ -8,8 +8,13 @@ import {
   rollNextPlayerDie,
 } from "../../src/game/combat-encounter";
 import { EffectType } from "../../src/game/dice";
+import { FaceAdjustmentModalityType } from "../../src/game/faces";
 import { createPlayerCombatDiceLoadout } from "../../src/game/player-combat-dice";
-import { createPlayerProgression, recordRemoveFace } from "../../src/game/player-progression";
+import {
+  createPlayerProgression,
+  recordFaceAdjustment,
+  recordRemoveFace,
+} from "../../src/game/player-progression";
 
 function fixedRandomSource() {
   return {
@@ -371,6 +376,115 @@ describe("combat encounter", () => {
     expect(spawnedPopup?.text).toContain("Transient");
     expect(spawnedPopup?.spawnedDie?.dieLabel).toBe("Rusty Sword Die");
     expect(spawnedPopup?.spawnedDie?.sideLabel).toBe("Whiff!");
+  });
+
+  it("applies upgraded wild strike attack count to total extra attacks", () => {
+    const baselineEncounter = createCombatEncounter({ randomSource: fixedRandomSource() });
+    resolveAllEnemyDice(baselineEncounter);
+    expect(baselineEncounter.state.phase).toBe("player-turn");
+
+    const wildStrikeDieId = getPlayerDieIdByName(baselineEncounter, "Wild Strike Die");
+    baselineEncounter.state.enemy.hp = 200;
+    const baselineEnemyHpBefore = baselineEncounter.state.enemy.hp;
+    const baselineWildStrikeRolls = sequenceRandomSource([0, 3]);
+    rollPlayerDie(
+      baselineEncounter.state,
+      baselineEncounter.eventBus,
+      wildStrikeDieId,
+      baselineWildStrikeRolls,
+    );
+    const baselineDamage = baselineEnemyHpBefore - baselineEncounter.state.enemy.hp;
+    expect(baselineDamage).toBeGreaterThan(0);
+
+    const upgradedProgression = createPlayerProgression();
+    recordFaceAdjustment(upgradedProgression, {
+      dieId: "player-die-2",
+      sideId: "player-die-2-side-1",
+      operation: {
+        propertyId: "attack_times",
+        type: FaceAdjustmentModalityType.Improve,
+        steps: 2,
+      },
+    });
+
+    const upgradedEncounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerProgression: upgradedProgression,
+    });
+    resolveAllEnemyDice(upgradedEncounter);
+    expect(upgradedEncounter.state.phase).toBe("player-turn");
+
+    const upgradedWildStrikeDieId = getPlayerDieIdByName(upgradedEncounter, "Wild Strike Die");
+    upgradedEncounter.state.enemy.hp = 200;
+    const upgradedEnemyHpBefore = upgradedEncounter.state.enemy.hp;
+    const upgradedWildStrikeRolls = sequenceRandomSource([0, 3, 3, 3]);
+    rollPlayerDie(
+      upgradedEncounter.state,
+      upgradedEncounter.eventBus,
+      upgradedWildStrikeDieId,
+      upgradedWildStrikeRolls,
+    );
+    const upgradedDamage = upgradedEnemyHpBefore - upgradedEncounter.state.enemy.hp;
+
+    expect(upgradedDamage).toBe(baselineDamage * 3);
+  });
+
+  it("queues one spawned transient popup per wild strike extra attack", () => {
+    const progression = createPlayerProgression();
+    recordFaceAdjustment(progression, {
+      dieId: "player-die-2",
+      sideId: "player-die-2-side-1",
+      operation: {
+        propertyId: "attack_times",
+        type: FaceAdjustmentModalityType.Improve,
+        steps: 2,
+      },
+    });
+
+    const encounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerProgression: progression,
+    });
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    const wildStrikeDieId = getPlayerDieIdByName(encounter, "Wild Strike Die");
+    // Roll Wild Strike face first, then force three transient misses so events may be empty.
+    rollPlayerDie(encounter.state, encounter.eventBus, wildStrikeDieId, sequenceRandomSource([0, 1, 1, 1]));
+
+    const popups = drainResolutionPopups(encounter.state);
+    const spawnedPopups = popups.filter((popup) => popup.spawnedDie !== undefined);
+    expect(spawnedPopups).toHaveLength(3);
+  });
+
+  it("logs each transient wild strike die roll", () => {
+    const progression = createPlayerProgression();
+    recordFaceAdjustment(progression, {
+      dieId: "player-die-2",
+      sideId: "player-die-2-side-1",
+      operation: {
+        propertyId: "attack_times",
+        type: FaceAdjustmentModalityType.Improve,
+        steps: 2,
+      },
+    });
+
+    const encounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerProgression: progression,
+    });
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    const wildStrikeDieId = getPlayerDieIdByName(encounter, "Wild Strike Die");
+    rollPlayerDie(encounter.state, encounter.eventBus, wildStrikeDieId, sequenceRandomSource([0, 1, 1, 1]));
+
+    const transientRollLines = encounter.state.combatLog.filter(
+      (line) => line === "Player rolls Rusty Sword Die: Whiff!.",
+    );
+    expect(transientRollLines).toHaveLength(3);
   });
 
   it("grants armor from Ironhide and applies armor before hp damage", () => {

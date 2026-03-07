@@ -1,4 +1,5 @@
 import type { CombatEvent } from "./combat-event-bus";
+import { buildRollCombatLogLines } from "./combat-log";
 import {
   defaultRandomSource,
   type DiceEventCause,
@@ -25,6 +26,7 @@ export type TransientDiePopupData = {
   dieLabel: string;
   sideLabel: string;
   popupText?: string;
+  combatLogLines?: string[];
 };
 
 export function resolveTransientDieFromConstruct(options: ResolveTransientDieOptions): CombatEvent[] {
@@ -42,18 +44,26 @@ export function resolveTransientDieFromConstruct(options: ResolveTransientDieOpt
       ? transientSide.getResolvePopupText()
       : transientSide.label;
 
-  options.onResolvedTransientDie?.({
-    constructId: construct.id,
-    dieLabel: construct.name,
-    sideLabel: transientSide.label,
-    popupText,
-  });
-
   const events = transientSide.resolve({
     source: options.source,
     cause: options.cause,
     dieId: options.parentDieId,
     randomSource: options.randomSource,
+  });
+
+  const combatLogLines = buildRollCombatLogLines({
+    source: options.source,
+    dieName: construct.name,
+    side: transientSide,
+    events,
+  });
+
+  options.onResolvedTransientDie?.({
+    constructId: construct.id,
+    dieLabel: construct.name,
+    sideLabel: transientSide.label,
+    popupText,
+    combatLogLines,
   });
 
   return events.map((event) => ({

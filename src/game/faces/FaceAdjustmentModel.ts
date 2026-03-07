@@ -26,11 +26,25 @@ export type FaceAdjustmentPropertyModality =
       rate: number;
     };
 
+export type FaceAdjustmentPointDeltaInput = {
+  operationType: FaceAdjustmentModalityType;
+  steps: number;
+  propertyValue: number | string;
+  pointValue: number;
+  properties: FaceAdjustmentProperty[];
+};
+
+export type FaceAdjustmentPointDeltaCalculator = (
+  input: FaceAdjustmentPointDeltaInput,
+) => number;
+
 export type FaceAdjustmentProperty = {
   id: string;
   label: string;
   description: string;
   value: number | string;
+  pointValue?: number;
+  pointDeltaCalculator?: FaceAdjustmentPointDeltaCalculator;
   improvementRate?: number;
   reductionRate?: number;
   modalities: FaceAdjustmentPropertyModality[];

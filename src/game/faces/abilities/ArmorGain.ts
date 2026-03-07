@@ -4,6 +4,7 @@ import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 import type {
   FaceAdjustmentOperation,
+  FaceAdjustmentPointDeltaInput,
   FaceAdjustmentProperty,
   FaceAdjustmentResult,
   FaceAdjustmentTextTemplate,
@@ -14,6 +15,7 @@ export class ArmorGain extends Face {
   private static readonly minArmor = 0;
   static readonly armorImproveRate = 1;
   static readonly armorReduceRate = 0.5;
+  static readonly armorPointExponent = 1;
 
   private armorGain: number;
 
@@ -47,6 +49,38 @@ export class ArmorGain extends Face {
     return new ArmorGain(newId, this.getBaseLabel(), this.armorGain);
   }
 
+  private getArmorPointValue(): number {
+    return ArmorGain.getPointValueAtArmor(this.armorGain);
+  }
+
+  private static getPointValueAtArmor(armor: number): number {
+    const safeArmor = Math.max(ArmorGain.minArmor, armor);
+    return safeArmor ** ArmorGain.armorPointExponent;
+  }
+
+  private static calculateArmorPointDelta(input: FaceAdjustmentPointDeltaInput): number {
+    if (typeof input.propertyValue !== "number") {
+      return 0;
+    }
+
+    const steps = Math.max(1, Math.floor(input.steps));
+    const currentArmor = Math.max(ArmorGain.minArmor, input.propertyValue);
+    const currentPoints = ArmorGain.getPointValueAtArmor(currentArmor);
+
+    switch (input.operationType) {
+      case FaceAdjustmentModalityType.Improve: {
+        const nextArmor = currentArmor + steps;
+        return ArmorGain.getPointValueAtArmor(nextArmor) - currentPoints;
+      }
+      case FaceAdjustmentModalityType.Reduce: {
+        const nextArmor = Math.max(ArmorGain.minArmor, currentArmor - steps);
+        return ArmorGain.getPointValueAtArmor(nextArmor) - currentPoints;
+      }
+      default:
+        return 0;
+    }
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {
@@ -54,6 +88,8 @@ export class ArmorGain extends Face {
         label: "Armor",
         description: "How much armor this face grants.",
         value: this.armorGain,
+        pointValue: this.getArmorPointValue(),
+        pointDeltaCalculator: ArmorGain.calculateArmorPointDelta,
         improvementRate: ArmorGain.armorImproveRate,
         reductionRate: ArmorGain.armorReduceRate,
         modalities: [
