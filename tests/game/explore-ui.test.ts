@@ -106,6 +106,29 @@ describe("explore-ui talent tree", () => {
     expect(uiState.selectedUpgradeSideId).toBeDefined();
   });
 
+  it("applies upgrade and downgrade from craft shop using gold", () => {
+    const uiState = createExploreUiState();
+    onExploreKeyPressed(uiState, "u");
+
+    // Select the only craftsfolk.
+    onExploreMouseReleased(uiState, 120, 108, 1);
+    // Select first die row.
+    onExploreMouseReleased(uiState, 120, 212, 1);
+
+    expect(uiState.playerProgression.gold).toBe(1000);
+    expect(uiState.selectedUpgradePropertyId).toBeDefined();
+
+    // Upgrade button in 1120x620 test layout.
+    onExploreMouseReleased(uiState, 840, 530, 1);
+    expect(uiState.playerProgression.gold).toBe(999);
+    expect(uiState.playerProgression.faceAdjustments.length).toBe(1);
+
+    // Downgrade button in 1120x620 test layout.
+    onExploreMouseReleased(uiState, 930, 530, 1);
+    expect(uiState.playerProgression.gold).toBe(999.5);
+    expect(uiState.playerProgression.faceAdjustments.length).toBe(2);
+  });
+
   it("captures branch clicks while craft shop modal is open", () => {
     const uiState = createExploreUiState();
     onExploreKeyPressed(uiState, "u");

@@ -18,15 +18,22 @@ import { createWorldSpecFromPlan, type WorldSpec } from "../planning/world-spec-
 import { validateWorldAgainstSpec, type WorldValidationResult } from "../planning/world-validator";
 import { applyWorldSpecToExploreState } from "./world-generator";
 import {
+  recordFaceAdjustment,
   createPlayerProgression,
   type PlayerProgressionState,
 } from "../game/player-progression";
 import { createPlayerCombatDiceLoadout } from "../game/player-combat-dice";
+import { applyFaceAdjustmentEntry } from "../game/face-adjustments";
 import {
   EQUIPMENT_SLOT_LABELS,
   EQUIPMENT_SLOT_ORDER,
 } from "../game/player-items";
 import type { Die } from "../game/dice";
+import {
+  FaceAdjustmentModalityType,
+  type FaceAdjustmentOperation,
+  type FaceAdjustmentProperty,
+} from "../game/faces";
 
 type Rect = {
   x: number;
@@ -59,9 +66,13 @@ type ShopLayout = {
   closeButtonRect: Rect;
   dieListRect: Rect;
   faceListRect: Rect;
+  propertyListRect: Rect;
+  upgradeButtonRect: Rect;
+  downgradeButtonRect: Rect;
   craftsfolkRows: ShopRowRect[];
   dieRows: ShopRowRect[];
   faceRows: ShopRowRect[];
+  propertyRows: ShopRowRect[];
 };
 
 export type CreateExploreUiStateOptions = {
@@ -350,8 +361,15 @@ function getCraftShopLayout(uiState: ExploreUiState, dice: Die[]): ShopLayout {
   const faceListRect: Rect = {
     x: dieListRect.x + dieListRect.width + 20,
     y: dieListRect.y,
-    width: panelWidth - (dieListRect.width + 60),
+    width: Math.floor((panelWidth - (dieListRect.width + 80)) * 0.58),
     height: dieListRect.height,
+  };
+
+  const propertyListRect: Rect = {
+    x: faceListRect.x + faceListRect.width + 20,
+    y: faceListRect.y,
+    width: panelX + panelWidth - (faceListRect.x + faceListRect.width + 20) - 20,
+    height: faceListRect.height,
   };
 
   const dieRows: ShopRowRect[] = [];
@@ -395,6 +413,44 @@ function getCraftShopLayout(uiState: ExploreUiState, dice: Die[]): ShopLayout {
     }
   }
 
+  const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
+  const adjustableSide = asAdjustableShopSide(selectedSide);
+  const propertyRows: ShopRowRect[] = [];
+  let propertyY = propertyListRect.y + 36;
+  if (adjustableSide !== undefined) {
+    for (const property of adjustableSide.getAdjustmentProperties()) {
+      if (propertyY > propertyListRect.y + propertyListRect.height - 90) {
+        break;
+      }
+
+      propertyRows.push({
+        id: property.id,
+        rect: {
+          x: propertyListRect.x + 10,
+          y: propertyY,
+          width: propertyListRect.width - 20,
+          height: 46,
+        },
+      });
+      propertyY += 52;
+    }
+  }
+
+  const actionButtonWidth = Math.max(90, Math.floor((propertyListRect.width - 30) * 0.5));
+  const actionButtonY = propertyListRect.y + propertyListRect.height - 42;
+  const upgradeButtonRect: Rect = {
+    x: propertyListRect.x + 10,
+    y: actionButtonY,
+    width: actionButtonWidth,
+    height: 28,
+  };
+  const downgradeButtonRect: Rect = {
+    x: propertyListRect.x + propertyListRect.width - actionButtonWidth - 10,
+    y: actionButtonY,
+    width: actionButtonWidth,
+    height: 28,
+  };
+
   return {
     panelRect: {
       x: panelX,
@@ -410,10 +466,102 @@ function getCraftShopLayout(uiState: ExploreUiState, dice: Die[]): ShopLayout {
     },
     dieListRect,
     faceListRect,
+    propertyListRect,
+    upgradeButtonRect,
+    downgradeButtonRect,
     craftsfolkRows,
     dieRows,
     faceRows,
+    propertyRows,
   };
+}
+
+type AdjustableShopSide = {
+  getAdjustmentProperties: () => FaceAdjustmentProperty[];
+};
+
+function asAdjustableShopSide(side: Die["sides"][number] | undefined): AdjustableShopSide | undefined {
+  if (!side) {
+    return undefined;
+  }
+
+  const candidate = side as Partial<AdjustableShopSide>;
+  if (typeof candidate.getAdjustmentProperties !== "function") {
+    return undefined;
+  }
+
+  return candidate as AdjustableShopSide;
+}
+
+function formatGold(value: number): string {
+  const roundedToTenth = Math.round(value * 10) / 10;
+  if (Math.abs(roundedToTenth - Math.floor(roundedToTenth)) < 0.001) {
+    return `${Math.floor(roundedToTenth)}`;
+  }
+
+  return roundedToTenth.toFixed(1);
+}
+
+function applyShopPropertyAdjustment(
+  uiState: ExploreUiState,
+  dice: Die[],
+  operationType: FaceAdjustmentModalityType.Improve | FaceAdjustmentModalityType.Reduce,
+): void {
+  if (!uiState.selectedCraftsfolkId) {
+    uiState.shopStatusText = "Select a craftsfolk before adjusting a face.";
+    return;
+  }
+
+  const selectedDie = dice.find((die) => die.id === uiState.selectedUpgradeDieId);
+  const selectedSide = selectedDie?.sides.find((side) => side.id === uiState.selectedUpgradeSideId);
+  const adjustableSide = asAdjustableShopSide(selectedSide);
+  if (!selectedDie || !selectedSide || !adjustableSide) {
+    uiState.shopStatusText = "Select an adjustable die face first.";
+    return;
+  }
+
+  const selectedProperty = adjustableSide
+    .getAdjustmentProperties()
+    .find((property) => property.id === uiState.selectedUpgradePropertyId);
+  if (!selectedProperty) {
+    uiState.shopStatusText = "Select a property before upgrading or downgrading.";
+    return;
+  }
+
+  const operation: FaceAdjustmentOperation = {
+    propertyId: selectedProperty.id,
+    type: operationType,
+    steps: 1,
+  };
+
+  const result = applyFaceAdjustmentEntry(dice, {
+    dieId: selectedDie.id,
+    sideId: selectedSide.id,
+    operation,
+  });
+
+  if (!result.applied) {
+    uiState.shopStatusText = result.reason ?? "Adjustment failed.";
+    return;
+  }
+
+  const nextGold = uiState.playerProgression.gold + result.resourceDelta;
+  if (nextGold < 0) {
+    uiState.shopStatusText = "Not enough gold for that adjustment.";
+    return;
+  }
+
+  uiState.playerProgression.gold = nextGold;
+  recordFaceAdjustment(uiState.playerProgression, {
+    dieId: selectedDie.id,
+    sideId: selectedSide.id,
+    operation,
+  });
+
+  const deltaText = result.resourceDelta < 0
+    ? `Spent ${formatGold(Math.abs(result.resourceDelta))} gold.`
+    : `Refunded ${formatGold(result.resourceDelta)} gold.`;
+  uiState.shopStatusText = `${deltaText} Gold now ${formatGold(uiState.playerProgression.gold)}.`;
 }
 
 function getTileAt(uiState: ExploreUiState, x: number, y: number): ExploreTile | undefined {
@@ -589,6 +737,9 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
   if (uiState.isCraftShopOpen) {
     const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
     const layout = getCraftShopLayout(uiState, dice);
+    const selectedDie =
+      dice.find((die) => die.id === uiState.selectedUpgradeDieId) ??
+      dice[0];
 
     if (isPointInRect(x, y, layout.closeButtonRect)) {
       uiState.isCraftShopOpen = false;
@@ -613,10 +764,11 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
       }
 
       uiState.selectedUpgradeDieId = row.id;
-      const selectedDie = dice.find((die) => die.id === row.id);
-      uiState.selectedUpgradeSideId = selectedDie?.sides[0]?.id;
-      uiState.selectedUpgradePropertyId = undefined;
-      uiState.shopStatusText = `Selected die: ${selectedDie?.name ?? row.id}`;
+      const clickedDie = dice.find((die) => die.id === row.id);
+      uiState.selectedUpgradeSideId = clickedDie?.sides[0]?.id;
+      const initialAdjustableSide = asAdjustableShopSide(clickedDie?.sides[0]);
+      uiState.selectedUpgradePropertyId = initialAdjustableSide?.getAdjustmentProperties()[0]?.id;
+      uiState.shopStatusText = `Selected die: ${clickedDie?.name ?? row.id}`;
       return undefined;
     }
 
@@ -626,8 +778,30 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
       }
 
       uiState.selectedUpgradeSideId = row.id;
-      uiState.selectedUpgradePropertyId = undefined;
+      const selectedSide = selectedDie?.sides.find((side) => side.id === row.id);
+      const adjustableSide = asAdjustableShopSide(selectedSide);
+      uiState.selectedUpgradePropertyId = adjustableSide?.getAdjustmentProperties()[0]?.id;
       uiState.shopStatusText = "Selected die face.";
+      return undefined;
+    }
+
+    for (const row of layout.propertyRows) {
+      if (!isPointInRect(x, y, row.rect)) {
+        continue;
+      }
+
+      uiState.selectedUpgradePropertyId = row.id;
+      uiState.shopStatusText = "Selected face property.";
+      return undefined;
+    }
+
+    if (isPointInRect(x, y, layout.upgradeButtonRect)) {
+      applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Improve);
+      return undefined;
+    }
+
+    if (isPointInRect(x, y, layout.downgradeButtonRect)) {
+      applyShopPropertyAdjustment(uiState, dice, FaceAdjustmentModalityType.Reduce);
       return undefined;
     }
 
@@ -1326,7 +1500,7 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
 
   love.graphics.setColor(0.96, 0.88, 0.42, 0.98);
   love.graphics.printf(
-    `Gold: ${uiState.playerProgression.gold}`,
+    `Gold: ${formatGold(uiState.playerProgression.gold)}`,
     layout.panelRect.x + 20,
     layout.panelRect.y + 42,
     layout.panelRect.width - 200,
@@ -1424,6 +1598,142 @@ function drawCraftShopOverlay(uiState: ExploreUiState): void {
     love.graphics.setColor(1, 1, 1, 0.98);
     love.graphics.printf(details, row.rect.x + 8, row.rect.y + 8, row.rect.width - 16, "left", 0, 0.52, 0.52);
   }
+
+  love.graphics.setColor(0.14, 0.16, 0.22, 0.95);
+  love.graphics.rectangle(
+    "fill",
+    layout.propertyListRect.x,
+    layout.propertyListRect.y,
+    layout.propertyListRect.width,
+    layout.propertyListRect.height,
+    8,
+    8,
+  );
+  love.graphics.setColor(0.75, 0.83, 0.96, 0.93);
+  love.graphics.rectangle(
+    "line",
+    layout.propertyListRect.x,
+    layout.propertyListRect.y,
+    layout.propertyListRect.width,
+    layout.propertyListRect.height,
+    8,
+    8,
+  );
+  love.graphics.setColor(0.95, 0.97, 1, 1);
+  love.graphics.printf(
+    "Adjustable Properties",
+    layout.propertyListRect.x + 10,
+    layout.propertyListRect.y + 10,
+    layout.propertyListRect.width - 20,
+    "left",
+    0,
+    0.62,
+    0.62,
+  );
+
+  const selectedAdjustableSide = asAdjustableShopSide(selectedSide);
+  for (const row of layout.propertyRows) {
+    const property = selectedAdjustableSide
+      ?.getAdjustmentProperties()
+      .find((entry) => entry.id === row.id);
+    const isSelected = uiState.selectedUpgradePropertyId === row.id;
+
+    love.graphics.setColor(isSelected ? 0.29 : 0.22, isSelected ? 0.32 : 0.25, isSelected ? 0.16 : 0.31, 0.95);
+    love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+    love.graphics.setColor(isSelected ? 0.97 : 0.78, isSelected ? 0.87 : 0.82, isSelected ? 0.55 : 0.94, 0.95);
+    love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 6, 6);
+
+    love.graphics.setColor(1, 1, 1, 0.98);
+    love.graphics.printf(
+      `${property?.label ?? row.id}: ${property?.value ?? "?"}`,
+      row.rect.x + 8,
+      row.rect.y + 8,
+      row.rect.width - 16,
+      "left",
+      0,
+      0.5,
+      0.5,
+    );
+
+    if (property?.description) {
+      love.graphics.setColor(0.78, 0.84, 0.95, 0.9);
+      love.graphics.printf(
+        property.description,
+        row.rect.x + 8,
+        row.rect.y + 24,
+        row.rect.width - 16,
+        "left",
+        0,
+        0.44,
+        0.44,
+      );
+    }
+  }
+
+  const canAdjust = uiState.selectedUpgradePropertyId !== undefined;
+  love.graphics.setColor(canAdjust ? 0.22 : 0.2, canAdjust ? 0.43 : 0.22, canAdjust ? 0.26 : 0.24, canAdjust ? 0.95 : 0.7);
+  love.graphics.rectangle(
+    "fill",
+    layout.upgradeButtonRect.x,
+    layout.upgradeButtonRect.y,
+    layout.upgradeButtonRect.width,
+    layout.upgradeButtonRect.height,
+    6,
+    6,
+  );
+  love.graphics.setColor(canAdjust ? 0.73 : 0.6, canAdjust ? 0.95 : 0.7, canAdjust ? 0.78 : 0.72, 0.95);
+  love.graphics.rectangle(
+    "line",
+    layout.upgradeButtonRect.x,
+    layout.upgradeButtonRect.y,
+    layout.upgradeButtonRect.width,
+    layout.upgradeButtonRect.height,
+    6,
+    6,
+  );
+  love.graphics.setColor(1, 1, 1, canAdjust ? 1 : 0.74);
+  love.graphics.printf(
+    "Upgrade",
+    layout.upgradeButtonRect.x,
+    layout.upgradeButtonRect.y + 8,
+    layout.upgradeButtonRect.width,
+    "center",
+    0,
+    0.52,
+    0.52,
+  );
+
+  love.graphics.setColor(canAdjust ? 0.26 : 0.2, canAdjust ? 0.25 : 0.22, canAdjust ? 0.16 : 0.24, canAdjust ? 0.95 : 0.7);
+  love.graphics.rectangle(
+    "fill",
+    layout.downgradeButtonRect.x,
+    layout.downgradeButtonRect.y,
+    layout.downgradeButtonRect.width,
+    layout.downgradeButtonRect.height,
+    6,
+    6,
+  );
+  love.graphics.setColor(canAdjust ? 0.96 : 0.6, canAdjust ? 0.86 : 0.7, canAdjust ? 0.6 : 0.72, 0.95);
+  love.graphics.rectangle(
+    "line",
+    layout.downgradeButtonRect.x,
+    layout.downgradeButtonRect.y,
+    layout.downgradeButtonRect.width,
+    layout.downgradeButtonRect.height,
+    6,
+    6,
+  );
+  love.graphics.setColor(1, 1, 1, canAdjust ? 1 : 0.74);
+  love.graphics.printf(
+    "Downgrade",
+    layout.downgradeButtonRect.x,
+    layout.downgradeButtonRect.y + 8,
+    layout.downgradeButtonRect.width,
+    "center",
+    0,
+    0.52,
+    0.52,
+  );
 
   love.graphics.setColor(0.84, 0.89, 0.98, 0.92);
   love.graphics.printf(
