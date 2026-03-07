@@ -174,6 +174,10 @@ export class WildStrike extends Face {
     return `Trigger ${this.attackCount} extra ${this.weaponChoice.replace("_", " ")} attack(s). If they damage the opponent, add +${this.bonusDamage} damage.`;
   }
 
+  protected getLabel(): string {
+    return `Wild Strike ${this.attackCount}x ${this.weaponChoice.replace("_", " ")} +${this.bonusDamage}`;
+  }
+
   getResolvePopupText(): string {
     return `Wild Strike (+${this.bonusDamage})`;
   }

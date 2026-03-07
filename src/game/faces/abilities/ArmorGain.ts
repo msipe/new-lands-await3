@@ -39,6 +39,10 @@ export class ArmorGain extends Face {
     return `+${this.armorGain} armor`;
   }
 
+  protected getLabel(): string {
+    return `${super.getLabel()} +${this.armorGain} armor`;
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {

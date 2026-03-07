@@ -195,4 +195,31 @@ describe("WildStrike", () => {
 
     expect(events).toHaveLength(1);
   });
+
+  it("keeps label synchronized with attack count, weapon choice, and bonus damage", () => {
+    const face = new WildStrike("wild-strike-label-sync", 1, "rusty-sword-die");
+
+    expect(face.label).toBe("Wild Strike 1x mainhand +1");
+
+    face.applyAdjustment({
+      propertyId: "attack_times",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 1,
+    });
+    expect(face.label).toBe("Wild Strike 2x mainhand +1");
+
+    face.applyAdjustment({
+      propertyId: "weapon_choice",
+      type: FaceAdjustmentModalityType.Select,
+      value: "both_hands",
+    });
+    expect(face.label).toBe("Wild Strike 2x both hands +1");
+
+    face.applyAdjustment({
+      propertyId: "extra_damage",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 2,
+    });
+    expect(face.label).toBe("Wild Strike 2x both hands +3");
+  });
 });

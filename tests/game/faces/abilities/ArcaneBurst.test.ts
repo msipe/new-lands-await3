@@ -71,4 +71,24 @@ describe("ArcaneBurst", () => {
 
     expect(event.value).toBe(4);
   });
+
+  it("keeps label synchronized with damage adjustments", () => {
+    const face = new ArcaneBurst("arcane-burst-label-sync");
+
+    expect(face.label).toBe("Arcane Burst +3");
+
+    face.applyAdjustment({
+      propertyId: "damage",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 1,
+    });
+    expect(face.label).toBe("Arcane Burst +4");
+
+    face.applyAdjustment({
+      propertyId: "damage",
+      type: FaceAdjustmentModalityType.Reduce,
+      steps: 2,
+    });
+    expect(face.label).toBe("Arcane Burst +2");
+  });
 });

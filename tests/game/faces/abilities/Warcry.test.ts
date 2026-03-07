@@ -1,4 +1,4 @@
-import { Warcry } from "../../../../src/game/faces";
+import { FaceAdjustmentModalityType, Warcry } from "../../../../src/game/faces";
 
 describe("Warcry", () => {
   it("exposes its attack modifier and emits no combat events", () => {
@@ -18,5 +18,25 @@ describe("Warcry", () => {
 
     expect(face.getAttackModifier()).toBe(-2);
     expect(face.getResolvePopupText()).toBe("Attacks -2 this turn");
+  });
+
+  it("keeps label synchronized with adjusted modifier", () => {
+    const face = new Warcry("warcry-face-label-sync", 1);
+
+    expect(face.label).toBe("Warcry +1");
+
+    face.applyAdjustment({
+      propertyId: "attack_modifier",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 2,
+    });
+    expect(face.label).toBe("Warcry +3");
+
+    face.applyAdjustment({
+      propertyId: "attack_modifier",
+      type: FaceAdjustmentModalityType.Reduce,
+      steps: 1,
+    });
+    expect(face.label).toBe("Warcry +2");
   });
 });

@@ -44,6 +44,10 @@ export class HealSelf extends Face {
     return `+${this.heal} heal`;
   }
 
+  protected getLabel(): string {
+    return `${super.getLabel()} +${this.heal}`;
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {

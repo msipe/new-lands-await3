@@ -44,6 +44,10 @@ export class DealDamage extends Face {
     return `+${this.damage} damage`;
   }
 
+  protected getLabel(): string {
+    return `${super.getLabel()} +${this.damage}`;
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {

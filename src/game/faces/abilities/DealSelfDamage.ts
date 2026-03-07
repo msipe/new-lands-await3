@@ -44,6 +44,10 @@ export class DealSelfDamage extends Face {
     return `-${this.damage} self damage`;
   }
 
+  protected getLabel(): string {
+    return `${super.getLabel()} -${this.damage}`;
+  }
+
   getAdjustmentProperties(): FaceAdjustmentProperty[] {
     return [
       {

@@ -24,8 +24,12 @@ export class Warcry extends Face {
   private attackModifier: number;
 
   constructor(id: string, attackModifier: number) {
-    super(id, `Warcry ${attackModifier >= 0 ? "+" : ""}${attackModifier}`, "abilities");
+    super(id, "Warcry", "abilities");
     this.attackModifier = Math.floor(attackModifier);
+  }
+
+  protected getLabel(): string {
+    return `Warcry ${this.attackModifier >= 0 ? "+" : ""}${this.attackModifier}`;
   }
 
   applyUpgrade(upgrade: FaceUpgrade): boolean {

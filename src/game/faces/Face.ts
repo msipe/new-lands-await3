@@ -16,15 +16,19 @@ export type FaceResolveContext = SideResolveContext & {
 
 export abstract class Face implements DieSide {
   readonly id: string;
-  readonly label: string;
   readonly category: FaceCategory;
 
   private rollCount = 0;
+  private readonly baseLabel: string;
 
   protected constructor(id: string, label: string, category: FaceCategory) {
     this.id = id;
-    this.label = label;
+    this.baseLabel = label;
     this.category = category;
+  }
+
+  get label(): string {
+    return this.getLabel();
   }
 
   resolve(context: SideResolveContext): CombatEvent[] {
@@ -49,6 +53,10 @@ export abstract class Face implements DieSide {
 
   getResolvePopupText(): string {
     return this.label;
+  }
+
+  protected getLabel(): string {
+    return this.baseLabel;
   }
 
   abstract applyUpgrade(upgrade: FaceUpgrade): boolean;

@@ -1,5 +1,5 @@
 import { EffectType } from "../../../../src/game/dice";
-import { ArmorGain } from "../../../../src/game/faces";
+import { ArmorGain, FaceAdjustmentModalityType } from "../../../../src/game/faces";
 
 describe("ArmorGain", () => {
   it("creates an armor event for self", () => {
@@ -24,5 +24,25 @@ describe("ArmorGain", () => {
 
     expect(didApply).toBe(true);
     expect(face.describe()).toBe("Gain 2 armor.");
+  });
+
+  it("keeps label synchronized with armor adjustments", () => {
+    const face = new ArmorGain("armor-gain-label-sync", "Armor Up", 2);
+
+    expect(face.label).toBe("Armor Up +2 armor");
+
+    face.applyAdjustment({
+      propertyId: "armor",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 2,
+    });
+    expect(face.label).toBe("Armor Up +4 armor");
+
+    face.applyAdjustment({
+      propertyId: "armor",
+      type: FaceAdjustmentModalityType.Reduce,
+      steps: 1,
+    });
+    expect(face.label).toBe("Armor Up +3 armor");
   });
 });
