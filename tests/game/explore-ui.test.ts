@@ -95,8 +95,12 @@ describe("explore-ui talent tree", () => {
     expect(uiState.playerProgression.talents[0].rank).toBe(1);
     expect(uiState.playerProgression.unspentTalentPoints).toBe(0);
     expect(uiState.selectedTalentId).toBeUndefined();
+    expect(uiState.isTalentTreeOpen).toBe(false);
 
     // Select again and cancel; modal closes without spending.
+    onExploreMouseReleased(uiState, xpX, xpY, 1);
+    expect(uiState.isTalentTreeOpen).toBe(true);
+
     onExploreMouseReleased(uiState, 280, 150, 1);
     expect(uiState.selectedTalentId).toBe("talent:unyielding-core");
 

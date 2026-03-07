@@ -299,6 +299,7 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         local layout = getTalentTreeLayout(nil, uiState)
         if isPointInRect(nil, x, y, layout.cancelButtonRect) then
             uiState.selectedTalentId = nil
+            uiState.isTalentTreeOpen = false
             return nil
         end
         if isPointInRect(nil, x, y, layout.confirmButtonRect) and canConfirmSelectedTalent(nil, uiState) then

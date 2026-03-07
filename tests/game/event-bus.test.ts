@@ -1,4 +1,11 @@
-import { CombatEventBus, type CombatEvent } from "../../src/game/combat-event-bus";
+import {
+  CombatActionType,
+  CombatEventBus,
+  CombatEventSubscriberTarget,
+  Duration,
+  EventSubscriberType,
+  type CombatEvent,
+} from "../../src/game/combat-event-bus";
 import { EffectType } from "../../src/game/dice";
 
 function createDamageEvent(value: number): CombatEvent {
@@ -132,5 +139,96 @@ describe("combat event bus", () => {
       EffectType.Heal,
       EffectType.Damage,
     ]);
+  });
+
+  it("applies modifier subscribers in hierarchy order before standard subscribers", () => {
+    const bus = new CombatEventBus();
+
+    bus.subscribeModifier(
+      {
+        name: "flat-buff",
+        id: "flat-buff",
+        target: CombatEventSubscriberTarget.PlayerAttackDamage,
+        modifierType: EventSubscriberType.AdditiveDamageBuff,
+        duration: Duration.PlayerTurn,
+      },
+      (event) => ({ ...event, value: event.value + 2 }),
+    );
+
+    bus.subscribeModifier(
+      {
+        name: "mult-buff",
+        id: "mult-buff",
+        target: CombatEventSubscriberTarget.PlayerAttackDamage,
+        modifierType: EventSubscriberType.MultiplicativeDamageBuff,
+        duration: Duration.PlayerTurn,
+      },
+      (event) => ({ ...event, value: event.value * 2 }),
+    );
+
+    const seenValues: number[] = [];
+    bus.subscribe(EffectType.Damage, (event) => {
+      seenValues.push(event.value);
+      return [];
+    });
+
+    bus.publish(createDamageEvent(3));
+
+    // Additive first => (3 + 2) * 2 = 10.
+    expect(seenValues).toEqual([10]);
+  });
+
+  it("clears turn-duration modifier subscribers", () => {
+    const bus = new CombatEventBus();
+
+    bus.subscribeModifier(
+      {
+        name: "warcry",
+        id: "warcry",
+        target: CombatEventSubscriberTarget.PlayerAttackDamage,
+        modifierType: EventSubscriberType.AdditiveDamageBuff,
+        duration: Duration.PlayerTurn,
+      },
+      (event) => ({ ...event, value: event.value + 3 }),
+    );
+
+    const seenValues: number[] = [];
+    bus.subscribe(EffectType.Damage, (event) => {
+      seenValues.push(event.value);
+      return [];
+    });
+
+    bus.publish(createDamageEvent(1));
+    bus.clearSubscribersByDuration(Duration.PlayerTurn);
+    bus.publish(createDamageEvent(1));
+
+    expect(seenValues).toEqual([4, 1]);
+  });
+
+  it("automatically clears player-turn modifiers when player turn end action is emitted", () => {
+    const bus = new CombatEventBus();
+
+    bus.subscribeModifier(
+      {
+        name: "warcry",
+        id: "warcry",
+        target: CombatEventSubscriberTarget.PlayerAttackDamage,
+        modifierType: EventSubscriberType.AdditiveDamageBuff,
+        duration: Duration.PlayerTurn,
+      },
+      (event) => ({ ...event, value: event.value + 3 }),
+    );
+
+    const seenValues: number[] = [];
+    bus.subscribe(EffectType.Damage, (event) => {
+      seenValues.push(event.value);
+      return [];
+    });
+
+    bus.publish(createDamageEvent(1));
+    bus.emitAction({ type: CombatActionType.PlayerTurnEnded });
+    bus.publish(createDamageEvent(1));
+
+    expect(seenValues).toEqual([4, 1]);
   });
 });

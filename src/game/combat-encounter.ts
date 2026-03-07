@@ -1,4 +1,9 @@
-import { CombatEvent, CombatEventBus } from "./combat-event-bus";
+import {
+  CombatActionType,
+  CombatEvent,
+  CombatEventBus,
+  type CombatEventModifierRegistration,
+} from "./combat-event-bus";
 import {
   Die,
   type DieSide,
@@ -8,11 +13,16 @@ import {
 } from "./dice";
 import { getDieConstructById } from "./dice-constructs";
 import { createDieFromConstruct } from "./dice-factory";
+import { buildRollCombatLogLines } from "./combat-log";
 import { getEnemyById, listEnemies } from "../planning/content-registry";
 import type { ContentEnemy } from "../planning/content-types";
 import type { PlayerProgressionState } from "./player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "./player-items";
-import { Ironhide, Miss, Warcry, WildStrike } from "./faces";
+import { Ironhide, Miss, WildStrike, Warcry } from "./faces";
+import {
+  bundleWildStrikeDamageEvents,
+  registerWildStrikeBonusSubscriber,
+} from "./faces/abilities/WildStrike";
 
 type CombatActor = {
   id: string;
@@ -85,6 +95,10 @@ export type CombatEncounterState = {
   playerAttackModifier: number;
 };
 
+type AttackModifierOnRollSide = DieSide & {
+  getAttackModifierOnRoll?: () => number;
+};
+
 function enterEnemyTurn(state: CombatEncounterState): void {
   state.phase = "enemy-turn";
   state.pendingEnemyDieIds =
@@ -151,27 +165,6 @@ function queueGhostResolutionPopupFromEvents(
   });
 }
 
-function getGhostRollSummaryFromEvents(
-  events: CombatEvent[],
-): { dieLabel: string; sideLabel: string; popupText?: string } | undefined {
-  const ghostEvent = events.find((event) => event.meta?.ghostDie === true);
-  if (!ghostEvent) {
-    return undefined;
-  }
-
-  const dieLabelMeta = ghostEvent.meta?.ghostDieLabel;
-  const sideLabelMeta = ghostEvent.meta?.ghostSideLabel;
-  if (typeof dieLabelMeta !== "string" || typeof sideLabelMeta !== "string") {
-    return undefined;
-  }
-
-  return {
-    dieLabel: dieLabelMeta,
-    sideLabel: sideLabelMeta,
-    popupText: typeof ghostEvent.meta?.ghostPopupText === "string" ? ghostEvent.meta.ghostPopupText : undefined,
-  };
-}
-
 function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void {
   const appliesToPlayer =
     (event.source === "enemy" && event.target === "opponent") ||
@@ -206,85 +199,9 @@ function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void
   state.combatLog.push(`${recipientLabel} heals ${event.value}.`);
 }
 
-function applyPlayerAttackModifier(state: CombatEncounterState, event: CombatEvent): CombatEvent {
-  if (
-    state.playerAttackModifier === 0 ||
-    event.effect !== EffectType.Damage ||
-    event.source !== "player" ||
-    event.target !== "opponent"
-  ) {
-    return event;
-  }
-
-  const nextValue = Math.max(0, event.value + state.playerAttackModifier);
-  if (nextValue === event.value) {
-    return event;
-  }
-
-  return {
-    ...event,
-    value: nextValue,
-    meta: {
-      ...(event.meta ?? {}),
-      warcryAppliedModifier: state.playerAttackModifier,
-    },
-  };
-}
-
-function bundleWildStrikeDamage(
-  event: CombatEvent,
-  triggeredEvents: CombatEvent[],
-): { eventToApply: CombatEvent; remainingTriggeredEvents: CombatEvent[] } {
-  const isWildStrikeBaseDamage =
-    event.effect === EffectType.Damage &&
-    event.source === "player" &&
-    event.target === "opponent" &&
-    event.meta?.wildStrike === true &&
-    event.meta?.wildStrikeBonusApplied !== true;
-
-  if (!isWildStrikeBaseDamage) {
-    return {
-      eventToApply: event,
-      remainingTriggeredEvents: triggeredEvents,
-    };
-  }
-
-  let bonusDamage = 0;
-  const remainingTriggeredEvents: CombatEvent[] = [];
-
-  for (const triggeredEvent of triggeredEvents) {
-    const isWildStrikeBonusEvent =
-      triggeredEvent.effect === EffectType.Damage &&
-      triggeredEvent.meta?.wildStrikeBonusApplied === true &&
-      triggeredEvent.dieId === event.dieId;
-
-    if (isWildStrikeBonusEvent) {
-      bonusDamage += Math.max(0, Math.floor(triggeredEvent.value));
-      continue;
-    }
-
-    remainingTriggeredEvents.push(triggeredEvent);
-  }
-
-  if (bonusDamage <= 0) {
-    return {
-      eventToApply: event,
-      remainingTriggeredEvents,
-    };
-  }
-
-  return {
-    eventToApply: {
-      ...event,
-      value: event.value + bonusDamage,
-      meta: {
-        ...(event.meta ?? {}),
-        wildStrikeBundledBonus: bonusDamage,
-      },
-    },
-    remainingTriggeredEvents,
-  };
-}
+type CombatEventModifierSide = DieSide & {
+  createCombatEventModifier?: () => CombatEventModifierRegistration;
+};
 
 function resolveImmediateEvents(
   state: CombatEncounterState,
@@ -299,9 +216,9 @@ function resolveImmediateEvents(
       break;
     }
 
-    const eventWithModifier = applyPlayerAttackModifier(state, event);
+    const preparedEvent = eventBus.prepareEvent(event);
 
-    const triggeredEvents = eventBus.publish(eventWithModifier).map((nextEvent) => ({
+    const triggeredEvents = eventBus.publish(preparedEvent, { alreadyPrepared: true }).map((nextEvent) => ({
       ...nextEvent,
       cause: "triggered" as const,
     }));
@@ -309,57 +226,12 @@ function resolveImmediateEvents(
     const {
       eventToApply,
       remainingTriggeredEvents,
-    } = bundleWildStrikeDamage(eventWithModifier, triggeredEvents);
+    } = bundleWildStrikeDamageEvents(preparedEvent, triggeredEvents);
 
     applyCombatEvent(state, eventToApply);
 
     queue.push(...remainingTriggeredEvents);
   }
-}
-
-function summarizeWildStrikeGhostDamage(
-  events: CombatEvent[],
-): { weaponLabel: string; combinedDamage: number; popupText?: string } | undefined {
-  const ghostEvent = events.find((event) => event.meta?.ghostDie === true);
-  if (!ghostEvent) {
-    return undefined;
-  }
-
-  const weaponLabel = ghostEvent.meta?.ghostDieLabel;
-  if (typeof weaponLabel !== "string") {
-    return undefined;
-  }
-
-  const baseDamage = events
-    .filter(
-      (event) =>
-        event.effect === EffectType.Damage &&
-        event.source === "player" &&
-        event.target === "opponent" &&
-        event.meta?.ghostDie === true,
-    )
-    .reduce((total, event) => total + Math.max(0, Math.floor(event.value)), 0);
-
-  const bonusRaw = ghostEvent.meta?.wildStrikeBonus;
-  const bonusDamage =
-    baseDamage > 0 && typeof bonusRaw === "number" ? Math.max(0, Math.floor(bonusRaw)) : 0;
-  const popupText =
-    typeof ghostEvent.meta?.ghostPopupText === "string" ? ghostEvent.meta.ghostPopupText : undefined;
-
-  return {
-    weaponLabel,
-    combinedDamage: baseDamage + bonusDamage,
-    popupText,
-  };
-}
-
-function normalizeWildStrikeWeaponLabel(weaponLabel: string): string {
-  return weaponLabel.endsWith(" Die") ? weaponLabel.slice(0, -4) : weaponLabel;
-}
-
-function getWildStrikeVariantBonus(events: CombatEvent[]): number {
-  const rawBonus = events.find((event) => event.meta?.wildStrike === true)?.meta?.wildStrikeBonus;
-  return typeof rawBonus === "number" ? Math.max(0, Math.floor(rawBonus)) : 0;
 }
 
 function createMainhandGhostResolver(mainhandWeaponDiceId?: string) {
@@ -444,43 +316,6 @@ function createIronhideDie(): Die {
       new Ironhide("player-die-5-side-5", 0),
       new Ironhide("player-die-5-side-6", 0),
     ],
-  });
-}
-
-function registerWildStrikeBonusSubscriber(eventBus: CombatEventBus): void {
-  eventBus.subscribe(EffectType.Damage, (event) => {
-    const bonusRaw = event.meta?.wildStrikeBonus;
-    const bonus = typeof bonusRaw === "number" ? Math.floor(bonusRaw) : 0;
-
-    if (event.meta?.wildStrikeBonusApplied === true) {
-      return [];
-    }
-
-    if (
-      bonus <= 0 ||
-      event.source !== "player" ||
-      event.target !== "opponent" ||
-      event.value <= 0 ||
-      event.meta?.wildStrike !== true
-    ) {
-      return [];
-    }
-
-    return [
-      {
-        effect: EffectType.Damage,
-        value: bonus,
-        source: event.source,
-        target: event.target,
-        cause: "triggered",
-        dieId: event.dieId,
-        sideId: `${event.sideId}-wild-strike-bonus`,
-        meta: {
-          ...(event.meta ?? {}),
-          wildStrikeBonusApplied: true,
-        },
-      },
-    ];
   });
 }
 
@@ -661,6 +496,7 @@ function beginEnemyResolutionIfNeeded(
   }
 
   state.playerAttackModifier = 0;
+  eventBus.emitAction({ type: CombatActionType.PlayerTurnEnded });
 
   if (state.enemy.hp <= 0) {
     state.phase = "resolved";
@@ -709,8 +545,14 @@ export function rollPlayerDie(
   }
 
   const side = die.roll(randomSource);
-  if (side instanceof Warcry) {
-    state.playerAttackModifier = side.getAttackModifier();
+  const attackModifierOnRoll = (side as AttackModifierOnRollSide).getAttackModifierOnRoll?.();
+  if (typeof attackModifierOnRoll === "number") {
+    state.playerAttackModifier = Math.floor(attackModifierOnRoll);
+  }
+
+  const eventModifier = (side as CombatEventModifierSide).createCombatEventModifier?.();
+  if (eventModifier) {
+    eventBus.subscribeModifier(eventModifier.definition, eventModifier.modifier);
   }
 
   const events = side.resolve({
@@ -720,39 +562,14 @@ export function rollPlayerDie(
     randomSource,
   });
 
-  const isWildStrikeRoll = die.name === "Wild Strike Die";
-  if (isWildStrikeRoll) {
-    state.combatLog.push("Player rolls Wild Strike.");
-  } else if (side instanceof Warcry) {
-    const signedModifier = state.playerAttackModifier >= 0
-      ? `+${state.playerAttackModifier}`
-      : `${state.playerAttackModifier}`;
-    state.combatLog.push(
-      `Player rolls ${die.name}: ${side.label} (attacks ${signedModifier} this turn).`,
-    );
-  } else {
-    state.combatLog.push(`Player rolls ${die.name}: ${side.label}.`);
-  }
-
-  if (isWildStrikeRoll) {
-    const ghostDamageSummary = summarizeWildStrikeGhostDamage(events);
-    const variantBonus = getWildStrikeVariantBonus(events);
-    if (!ghostDamageSummary) {
-      state.combatLog.push(`  > Miss (Wild Strike +${variantBonus})`);
-    } else if (ghostDamageSummary.combinedDamage > 0) {
-      state.combatLog.push(`  > Success (Wild Strike +${variantBonus})`);
-      state.combatLog.push(
-        `${normalizeWildStrikeWeaponLabel(ghostDamageSummary.weaponLabel)} (from Wild Strike):`,
-      );
-      state.combatLog.push(`  > ${ghostDamageSummary.combinedDamage} damage`);
-    } else {
-      state.combatLog.push(`  > Backfire (Wild Strike +${variantBonus})`);
-      state.combatLog.push(
-        `${normalizeWildStrikeWeaponLabel(ghostDamageSummary.weaponLabel)} (from Wild Strike):`,
-      );
-      state.combatLog.push(`  > ${ghostDamageSummary.popupText ?? "No effect"}`);
-    }
-  }
+  state.combatLog.push(
+    ...buildRollCombatLogLines({
+      source: "player",
+      dieName: die.name,
+      side,
+      events,
+    }),
+  );
 
   resolveImmediateEvents(state, eventBus, events);
   queueResolutionPopup(state, "player", die.id, side);
@@ -826,6 +643,7 @@ export function resolveEnemyDie(
   state.phase = "player-turn";
   state.playerRollIndex = 0;
   state.rolledPlayerDieIds = [];
+  eventBus.emitAction({ type: CombatActionType.EnemyTurnEnded });
   state.combatLog.push("Enemy intent revealed. Player turn begins.");
   return state;
 }

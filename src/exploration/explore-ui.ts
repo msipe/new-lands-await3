@@ -435,6 +435,7 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
         );
       }
       uiState.selectedTalentId = undefined;
+      uiState.isTalentTreeOpen = false;
       return undefined;
     }
 
