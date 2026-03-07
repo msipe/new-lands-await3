@@ -1,8 +1,6 @@
-import {
-  MinorMend,
-  ShieldBash,
-  SwordSlash,
-} from "../faces";
+import { MinorMend } from "../faces/abilities/MinorMend";
+import { ShieldBash } from "../faces/abilities/ShieldBash";
+import { SwordSlash } from "../faces/abilities/SwordSlash";
 import type { DieConstruct } from "./types";
 
 export const ENEMY_DIE_CONSTRUCTS: DieConstruct[] = [

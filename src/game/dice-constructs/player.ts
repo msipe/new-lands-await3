@@ -1,9 +1,7 @@
-import {
-  ArcaneBurst,
-  MinorMend,
-  ShieldBash,
-  SwordSlash,
-} from "../faces";
+import { ArcaneBurst } from "../faces/abilities/ArcaneBurst";
+import { MinorMend } from "../faces/abilities/MinorMend";
+import { ShieldBash } from "../faces/abilities/ShieldBash";
+import { SwordSlash } from "../faces/abilities/SwordSlash";
 import type { DieConstruct } from "./types";
 
 export const PLAYER_DIE_CONSTRUCTS: DieConstruct[] = [

@@ -54,17 +54,17 @@ function getDieFromInspector(self, uiState, state)
     if not inspector then
         return nil
     end
-    if inspector.ghostDieId then
-        local ghostDie = findVisualDieById(nil, uiState, inspector.ghostDieId)
-        if not ghostDie or not ghostDie.ghostInspectorSides or not ghostDie.ghostInspectorName then
+    if inspector.spawnedDieId then
+        local spawnedDie = findVisualDieById(nil, uiState, inspector.spawnedDieId)
+        if not spawnedDie or not spawnedDie.spawnedInspectorSides or not spawnedDie.spawnedInspectorName then
             return nil
         end
         return {
-            name = ghostDie.ghostInspectorName,
+            name = spawnedDie.spawnedInspectorName,
             sides = __TS__ArrayMap(
-                ghostDie.ghostInspectorSides,
+                spawnedDie.spawnedInspectorSides,
                 function(____, side, index) return {
-                    id = "ghost-side-" .. tostring(index + 1),
+                    id = "spawned-side-" .. tostring(index + 1),
                     label = side.label,
                     describe = function() return side.description end
                 } end
@@ -990,19 +990,18 @@ end
 function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
     for ____, popup in ipairs(popups) do
         do
-            local ____opt_23 = popup.ghostDie
-            if (____opt_23 and ____opt_23.isGhost) == true then
+            if popup.spawnedDie then
                 local sourceDie = findVisualDieByCombatId(nil, uiState, popup.dieId)
                 local spawnX = sourceDie and sourceDie.x or uiState.layout.poolX + uiState.layout.poolWidth * 0.3
                 local spawnY = sourceDie and sourceDie.y or uiState.layout.poolY + 84
                 local tossDirection = math.random() < 0.5 and -1 or 1
                 local launchVx = (sourceDie and sourceDie.vx or 0) * 0.28 + tossDirection * (140 + math.random() * 90)
                 local launchVy = (sourceDie and sourceDie.vy or 0) * 0.2 - (190 + math.random() * 120)
-                local ghostConstruct = getDieConstructById(nil, popup.ghostDie.constructId)
-                local ghostInspectDie = createDieFromConstruct(nil, {construct = ghostConstruct, dieId = "ghost-inspector-" .. popup.dieId})
-                local ____uiState_arenaPlayerDice_33 = uiState.arenaPlayerDice
-                ____uiState_arenaPlayerDice_33[#____uiState_arenaPlayerDice_33 + 1] = {
-                    id = (("ghost-" .. popup.dieId) .. "-") .. string.sub(
+                local spawnedConstruct = getDieConstructById(nil, popup.spawnedDie.constructId)
+                local spawnedInspectDie = createDieFromConstruct(nil, {construct = spawnedConstruct, dieId = "spawned-inspector-" .. popup.dieId})
+                local ____uiState_arenaPlayerDice_31 = uiState.arenaPlayerDice
+                ____uiState_arenaPlayerDice_31[#____uiState_arenaPlayerDice_31 + 1] = {
+                    id = (("spawned-" .. popup.dieId) .. "-") .. string.sub(
                         __TS__NumberToString(
                             math.random(),
                             16
@@ -1011,9 +1010,9 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                         8
                     ),
                     owner = popup.source,
-                    isGhostDie = true,
-                    label = popup.ghostDie.sideLabel,
-                    displayLabel = popup.ghostDie.sideLabel,
+                    isSpawnedDie = true,
+                    label = popup.spawnedDie.sideLabel,
+                    displayLabel = popup.spawnedDie.sideLabel,
                     rollingLabel = nil,
                     rollingFaceTimer = 0,
                     faceLocked = true,
@@ -1026,17 +1025,17 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                     size = 44,
                     state = "arena",
                     flashTimer = RESOLVE_FLASH_DURATION,
-                    ghostInspectorName = popup.ghostDie.dieLabel,
-                    ghostInspectorSides = __TS__ArrayMap(
-                        ghostInspectDie.sides,
+                    spawnedInspectorName = popup.spawnedDie.dieLabel,
+                    spawnedInspectorSides = __TS__ArrayMap(
+                        spawnedInspectDie.sides,
                         function(____, side) return {
                             label = side.label,
                             description = type(side.describe) == "function" and side:describe() or side.label
                         } end
                     )
                 }
-                local ____uiState_floatingPopups_34 = uiState.floatingPopups
-                ____uiState_floatingPopups_34[#____uiState_floatingPopups_34 + 1] = {
+                local ____uiState_floatingPopups_32 = uiState.floatingPopups
+                ____uiState_floatingPopups_32[#____uiState_floatingPopups_32 + 1] = {
                     x = spawnX,
                     y = spawnY - 32,
                     text = popup.text,
@@ -1055,8 +1054,8 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                 die.displayLabel = popup.sideLabel
             end
             lockVisualDieFace(nil, die)
-            local ____uiState_floatingPopups_35 = uiState.floatingPopups
-            ____uiState_floatingPopups_35[#____uiState_floatingPopups_35 + 1] = {
+            local ____uiState_floatingPopups_33 = uiState.floatingPopups
+            ____uiState_floatingPopups_33[#____uiState_floatingPopups_33 + 1] = {
                 x = die.x,
                 y = die.y - die.size * 0.72,
                 text = popup.text,
@@ -1250,8 +1249,8 @@ local function drawDieInspector(self, uiState, state)
         8,
         8
     )
-    local ____opt_36 = uiState.inspector
-    local ownerLabel = (____opt_36 and ____opt_36.owner) == "player" and "Ally" or "Enemy"
+    local ____opt_34 = uiState.inspector
+    local ownerLabel = (____opt_34 and ____opt_34.owner) == "player" and "Ally" or "Enemy"
     love.graphics.setColor(1, 1, 1)
     love.graphics.print((ownerLabel .. " Die: ") .. die.name, panel.x + 20, panel.y + 14)
     love.graphics.setColor(0.78, 0.83, 0.9)
@@ -1311,13 +1310,13 @@ local function drawDieInspector(self, uiState, state)
         6,
         6
     )
-    local ____opt_38 = uiState.inspector
-    local ____temp_42 = ____opt_38 and ____opt_38.hoveredSideIndex
-    if ____temp_42 == nil then
-        local ____opt_40 = uiState.inspector
-        ____temp_42 = ____opt_40 and ____opt_40.selectedSideIndex
+    local ____opt_36 = uiState.inspector
+    local ____temp_40 = ____opt_36 and ____opt_36.hoveredSideIndex
+    if ____temp_40 == nil then
+        local ____opt_38 = uiState.inspector
+        ____temp_40 = ____opt_38 and ____opt_38.selectedSideIndex
     end
-    local activeSideIndex = ____temp_42
+    local activeSideIndex = ____temp_40
     for ____, tile in ipairs(layout.tiles) do
         local side = die.sides[tile.sideIndex + 1]
         local label = layout.denseMode and tostring(tile.sideIndex + 1) or side.label
@@ -1408,13 +1407,13 @@ local function drawDieInspector(self, uiState, state)
     end
 end
 local function openInspectorForDie(self, uiState, die)
-    if not die.combatDieId and not die.isGhostDie then
+    if not die.combatDieId and not die.isSpawnedDie then
         return
     end
     uiState.inspector = {
         owner = die.owner,
         combatDieId = die.combatDieId,
-        ghostDieId = die.isGhostDie and die.id or nil,
+        spawnedDieId = die.isSpawnedDie and die.id or nil,
         selectedSideIndex = nil,
         hoveredSideIndex = nil
     }
@@ -1537,9 +1536,9 @@ function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
     local dragged = __TS__ArrayFind(
         uiState.playerDice,
         function(____, die)
-            local ____die_id_45 = die.id
-            local ____opt_43 = uiState.drag
-            return ____die_id_45 == (____opt_43 and ____opt_43.dieId)
+            local ____die_id_43 = die.id
+            local ____opt_41 = uiState.drag
+            return ____die_id_43 == (____opt_41 and ____opt_41.dieId)
         end
     )
     if not dragged then
@@ -1731,7 +1730,7 @@ local function drawDie(self, die)
     love.graphics.push()
     love.graphics.translate(die.x, die.y)
     love.graphics.rotate(die.angle)
-    if die.isGhostDie then
+    if die.isSpawnedDie then
         love.graphics.setColor(0.58, 0.76, 1)
     elseif die.isItemDie then
         love.graphics.setColor(0.72, 0.74, 0.78)

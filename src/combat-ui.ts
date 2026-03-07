@@ -27,7 +27,7 @@ type VisualDie = {
   id: string;
   owner: Owner;
   isItemDie?: boolean;
-  isGhostDie?: boolean;
+  isSpawnedDie?: boolean;
   combatDieId?: string;
   label: string;
   displayLabel?: string;
@@ -52,8 +52,8 @@ type VisualDie = {
   parkProgress?: number;
   parkDuration?: number;
   flashTimer?: number;
-  ghostInspectorName?: string;
-  ghostInspectorSides?: { label: string; description: string }[];
+  spawnedInspectorName?: string;
+  spawnedInspectorSides?: { label: string; description: string }[];
 };
 
 type DragState = {
@@ -77,7 +77,7 @@ type QueuedPlayerThrow = {
 type DiceInspectorState = {
   owner: Owner;
   combatDieId?: string;
-  ghostDieId?: string;
+  spawnedDieId?: string;
   selectedSideIndex?: number;
   hoveredSideIndex?: number;
 };
@@ -1155,25 +1155,25 @@ export function enqueueCombatResolutionPopups(
   popups: CombatResolutionPopup[],
 ): void {
   for (const popup of popups) {
-    if (popup.ghostDie?.isGhost === true) {
+    if (popup.spawnedDie) {
       const sourceDie = findVisualDieByCombatId(uiState, popup.dieId);
       const spawnX = sourceDie?.x ?? uiState.layout.poolX + uiState.layout.poolWidth * 0.3;
       const spawnY = sourceDie?.y ?? uiState.layout.poolY + 84;
       const tossDirection = Math.random() < 0.5 ? -1 : 1;
       const launchVx = (sourceDie?.vx ?? 0) * 0.28 + tossDirection * (140 + Math.random() * 90);
       const launchVy = (sourceDie?.vy ?? 0) * 0.2 - (190 + Math.random() * 120);
-      const ghostConstruct = getDieConstructById(popup.ghostDie.constructId);
-      const ghostInspectDie = createDieFromConstruct({
-        construct: ghostConstruct,
-        dieId: `ghost-inspector-${popup.dieId}`,
+      const spawnedConstruct = getDieConstructById(popup.spawnedDie.constructId);
+      const spawnedInspectDie = createDieFromConstruct({
+        construct: spawnedConstruct,
+        dieId: `spawned-inspector-${popup.dieId}`,
       });
 
       uiState.arenaPlayerDice.push({
-        id: `ghost-${popup.dieId}-${Math.random().toString(16).slice(2, 8)}`,
+        id: `spawned-${popup.dieId}-${Math.random().toString(16).slice(2, 8)}`,
         owner: popup.source,
-        isGhostDie: true,
-        label: popup.ghostDie.sideLabel,
-        displayLabel: popup.ghostDie.sideLabel,
+        isSpawnedDie: true,
+        label: popup.spawnedDie.sideLabel,
+        displayLabel: popup.spawnedDie.sideLabel,
         rollingLabel: undefined,
         rollingFaceTimer: 0,
         faceLocked: true,
@@ -1186,8 +1186,8 @@ export function enqueueCombatResolutionPopups(
         size: 44,
         state: "arena",
         flashTimer: RESOLVE_FLASH_DURATION,
-        ghostInspectorName: popup.ghostDie.dieLabel,
-        ghostInspectorSides: ghostInspectDie.sides.map((side) => ({
+        spawnedInspectorName: popup.spawnedDie.dieLabel,
+        spawnedInspectorSides: spawnedInspectDie.sides.map((side) => ({
           label: side.label,
           description: typeof side.describe === "function" ? side.describe() : side.label,
         })),
@@ -1381,16 +1381,16 @@ function getDieFromInspector(uiState: CombatUiState, state: CombatEncounterState
     return undefined;
   }
 
-  if (inspector.ghostDieId) {
-    const ghostDie = findVisualDieById(uiState, inspector.ghostDieId);
-    if (!ghostDie || !ghostDie.ghostInspectorSides || !ghostDie.ghostInspectorName) {
+  if (inspector.spawnedDieId) {
+    const spawnedDie = findVisualDieById(uiState, inspector.spawnedDieId);
+    if (!spawnedDie || !spawnedDie.spawnedInspectorSides || !spawnedDie.spawnedInspectorName) {
       return undefined;
     }
 
     return {
-      name: ghostDie.ghostInspectorName,
-      sides: ghostDie.ghostInspectorSides.map((side, index) => ({
-        id: `ghost-side-${index + 1}`,
+      name: spawnedDie.spawnedInspectorName,
+      sides: spawnedDie.spawnedInspectorSides.map((side, index) => ({
+        id: `spawned-side-${index + 1}`,
         label: side.label,
         describe: () => side.description,
       })),
@@ -1517,14 +1517,14 @@ function drawDieInspector(uiState: CombatUiState, state: CombatEncounterState): 
 }
 
 function openInspectorForDie(uiState: CombatUiState, die: VisualDie): void {
-  if (!die.combatDieId && !die.isGhostDie) {
+  if (!die.combatDieId && !die.isSpawnedDie) {
     return;
   }
 
   uiState.inspector = {
     owner: die.owner,
     combatDieId: die.combatDieId,
-    ghostDieId: die.isGhostDie ? die.id : undefined,
+    spawnedDieId: die.isSpawnedDie ? die.id : undefined,
     selectedSideIndex: undefined,
     hoveredSideIndex: undefined,
   };
@@ -1818,7 +1818,7 @@ function drawDie(die: VisualDie): void {
   love.graphics.translate(die.x, die.y);
   love.graphics.rotate(die.angle);
 
-  if (die.isGhostDie) {
+  if (die.isSpawnedDie) {
     love.graphics.setColor(0.58, 0.76, 1);
   } else if (die.isItemDie) {
     // Stronger gray tint so equipment dice are clearly distinguishable.

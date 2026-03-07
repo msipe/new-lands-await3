@@ -52,6 +52,7 @@ import {
     type CombatEncounterState,
 } from "./game/combat-encounter";
 import { CombatEventBus } from "./game/combat-event-bus";
+import { createPlayerCombatDiceLoadout } from "./game/player-combat-dice";
 import {
     advanceScene,
     chooseExploreBranch,
@@ -93,7 +94,8 @@ function createCombatForCurrentTile(): { state: CombatEncounterState; eventBus: 
     const currentTile = activeExploreUi ? getCurrentTile(activeExploreUi.model) : undefined;
     const runSeed = activeExploreUi?.plannerSpec.seed ?? `run-fallback-${runSeedNonce}`;
     const enemyId = pickEnemyIdForTile(currentTile, runSeed);
-    return createCombatEncounter({ enemyId, playerProgression });
+    const playerDice = createPlayerCombatDiceLoadout(playerProgression);
+    return createCombatEncounter({ enemyId, playerProgression, playerDice });
 }
 
 love.load = () => {

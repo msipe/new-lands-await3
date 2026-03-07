@@ -1,10 +1,43 @@
-import { CombatEventBus, type CombatEvent } from "../../combat-event-bus";
+import {
+  CombatEventSubscriberTarget,
+  Duration,
+  EventSubscriberType,
+  type CombatEvent,
+  type CombatEventModifierRegistration,
+} from "../../combat-event-bus";
 import type { CombatLogRollContext } from "../../combat-log";
 import { EffectType, defaultRandomSource, type RandomSource } from "../../dice";
+import {
+  resolveTransientDieFromConstruct,
+  type TransientDiePopupData,
+} from "../../transient-die";
 import { Face, type FaceResolveContext } from "../Face";
 import type { FaceUpgrade } from "../FaceUpgrade";
 
-type ResolveGhostWeaponEvents = (context: FaceResolveContext, randomSource: RandomSource) => CombatEvent[];
+type ResolveTransientWeaponEvents = (
+  context: FaceResolveContext,
+  randomSource: RandomSource,
+  onResolvedTransientDie?: (popupData: TransientDiePopupData) => void,
+) => CombatEvent[];
+
+function createMainhandTransientResolver(
+  mainhandWeaponConstructId?: string,
+): ResolveTransientWeaponEvents {
+  return (context, randomSource, onResolvedTransientDie) => {
+    if (!mainhandWeaponConstructId) {
+      return [];
+    }
+
+    return resolveTransientDieFromConstruct({
+      constructId: mainhandWeaponConstructId,
+      parentDieId: context.dieId,
+      source: context.source,
+      cause: context.cause,
+      randomSource,
+      onResolvedTransientDie,
+    });
+  };
+}
 
 export type WildStrikeRollSummary = {
   outcome: "miss" | "success" | "backfire";
@@ -18,18 +51,20 @@ function hasWildStrikeMeta(event: CombatEvent): boolean {
   return event.meta?.wildStrike === true;
 }
 
-function getWildStrikeBonusValue(rawBonus: unknown): number {
-  return typeof rawBonus === "number" ? Math.max(0, Math.floor(rawBonus)) : 0;
-}
-
-function isWildStrikeBaseDamageEvent(event: CombatEvent): boolean {
+function isMatchingWildStrikeDamageEvent(event: CombatEvent): boolean {
   return (
     event.effect === EffectType.Damage &&
     event.source === "player" &&
     event.target === "opponent" &&
-    hasWildStrikeMeta(event) &&
-    event.meta?.wildStrikeBonusApplied !== true
+    event.value > 0 &&
+    event.meta?.wildStrike === true &&
+    typeof event.meta?.wildStrikeSourceDieId === "string" &&
+    event.meta.wildStrikeSourceDieId === event.dieId
   );
+}
+
+function getWildStrikeBonusValue(rawBonus: unknown): number {
+  return typeof rawBonus === "number" ? Math.max(0, Math.floor(rawBonus)) : 0;
 }
 
 export function getWildStrikeVariantBonus(events: CombatEvent[]): number {
@@ -43,9 +78,9 @@ export function normalizeWildStrikeWeaponLabel(weaponLabel: string): string {
 
 export function summarizeWildStrikeRoll(events: CombatEvent[]): WildStrikeRollSummary {
   const variantBonus = getWildStrikeVariantBonus(events);
-  const ghostEvent = events.find((event) => event.meta?.ghostDie === true);
+  const transientEvent = events.find((event) => event.meta?.transientDie === true);
 
-  if (!ghostEvent) {
+  if (!transientEvent) {
     return {
       outcome: "miss",
       variantBonus,
@@ -54,7 +89,9 @@ export function summarizeWildStrikeRoll(events: CombatEvent[]): WildStrikeRollSu
   }
 
   const weaponLabel =
-    typeof ghostEvent.meta?.ghostDieLabel === "string" ? ghostEvent.meta.ghostDieLabel : undefined;
+    typeof transientEvent.meta?.transientDieLabel === "string"
+      ? transientEvent.meta.transientDieLabel
+      : undefined;
 
   const baseDamage = events
     .filter(
@@ -62,15 +99,17 @@ export function summarizeWildStrikeRoll(events: CombatEvent[]): WildStrikeRollSu
         event.effect === EffectType.Damage &&
         event.source === "player" &&
         event.target === "opponent" &&
-        event.meta?.ghostDie === true,
+        event.meta?.transientDie === true,
     )
     .reduce((total, event) => total + Math.max(0, Math.floor(event.value)), 0);
 
   const bonusDamage =
-    baseDamage > 0 ? getWildStrikeBonusValue(ghostEvent.meta?.wildStrikeBonus) : 0;
+    baseDamage > 0 ? getWildStrikeBonusValue(transientEvent.meta?.wildStrikeBonus) : 0;
   const combinedDamage = baseDamage + bonusDamage;
   const popupText =
-    typeof ghostEvent.meta?.ghostPopupText === "string" ? ghostEvent.meta.ghostPopupText : undefined;
+    typeof transientEvent.meta?.transientPopupText === "string"
+      ? transientEvent.meta.transientPopupText
+      : undefined;
 
   return {
     outcome: combinedDamage > 0 ? "success" : "backfire",
@@ -81,105 +120,20 @@ export function summarizeWildStrikeRoll(events: CombatEvent[]): WildStrikeRollSu
   };
 }
 
-export function bundleWildStrikeDamageEvents(
-  event: CombatEvent,
-  triggeredEvents: CombatEvent[],
-): { eventToApply: CombatEvent; remainingTriggeredEvents: CombatEvent[] } {
-  if (!isWildStrikeBaseDamageEvent(event)) {
-    return {
-      eventToApply: event,
-      remainingTriggeredEvents: triggeredEvents,
-    };
-  }
-
-  let bonusDamage = 0;
-  const remainingTriggeredEvents: CombatEvent[] = [];
-
-  for (const triggeredEvent of triggeredEvents) {
-    const isWildStrikeBonusEvent =
-      triggeredEvent.effect === EffectType.Damage &&
-      triggeredEvent.meta?.wildStrikeBonusApplied === true &&
-      triggeredEvent.dieId === event.dieId;
-
-    if (isWildStrikeBonusEvent) {
-      bonusDamage += Math.max(0, Math.floor(triggeredEvent.value));
-      continue;
-    }
-
-    remainingTriggeredEvents.push(triggeredEvent);
-  }
-
-  if (bonusDamage <= 0) {
-    return {
-      eventToApply: event,
-      remainingTriggeredEvents,
-    };
-  }
-
-  return {
-    eventToApply: {
-      ...event,
-      value: event.value + bonusDamage,
-      meta: {
-        ...(event.meta ?? {}),
-        wildStrikeBundledBonus: bonusDamage,
-      },
-    },
-    remainingTriggeredEvents,
-  };
-}
-
-export function registerWildStrikeBonusSubscriber(eventBus: CombatEventBus): void {
-  eventBus.subscribe(EffectType.Damage, (event) => {
-    const bonus = typeof event.meta?.wildStrikeBonus === "number"
-      ? Math.floor(event.meta.wildStrikeBonus)
-      : 0;
-
-    if (event.meta?.wildStrikeBonusApplied === true) {
-      return [];
-    }
-
-    if (
-      bonus <= 0 ||
-      event.source !== "player" ||
-      event.target !== "opponent" ||
-      event.value <= 0 ||
-      !hasWildStrikeMeta(event)
-    ) {
-      return [];
-    }
-
-    return [
-      {
-        effect: EffectType.Damage,
-        value: bonus,
-        source: event.source,
-        target: event.target,
-        cause: "triggered",
-        dieId: event.dieId,
-        sideId: `${event.sideId}-wild-strike-bonus`,
-        meta: {
-          ...(event.meta ?? {}),
-          wildStrikeBonusApplied: true,
-        },
-      },
-    ];
-  });
-}
-
 export class WildStrike extends Face {
   private bonusDamage: number;
-  private readonly resolveGhostWeaponEvents: ResolveGhostWeaponEvents;
+  private readonly resolveTransientWeaponEvents: ResolveTransientWeaponEvents;
+  private lastTransientPopupData?: TransientDiePopupData;
 
   constructor(
     id: string,
     bonusDamage: number,
-    resolveGhostWeaponEvents: ResolveGhostWeaponEvents,
+    mainhandWeaponConstructId?: string,
     label = "Wild Strike",
   ) {
     super(id, label, "abilities");
     this.bonusDamage = Math.max(0, Math.floor(bonusDamage));
-    this.resolveGhostWeaponEvents = resolveGhostWeaponEvents;
+    this.resolveTransientWeaponEvents = createMainhandTransientResolver(mainhandWeaponConstructId);
   }
 
   applyUpgrade(upgrade: FaceUpgrade): boolean {
@@ -202,6 +156,38 @@ export class WildStrike extends Face {
 
   getResolvePopupText(): string {
     return `Wild Strike (+${this.bonusDamage})`;
+  }
+
+  getSpawnedDiePopupData(): TransientDiePopupData | undefined {
+    return this.lastTransientPopupData;
+  }
+
+  createCombatEventModifier(): CombatEventModifierRegistration {
+    const bonusDamage = this.bonusDamage;
+
+    return {
+      definition: {
+        name: "wild-strike-bonus",
+        id: this.id,
+        target: CombatEventSubscriberTarget.PlayerAttackDamage,
+        modifierType: EventSubscriberType.AdditiveDamageBuff,
+        duration: Duration.PlayerTurn,
+      },
+      modifier: (event) => {
+        if (!isMatchingWildStrikeDamageEvent(event) || bonusDamage <= 0) {
+          return event;
+        }
+
+        return {
+          ...event,
+          value: event.value + bonusDamage,
+          meta: {
+            ...(event.meta ?? {}),
+            wildStrikeBundledBonus: bonusDamage,
+          },
+        };
+      },
+    };
   }
 
   getCombatLogLines(context: CombatLogRollContext): string[] {
@@ -232,18 +218,26 @@ export class WildStrike extends Face {
 
   protected onResolve(context: FaceResolveContext): CombatEvent[] {
     const randomSource = context.randomSource ?? defaultRandomSource;
-    const ghostEvents = this.resolveGhostWeaponEvents(context, randomSource);
+    this.lastTransientPopupData = undefined;
+    const transientEvents = this.resolveTransientWeaponEvents(
+      context,
+      randomSource,
+      (popupData) => {
+        this.lastTransientPopupData = popupData;
+      },
+    );
 
-    if (ghostEvents.length === 0) {
+    if (transientEvents.length === 0) {
       return [];
     }
 
-    return ghostEvents.map((event) => ({
+    return transientEvents.map((event) => ({
       ...event,
       meta: {
         ...(event.meta ?? {}),
         wildStrike: true,
         wildStrikeBonus: this.bonusDamage,
+        wildStrikeSourceDieId: context.dieId,
         wildStrikeSourceSideId: this.id,
       },
     }));

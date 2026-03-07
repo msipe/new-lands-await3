@@ -13,16 +13,12 @@ import {
 } from "./dice";
 import { getDieConstructById } from "./dice-constructs";
 import { createDieFromConstruct } from "./dice-factory";
+import { createPlayerCombatDiceLoadout } from "./player-combat-dice";
 import { buildRollCombatLogLines } from "./combat-log";
+import { getTransientDiePopupDataFromEvents } from "./transient-die";
 import { getEnemyById, listEnemies } from "../planning/content-registry";
 import type { ContentEnemy } from "../planning/content-types";
-import type { PlayerProgressionState } from "./player-progression";
-import { EQUIPMENT_SLOT_ORDER } from "./player-items";
-import { Ironhide, Miss, WildStrike, Warcry } from "./faces";
-import {
-  bundleWildStrikeDamageEvents,
-  registerWildStrikeBonusSubscriber,
-} from "./faces/abilities/WildStrike";
+import { createPlayerProgression, type PlayerProgressionState } from "./player-progression";
 
 type CombatActor = {
   id: string;
@@ -72,8 +68,7 @@ export type CombatResolutionPopup = {
   dieId: string;
   text: string;
   sideLabel?: string;
-  ghostDie?: {
-    isGhost: true;
+  spawnedDie?: {
     constructId: string;
     dieLabel: string;
     sideLabel: string;
@@ -92,11 +87,6 @@ export type CombatEncounterState = {
   enemyIntent: PendingEnemyIntent;
   combatLog: string[];
   pendingResolutionPopups: CombatResolutionPopup[];
-  playerAttackModifier: number;
-};
-
-type AttackModifierOnRollSide = DieSide & {
-  getAttackModifierOnRoll?: () => number;
 };
 
 function enterEnemyTurn(state: CombatEncounterState): void {
@@ -126,26 +116,17 @@ function queueResolutionPopup(
   });
 }
 
-function queueGhostResolutionPopupFromEvents(
+function queueSpawnedDiePopupFromEvents(
   state: CombatEncounterState,
   source: "player" | "enemy",
   dieId: string,
   events: CombatEvent[],
+  side?: DieSide,
 ): void {
-  const ghostEvent = events.find((event) => event.meta?.ghostDie === true);
-  if (!ghostEvent) {
-    return;
-  }
-
-  const dieLabelMeta = ghostEvent.meta?.ghostDieLabel;
-  const sideLabelMeta = ghostEvent.meta?.ghostSideLabel;
-  const constructIdMeta = ghostEvent.meta?.ghostDieConstructId;
-  const popupTextMeta = ghostEvent.meta?.ghostPopupText;
-  if (
-    typeof dieLabelMeta !== "string" ||
-    typeof sideLabelMeta !== "string" ||
-    typeof constructIdMeta !== "string"
-  ) {
+  const transientPopup =
+    getTransientDiePopupDataFromEvents(events) ??
+    (side as SpawnedDiePopupSide | undefined)?.getSpawnedDiePopupData?.();
+  if (!transientPopup) {
     return;
   }
 
@@ -153,14 +134,13 @@ function queueGhostResolutionPopupFromEvents(
     source,
     dieId,
     text:
-      typeof popupTextMeta === "string" && popupTextMeta.length > 0
-        ? `Ghost ${popupTextMeta}`
-        : `Ghost ${sideLabelMeta}`,
-    ghostDie: {
-      isGhost: true,
-      constructId: constructIdMeta,
-      dieLabel: dieLabelMeta,
-      sideLabel: sideLabelMeta,
+      typeof transientPopup.popupText === "string" && transientPopup.popupText.length > 0
+        ? `Transient ${transientPopup.popupText}`
+        : `Transient ${transientPopup.sideLabel}`,
+    spawnedDie: {
+      constructId: transientPopup.constructId,
+      dieLabel: transientPopup.dieLabel,
+      sideLabel: transientPopup.sideLabel,
     },
   });
 }
@@ -203,6 +183,15 @@ type CombatEventModifierSide = DieSide & {
   createCombatEventModifier?: () => CombatEventModifierRegistration;
 };
 
+type SpawnedDiePopupSide = DieSide & {
+  getSpawnedDiePopupData?: () => {
+    constructId: string;
+    dieLabel: string;
+    sideLabel: string;
+    popupText?: string;
+  } | undefined;
+};
+
 function resolveImmediateEvents(
   state: CombatEncounterState,
   eventBus: CombatEventBus,
@@ -223,143 +212,10 @@ function resolveImmediateEvents(
       cause: "triggered" as const,
     }));
 
-    const {
-      eventToApply,
-      remainingTriggeredEvents,
-    } = bundleWildStrikeDamageEvents(preparedEvent, triggeredEvents);
+    applyCombatEvent(state, preparedEvent);
 
-    applyCombatEvent(state, eventToApply);
-
-    queue.push(...remainingTriggeredEvents);
+    queue.push(...triggeredEvents);
   }
-}
-
-function createMainhandGhostResolver(mainhandWeaponDiceId?: string) {
-  return (context: { source: "player" | "enemy"; cause: "enemy-intent" | "player-roll" | "triggered"; dieId: string; randomSource?: RandomSource }) => {
-    if (!mainhandWeaponDiceId) {
-      return [] as CombatEvent[];
-    }
-
-    const construct = getDieConstructById(mainhandWeaponDiceId);
-    const ghostDie = createDieFromConstruct({
-      construct,
-      dieId: `${context.dieId}-ghost-mainhand`,
-      nameOverride: `${construct.name} (Ghost)`,
-    });
-
-    const ghostSide = ghostDie.roll(context.randomSource ?? defaultRandomSource);
-    const ghostPopupText =
-      typeof ghostSide.getResolvePopupText === "function"
-        ? ghostSide.getResolvePopupText()
-        : ghostSide.label;
-    return ghostSide.resolve({
-      source: context.source,
-      cause: context.cause,
-      dieId: context.dieId,
-      randomSource: context.randomSource,
-    }).map((event) => ({
-      ...event,
-      meta: {
-        ...(event.meta ?? {}),
-        ghostDie: true,
-        ghostDieConstructId: construct.id,
-        ghostDieLabel: construct.name,
-        ghostSideLabel: ghostSide.label,
-        ghostPopupText,
-        ghostSideId: ghostSide.id,
-      },
-    }));
-  };
-}
-
-function createWarcryDie(): Die {
-  return new Die({
-    id: "player-die-1",
-    name: "Warcry Die",
-    sides: [
-      new Warcry("player-die-1-side-1", 3),
-      new Warcry("player-die-1-side-2", 2),
-      new Warcry("player-die-1-side-3", 1),
-      new Warcry("player-die-1-side-4", 0),
-      new Warcry("player-die-1-side-5", -1),
-      new Warcry("player-die-1-side-6", -2),
-    ],
-  });
-}
-
-function createWildStrikeDie(mainhandWeaponDiceId?: string): Die {
-  const resolveGhostWeaponEvents = createMainhandGhostResolver(mainhandWeaponDiceId);
-
-  return new Die({
-    id: "player-die-4",
-    name: "Wild Strike Die",
-    sides: [
-      new WildStrike("player-die-4-side-1", 2, resolveGhostWeaponEvents),
-      new WildStrike("player-die-4-side-2", 1, resolveGhostWeaponEvents),
-      new WildStrike("player-die-4-side-3", 0, resolveGhostWeaponEvents),
-      new Miss("player-die-4-side-4"),
-      new Miss("player-die-4-side-5"),
-      new Miss("player-die-4-side-6"),
-    ],
-  });
-}
-
-function createIronhideDie(): Die {
-  return new Die({
-    id: "player-die-5",
-    name: "Ironhide Die",
-    sides: [
-      new Ironhide("player-die-5-side-1", 5),
-      new Ironhide("player-die-5-side-2", 4),
-      new Ironhide("player-die-5-side-3", 3),
-      new Ironhide("player-die-5-side-4", 2),
-      new Ironhide("player-die-5-side-5", 0),
-      new Ironhide("player-die-5-side-6", 0),
-    ],
-  });
-}
-
-function createPlayerDice(progression?: PlayerProgressionState): Die[] {
-  const mainhandWeaponDiceId = progression
-    ? progression.items.equipped["weapon-1"]?.diceId
-    : "spark-die";
-
-  const wardConstruct = getDieConstructById("ward-die");
-  const mendConstruct = getDieConstructById("mend-die");
-
-  const baseDice = [
-    createWarcryDie(),
-    createDieFromConstruct({ construct: wardConstruct, dieId: "player-die-2" }),
-    createDieFromConstruct({ construct: mendConstruct, dieId: "player-die-3" }),
-    createWildStrikeDie(mainhandWeaponDiceId),
-    createIronhideDie(),
-  ];
-
-  if (!progression) {
-    return baseDice;
-  }
-
-  const equipmentDice: Die[] = [];
-  let equipmentIndex = 1;
-
-  for (const slotId of EQUIPMENT_SLOT_ORDER) {
-    const equippedItem = progression.items.equipped[slotId];
-    const diceId = equippedItem?.diceId;
-    if (!diceId) {
-      continue;
-    }
-
-    const construct = getDieConstructById(diceId);
-    equipmentDice.push(
-      createDieFromConstruct({
-        construct,
-        dieId: `equipped-${slotId}-${equipmentIndex}`,
-      }),
-    );
-    equipmentIndex += 1;
-  }
-
-  return [...baseDice, ...equipmentDice];
 }
 
 export function createStubEnemies(): EnemyStub[] {
@@ -417,11 +273,12 @@ export function createCombatEncounter(
     randomSource?: RandomSource;
     eventBus?: CombatEventBus;
     playerProgression?: PlayerProgressionState;
+    playerDice?: Die[];
   },
 ): { state: CombatEncounterState; eventBus: CombatEventBus } {
   const randomSource = options?.randomSource ?? defaultRandomSource;
   const eventBus = options?.eventBus ?? new CombatEventBus();
-  registerWildStrikeBonusSubscriber(eventBus);
+  const playerProgression = options?.playerProgression ?? createPlayerProgression();
   const enemyTemplate =
     options?.enemyId !== undefined
       ? createEnemyTemplate(getEnemyById(options.enemyId))
@@ -430,11 +287,11 @@ export function createCombatEncounter(
   const player: CombatActor = {
     id: "player",
     name: "Arcanist",
-    level: options?.playerProgression?.level ?? 1,
-    hp: options?.playerProgression?.maxHp ?? 20,
-    maxHp: options?.playerProgression?.maxHp ?? 20,
+    level: playerProgression.level,
+    hp: playerProgression.maxHp,
+    maxHp: playerProgression.maxHp,
     armor: 0,
-    dice: createPlayerDice(options?.playerProgression),
+    dice: options?.playerDice ?? createPlayerCombatDiceLoadout(playerProgression),
   };
 
   const enemy: CombatActor = {
@@ -463,7 +320,6 @@ export function createCombatEncounter(
       `${enemy.name} prepares ${enemyIntent.pendingPlayerDamage} damage and ${enemyIntent.pendingEnemyHealing} healing.`,
     ],
     pendingResolutionPopups: [],
-    playerAttackModifier: 0,
   };
 
   enterEnemyTurn(state);
@@ -476,7 +332,6 @@ function startNextRound(state: CombatEncounterState, randomSource: RandomSource)
   state.playerRollIndex = 0;
   state.rolledPlayerDieIds = [];
   state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
-  state.playerAttackModifier = 0;
 
   state.combatLog.push(`Round ${state.round} begins.`);
   state.combatLog.push(
@@ -495,7 +350,6 @@ function beginEnemyResolutionIfNeeded(
     return state;
   }
 
-  state.playerAttackModifier = 0;
   eventBus.emitAction({ type: CombatActionType.PlayerTurnEnded });
 
   if (state.enemy.hp <= 0) {
@@ -545,10 +399,6 @@ export function rollPlayerDie(
   }
 
   const side = die.roll(randomSource);
-  const attackModifierOnRoll = (side as AttackModifierOnRollSide).getAttackModifierOnRoll?.();
-  if (typeof attackModifierOnRoll === "number") {
-    state.playerAttackModifier = Math.floor(attackModifierOnRoll);
-  }
 
   const eventModifier = (side as CombatEventModifierSide).createCombatEventModifier?.();
   if (eventModifier) {
@@ -573,7 +423,7 @@ export function rollPlayerDie(
 
   resolveImmediateEvents(state, eventBus, events);
   queueResolutionPopup(state, "player", die.id, side);
-  queueGhostResolutionPopupFromEvents(state, "player", die.id, events);
+  queueSpawnedDiePopupFromEvents(state, "player", die.id, events, side);
 
   state.rolledPlayerDieIds.push(die.id);
   state.playerRollIndex = state.rolledPlayerDieIds.length;

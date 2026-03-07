@@ -312,6 +312,7 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
                 uiState.playerProgression.unspentTalentPoints = math.max(0, uiState.playerProgression.unspentTalentPoints - 1)
             end
             uiState.selectedTalentId = nil
+            uiState.isTalentTreeOpen = false
             return nil
         end
         for ____, row in ipairs(layout.talentRowRects) do

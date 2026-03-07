@@ -1,10 +1,8 @@
-import {
-  DealSelfDamage,
-  Miss,
-  MinorMend,
-  ShieldBash,
-  SwordSlash,
-} from "../faces";
+import { DealSelfDamage } from "../faces/abilities/DealSelfDamage";
+import { Miss } from "../faces/abilities/Miss";
+import { MinorMend } from "../faces/abilities/MinorMend";
+import { ShieldBash } from "../faces/abilities/ShieldBash";
+import { SwordSlash } from "../faces/abilities/SwordSlash";
 import type { DieConstruct } from "./types";
 
 export const ITEM_DIE_CONSTRUCTS: DieConstruct[] = [

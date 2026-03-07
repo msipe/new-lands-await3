@@ -148,8 +148,8 @@ describe("combat ui", () => {
 
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
-    expect(uiState.readyPlayerDieIds).toHaveLength(5);
-    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(5);
+    expect(uiState.readyPlayerDieIds).toHaveLength(encounter.state.player.dice.length);
+    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(encounter.state.player.dice.length);
   });
 
   it("queues throw during enemy turn and executes it when player turn is available", () => {
@@ -324,7 +324,7 @@ describe("combat ui", () => {
     expect(uiState.floatingPopups[0].text).toBe("+2 damage");
   });
 
-  it("spawns a blue ghost die in the arena for ghost popups", () => {
+  it("spawns a transient attack die popup when requested", () => {
     const encounter = createCombatEncounter();
     const uiState = createCombatUiState(encounter.state);
     const sourceDie = uiState.playerDice[0];
@@ -339,9 +339,8 @@ describe("combat ui", () => {
       {
         source: "player",
         dieId: sourceDie.combatDieId ?? "player-die-1",
-        text: "Ghost Sword Slash",
-        ghostDie: {
-          isGhost: true,
+        text: "Transient Sword Slash",
+        spawnedDie: {
           constructId: "rusty-sword-die",
           dieLabel: "Rusty Sword Die",
           sideLabel: "Sword Slash",
@@ -349,23 +348,23 @@ describe("combat ui", () => {
       },
     ]);
 
-    const ghost = uiState.arenaPlayerDice.find((die) => die.isGhostDie === true);
-    expect(ghost).toBeDefined();
-    expect(ghost?.combatDieId).toBeUndefined();
-    expect(ghost?.label).toBe("Sword Slash");
-    expect(ghost?.x).toBe(sourceDie.x);
-    expect(ghost?.y).toBe(sourceDie.y);
+    const spawned = uiState.arenaPlayerDice.find((die) => die.isSpawnedDie === true);
+    expect(spawned).toBeDefined();
+    expect(spawned?.combatDieId).toBeUndefined();
+    expect(spawned?.label).toBe("Sword Slash");
+    expect(uiState.floatingPopups).toHaveLength(1);
+    expect(uiState.floatingPopups[0].text).toBe("Transient Sword Slash");
 
     encounter.state.phase = "player-turn";
     updateCombatUiState(uiState, encounter.state, 2.8);
-    expect(uiState.arenaPlayerDice.some((die) => die.isGhostDie)).toBe(true);
+    expect(uiState.arenaPlayerDice.some((die) => die.isSpawnedDie)).toBe(true);
 
-    onCombatMousePressed(uiState, encounter.state, ghost?.x ?? 0, ghost?.y ?? 0, 2);
+    onCombatMousePressed(uiState, encounter.state, spawned?.x ?? 0, spawned?.y ?? 0, 2);
     expect(isCombatInspectorOpen(uiState)).toBe(true);
 
     encounter.state.phase = "enemy-turn";
     updateCombatUiState(uiState, encounter.state, 1 / 60);
-    expect(uiState.arenaPlayerDice.some((die) => die.isGhostDie)).toBe(false);
+    expect(uiState.arenaPlayerDice.some((die) => die.isSpawnedDie)).toBe(false);
   });
 
   it("syncs enemy die label from authoritative sideLabel", () => {

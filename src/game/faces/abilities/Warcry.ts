@@ -43,14 +43,6 @@ export class Warcry extends Face {
       : `Attacks ${this.attackModifier} this turn`;
   }
 
-  getAttackModifier(): number {
-    return this.attackModifier;
-  }
-
-  getAttackModifierOnRoll(): number {
-    return this.attackModifier;
-  }
-
   createCombatEventModifier(): CombatEventModifierRegistration {
     const modifierValue = this.attackModifier;
 
