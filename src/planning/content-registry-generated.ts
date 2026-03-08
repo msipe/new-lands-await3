@@ -355,8 +355,31 @@ export const RAW_QUESTS = [
     "id": "main:defeat-dracula",
     "name": "Defeat Lord Dracula",
     "summary": "Uncover Dracula's weakness and confront him in the castle.",
-    "type": "main",
-    "requirements": [
+    "category": "main",
+    "offerNpcId": "npc:igor",
+    "turnInNpcId": "npc:igor",
+    "objectives": [
+      {
+        "id": "obj:visit-castle",
+        "kind": "visit-tile",
+        "description": "Reach Dracula's Castle.",
+        "tileIds": [
+          "tile:draculas-castle"
+        ],
+        "targetCount": 1,
+        "goToTileHint": "Travel toward mountain special tiles and look for castle ruins."
+      },
+      {
+        "id": "obj:slay-dracula",
+        "kind": "kill-enemy",
+        "description": "Defeat Lord Dracula.",
+        "enemyIds": [
+          "enemy:lord-dracula"
+        ],
+        "targetCount": 1
+      }
+    ],
+    "worldRequirements": [
       {
         "id": "npc:igor",
         "kind": "npc-presence",
@@ -388,8 +411,31 @@ export const RAW_QUESTS = [
     "id": "side:sacred-tome",
     "name": "Sacred Tome",
     "summary": "Recover the Sacred Tome from Dracula's castle archives.",
-    "type": "side",
-    "requirements": [
+    "category": "side",
+    "offerNpcId": "npc:castle-librarian",
+    "turnInNpcId": "npc:castle-librarian",
+    "objectives": [
+      {
+        "id": "obj:visit-castle-archives",
+        "kind": "visit-tile",
+        "description": "Enter Dracula's Castle Archives.",
+        "tileIds": [
+          "tile:draculas-castle"
+        ],
+        "targetCount": 1,
+        "goToTileHint": "Seek mountain paths leading to Dracula's Castle."
+      },
+      {
+        "id": "obj:collect-sacred-tome",
+        "kind": "collect-item",
+        "description": "Acquire the Sacred Tome.",
+        "itemIds": [
+          "item:sacred-tome"
+        ],
+        "targetCount": 1
+      }
+    ],
+    "worldRequirements": [
       {
         "id": "npc:castle-librarian",
         "kind": "npc-presence",
@@ -421,8 +467,20 @@ export const RAW_QUESTS = [
     "id": "side:night-caravan",
     "name": "Night Caravan",
     "summary": "Escort a caravan that only travels under moonlight.",
-    "type": "side",
-    "requirements": [
+    "category": "side",
+    "offerNpcId": "npc:captain-marla",
+    "turnInNpcId": "npc:captain-marla",
+    "objectives": [
+      {
+        "id": "obj:visit-farmland-route",
+        "kind": "visit-tile",
+        "description": "Visit farmland routes suitable for caravan travel.",
+        "zone": "farmland",
+        "targetCount": 2,
+        "goToTileHint": "Use the map to chain through farmland tiles in one route."
+      }
+    ],
+    "worldRequirements": [
       {
         "id": "tile-zone:farmland",
         "kind": "tile-zone",
@@ -455,8 +513,18 @@ export const RAW_QUESTS = [
     "id": "side:grave-sigil",
     "name": "Grave Sigil",
     "summary": "Gather sigils from cursed burial grounds.",
-    "type": "side",
-    "requirements": [
+    "category": "side",
+    "objectives": [
+      {
+        "id": "obj:visit-cursed-mountains",
+        "kind": "visit-tile",
+        "description": "Visit cursed mountain landmarks.",
+        "zone": "mountain",
+        "targetCount": 2,
+        "goToTileHint": "Target mountain tiles with ominous event markers."
+      }
+    ],
+    "worldRequirements": [
       {
         "id": "tile-zone:mountain",
         "kind": "tile-zone",
@@ -476,8 +544,22 @@ export const RAW_QUESTS = [
     "id": "town:big-scary-wolf",
     "name": "Big Scary Wolf",
     "summary": "Track a wolf terrorizing settlements near the woods.",
-    "type": "town",
-    "requirements": [
+    "category": "town",
+    "offerNpcId": "npc:warden-bren",
+    "turnInNpcId": "npc:warden-bren",
+    "objectives": [
+      {
+        "id": "obj:hunt-forest-wolves",
+        "kind": "kill-enemy",
+        "description": "Defeat wolves and related threats in the forest.",
+        "enemyIds": [
+          "enemy:goblin-raider",
+          "enemy:slime-raider"
+        ],
+        "targetCount": 3
+      }
+    ],
+    "worldRequirements": [
       {
         "id": "tile-zone:forest",
         "kind": "tile-zone",
@@ -498,8 +580,22 @@ export const RAW_QUESTS = [
     "id": "town:bandit-den",
     "name": "Bandit Den",
     "summary": "Clear out a hidden den raiding nearby roads.",
-    "type": "town",
-    "requirements": [
+    "category": "town",
+    "offerNpcId": "npc:warden-bren",
+    "turnInNpcId": "npc:warden-bren",
+    "objectives": [
+      {
+        "id": "obj:clear-forest-bandits",
+        "kind": "kill-enemy",
+        "description": "Defeat bandit and raider forces in the woods.",
+        "enemyIds": [
+          "enemy:goblin-raider",
+          "enemy:goblin-hexer"
+        ],
+        "targetCount": 3
+      }
+    ],
+    "worldRequirements": [
       {
         "id": "tile-zone:forest",
         "kind": "tile-zone",
@@ -535,8 +631,20 @@ export const RAW_QUESTS = [
     "id": "town:river-toll",
     "name": "River Toll",
     "summary": "Negotiate or fight for passage at a flooded crossing.",
-    "type": "town",
-    "requirements": [
+    "category": "town",
+    "offerNpcId": "npc:ferryman-colt",
+    "turnInNpcId": "npc:ferryman-colt",
+    "objectives": [
+      {
+        "id": "obj:visit-coastline",
+        "kind": "visit-tile",
+        "description": "Find and visit a coastal route.",
+        "zone": "ocean",
+        "targetCount": 1,
+        "goToTileHint": "Head for ocean-edge tiles with crossing events."
+      }
+    ],
+    "worldRequirements": [
       {
         "id": "tile-zone:ocean",
         "kind": "tile-zone",

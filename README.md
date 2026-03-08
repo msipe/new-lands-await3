@@ -3,6 +3,7 @@
 LÖVE2D game scaffold using TypeScript + TypeScriptToLua + `love-typescript-definitions`.
 
 See [GAME_DESIGN.md](./GAME_DESIGN.md) for product direction, architecture rules, and development workflow.
+Quest pipeline docs: [docs/quests.md](./docs/quests.md)
 
 ## Setup
 

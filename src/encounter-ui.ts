@@ -4,7 +4,8 @@ import {
   getStandardDialogForNpc,
   type QuestDialogPrompt,
 } from "./planning/dialog-service";
-import { acceptQuest } from "./planning/quest-log";
+import { acceptQuest, turnInQuest } from "./planning/quest-log";
+import { recordNpcInteracted } from "./planning/quest-events";
 
 type Rect = {
   x: number;
@@ -242,6 +243,7 @@ function refreshDialogForSelection(uiState: EncounterUiState): void {
   }
 
   const lines = getStandardDialogForNpc(character.npcId);
+  recordNpcInteracted(character.npcId);
   const prompts = getQuestDialogPromptsForNpc(character.npcId);
   uiState.dialogMode = "standard";
   uiState.dialogText = lines[0] ?? character.description;
@@ -365,9 +367,17 @@ export function onEncounterMouseReleased(uiState: EncounterUiState, x: number, y
 
     if (uiState.dialogMode === "quest" && isInRect(x, y, uiState.dialogButtons.yes)) {
       if (uiState.selectedQuestPrompt !== undefined) {
-        acceptQuest(uiState.selectedQuestPrompt.questId);
-        uiState.questResponseText = `Accepted: ${uiState.selectedQuestPrompt.questName}`;
-        refreshDialogForSelection(uiState);
+        if (uiState.selectedQuestPrompt.kind === "turn-in") {
+          const questName = uiState.selectedQuestPrompt.questName;
+          turnInQuest(uiState.selectedQuestPrompt.questId);
+          refreshDialogForSelection(uiState);
+          uiState.questResponseText = `Turned in: ${questName}`;
+        } else {
+          const questName = uiState.selectedQuestPrompt.questName;
+          acceptQuest(uiState.selectedQuestPrompt.questId);
+          refreshDialogForSelection(uiState);
+          uiState.questResponseText = `Accepted: ${questName}`;
+        }
       } else {
         uiState.questResponseText = "No quest selected.";
       }

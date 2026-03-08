@@ -7,6 +7,7 @@ import {
   type ExploreBranch,
   type ExploreState,
   type ExploreTile,
+  type ZoneType,
 } from "./explore-state";
 import {
   createDefaultGamePlannerConfig,
@@ -16,6 +17,10 @@ import {
 } from "../planning/game-planner";
 import { createWorldSpecFromPlan, type WorldSpec } from "../planning/world-spec-builder";
 import { validateWorldAgainstSpec, type WorldValidationResult } from "../planning/world-validator";
+import { recordTileVisited } from "../planning/quest-events";
+import { getQuestById } from "../planning/content-registry";
+import type { ContentQuest } from "../planning/content-types";
+import { listQuestEntries, type QuestLogEntry } from "../planning/quest-log";
 import { applyWorldSpecToExploreState } from "./world-generator";
 import {
   buildGeneratedFaceId,
@@ -101,6 +106,16 @@ type ShopLayout = {
 
 type ShopFocusColumn = "craftsfolk" | "dice" | "faces" | "properties" | "actions";
 type ShopHoveredAction = "close" | "primary" | "secondary";
+type QuestCategory = ContentQuest["category"];
+
+type QuestMenuLayout = {
+  panelRect: Rect;
+  closeButtonRect: Rect;
+  clearGoToRect: Rect;
+  categoryTabs: Array<{ category: QuestCategory; rect: Rect }>;
+  questRows: Array<{ questId: string; rect: Rect }>;
+  objectiveGoToButtons: Array<{ objectiveId: string; rect: Rect }>;
+};
 
 export type CreateExploreUiStateOptions = {
   initialSeedIndex?: number;
@@ -136,6 +151,14 @@ export type ExploreUiState = {
   inventoryButtonRect: Rect;
   isCraftShopOpen: boolean;
   craftShopButtonRect: Rect;
+  isQuestMenuOpen: boolean;
+  questMenuButtonRect: Rect;
+  selectedQuestCategory: QuestCategory;
+  selectedQuestId?: string;
+  isGoToTileMode: boolean;
+  goToTileZone?: ZoneType;
+  goToTileIds?: string[];
+  goToTileHint?: string;
   availableCraftsfolk: CraftsfolkOption[];
   selectedCraftsfolkId?: CraftsfolkId;
   selectedUpgradeDieId?: string;
@@ -315,6 +338,15 @@ function createCraftShopButtonRect(): Rect {
   };
 }
 
+function createQuestMenuButtonRect(): Rect {
+  return {
+    x: 616,
+    y: 52,
+    width: 180,
+    height: 34,
+  };
+}
+
 function createCraftsfolkOptions(): CraftsfolkOption[] {
   return [
     {
@@ -358,6 +390,7 @@ function refreshLayoutIfNeeded(uiState: ExploreUiState): void {
   uiState.characterSheetButtonRect = createCharacterSheetButtonRect();
   uiState.inventoryButtonRect = createInventoryButtonRect();
   uiState.craftShopButtonRect = createCraftShopButtonRect();
+  uiState.questMenuButtonRect = createQuestMenuButtonRect();
   uiState.xpBarRect = createXpBarRect();
 }
 
@@ -373,6 +406,144 @@ function getButtonAt(uiState: ExploreUiState, x: number, y: number): ActionButto
   }
 
   return undefined;
+}
+
+function listQuestEntriesForCategory(category: QuestCategory): QuestLogEntry[] {
+  return listQuestEntries().filter((entry) => entry.category === category);
+}
+
+function ensureQuestSelection(uiState: ExploreUiState): void {
+  const entries = listQuestEntriesForCategory(uiState.selectedQuestCategory);
+  if (entries.length === 0) {
+    uiState.selectedQuestId = undefined;
+    return;
+  }
+
+  const selectedExists = entries.some((entry) => entry.questId === uiState.selectedQuestId);
+  if (!selectedExists) {
+    uiState.selectedQuestId = entries[0]?.questId;
+  }
+}
+
+function getSelectedQuestEntry(uiState: ExploreUiState): QuestLogEntry | undefined {
+  ensureQuestSelection(uiState);
+  if (uiState.selectedQuestId === undefined) {
+    return undefined;
+  }
+
+  return listQuestEntriesForCategory(uiState.selectedQuestCategory).find(
+    (entry) => entry.questId === uiState.selectedQuestId,
+  );
+}
+
+function getQuestMenuLayout(uiState: ExploreUiState): QuestMenuLayout {
+  const panelWidth = Math.min(860, Math.floor(uiState.width * 0.88));
+  const panelHeight = Math.min(560, Math.floor(uiState.height * 0.9));
+  const panelX = Math.floor((uiState.width - panelWidth) * 0.5);
+  const panelY = Math.floor((uiState.height - panelHeight) * 0.5);
+
+  const categories: QuestCategory[] = ["main", "side", "town"];
+  const categoryTabs = categories.map((category, index) => ({
+    category,
+    rect: {
+      x: panelX + 20 + index * 132,
+      y: panelY + 56,
+      width: 120,
+      height: 32,
+    },
+  }));
+
+  const questRows: Array<{ questId: string; rect: Rect }> = [];
+  let rowY = panelY + 104;
+  const entries = listQuestEntriesForCategory(uiState.selectedQuestCategory);
+  for (const entry of entries) {
+    if (rowY > panelY + panelHeight - 64) {
+      break;
+    }
+
+    questRows.push({
+      questId: entry.questId,
+      rect: {
+        x: panelX + 20,
+        y: rowY,
+        width: 280,
+        height: 34,
+      },
+    });
+    rowY += 42;
+  }
+
+  const objectiveGoToButtons: Array<{ objectiveId: string; rect: Rect }> = [];
+  const selectedQuest = getSelectedQuestEntry(uiState);
+  if (selectedQuest !== undefined) {
+    const quest = getQuestById(selectedQuest.questId);
+    let objectiveY = panelY + 146;
+    for (const objective of quest.objectives) {
+      if (objectiveY > panelY + panelHeight - 64) {
+        break;
+      }
+
+      if (objective.kind === "visit-tile") {
+        objectiveGoToButtons.push({
+          objectiveId: objective.id,
+          rect: {
+            x: panelX + panelWidth - 180,
+            y: objectiveY - 2,
+            width: 120,
+            height: 24,
+          },
+        });
+      }
+
+      objectiveY += 52;
+    }
+  }
+
+  return {
+    panelRect: {
+      x: panelX,
+      y: panelY,
+      width: panelWidth,
+      height: panelHeight,
+    },
+    closeButtonRect: {
+      x: panelX + panelWidth - 50,
+      y: panelY + 12,
+      width: 34,
+      height: 24,
+    },
+    clearGoToRect: {
+      x: panelX + panelWidth - 220,
+      y: panelY + 56,
+      width: 140,
+      height: 32,
+    },
+    categoryTabs,
+    questRows,
+    objectiveGoToButtons,
+  };
+}
+
+function tileMatchesGoToMode(uiState: ExploreUiState, tile: ExploreTile): boolean {
+  if (!uiState.isGoToTileMode) {
+    return false;
+  }
+
+  if (uiState.goToTileZone !== undefined && tile.zone !== uiState.goToTileZone) {
+    return false;
+  }
+
+  if (uiState.goToTileIds !== undefined && uiState.goToTileIds.length > 0) {
+    const specialTileId =
+      typeof tile.metadata.specialTileId === "string" ? tile.metadata.specialTileId : undefined;
+    if (specialTileId === undefined) {
+      return false;
+    }
+
+    return uiState.goToTileIds.includes(specialTileId);
+  }
+
+  return true;
 }
 
 function getCraftShopLayout(uiState: ExploreUiState, dice: Die[]): ShopLayout {
@@ -1228,6 +1399,14 @@ export function createExploreUiState(input?: number | CreateExploreUiStateOption
     inventoryButtonRect: createInventoryButtonRect(),
     isCraftShopOpen: false,
     craftShopButtonRect: createCraftShopButtonRect(),
+    isQuestMenuOpen: false,
+    questMenuButtonRect: createQuestMenuButtonRect(),
+    selectedQuestCategory: "main",
+    selectedQuestId: undefined,
+    isGoToTileMode: false,
+    goToTileZone: undefined,
+    goToTileIds: undefined,
+    goToTileHint: undefined,
     availableCraftsfolk: createCraftsfolkOptions(),
     selectedCraftsfolkId: undefined,
     selectedUpgradeDieId: undefined,
@@ -1260,6 +1439,25 @@ function regeneratePlannerSpec(uiState: ExploreUiState): void {
 }
 
 export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boolean {
+  if (uiState.isQuestMenuOpen) {
+    if (key === "escape" || key === "q") {
+      uiState.isQuestMenuOpen = false;
+      return true;
+    }
+
+    if (key === "left" || key === "right") {
+      const categories: QuestCategory[] = ["main", "side", "town"];
+      const currentIndex = categories.findIndex((category) => category === uiState.selectedQuestCategory);
+      const delta = key === "left" ? -1 : 1;
+      const nextIndex = Math.max(0, Math.min(categories.length - 1, currentIndex + delta));
+      uiState.selectedQuestCategory = categories[nextIndex] ?? uiState.selectedQuestCategory;
+      ensureQuestSelection(uiState);
+      return true;
+    }
+
+    return true;
+  }
+
   if (uiState.isCraftShopOpen) {
     if (key === "escape" || key === "u") {
       closeCraftShop(uiState);
@@ -1408,6 +1606,27 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     return true;
   }
 
+  if (key === "q") {
+    uiState.isQuestMenuOpen = !uiState.isQuestMenuOpen;
+    if (uiState.isQuestMenuOpen) {
+      uiState.isCharacterSheetOpen = false;
+      uiState.isInventoryOpen = false;
+      uiState.isTalentTreeOpen = false;
+      uiState.selectedTalentId = undefined;
+      uiState.isCraftShopOpen = false;
+      ensureQuestSelection(uiState);
+    }
+    return true;
+  }
+
+  if (key === "g" && uiState.isGoToTileMode) {
+    uiState.isGoToTileMode = false;
+    uiState.goToTileZone = undefined;
+    uiState.goToTileIds = undefined;
+    uiState.goToTileHint = undefined;
+    return true;
+  }
+
   if (key === "escape" && (uiState.isCharacterSheetOpen || uiState.isInventoryOpen || uiState.isTalentTreeOpen)) {
     uiState.isCharacterSheetOpen = false;
     uiState.isInventoryOpen = false;
@@ -1462,6 +1681,10 @@ export function updateExploreUiState(uiState: ExploreUiState, dt: number): void 
 
 export function onExploreMouseMoved(uiState: ExploreUiState, x: number, y: number): void {
   refreshLayoutIfNeeded(uiState);
+  if (uiState.isQuestMenuOpen) {
+    return;
+  }
+
   if (uiState.isCraftShopOpen) {
     const dice = createPlayerCombatDiceLoadout(uiState.playerProgression);
     const layout = getCraftShopLayout(uiState, dice);
@@ -1480,6 +1703,68 @@ export function onExploreMouseMoved(uiState: ExploreUiState, x: number, y: numbe
 
 export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: number, button: number): ExploreUiAction {
   if (button !== 1) {
+    return undefined;
+  }
+
+  if (uiState.isQuestMenuOpen) {
+    const layout = getQuestMenuLayout(uiState);
+
+    if (isPointInRect(x, y, layout.closeButtonRect)) {
+      uiState.isQuestMenuOpen = false;
+      return undefined;
+    }
+
+    if (isPointInRect(x, y, layout.clearGoToRect)) {
+      uiState.isGoToTileMode = false;
+      uiState.goToTileZone = undefined;
+      uiState.goToTileIds = undefined;
+      uiState.goToTileHint = undefined;
+      return undefined;
+    }
+
+    for (const tab of layout.categoryTabs) {
+      if (!isPointInRect(x, y, tab.rect)) {
+        continue;
+      }
+
+      uiState.selectedQuestCategory = tab.category;
+      ensureQuestSelection(uiState);
+      return undefined;
+    }
+
+    for (const row of layout.questRows) {
+      if (!isPointInRect(x, y, row.rect)) {
+        continue;
+      }
+
+      uiState.selectedQuestId = row.questId;
+      return undefined;
+    }
+
+    for (const goToButton of layout.objectiveGoToButtons) {
+      if (!isPointInRect(x, y, goToButton.rect)) {
+        continue;
+      }
+
+      const selectedQuest = getSelectedQuestEntry(uiState);
+      if (selectedQuest === undefined) {
+        return undefined;
+      }
+
+      const quest = getQuestById(selectedQuest.questId);
+      const objective = quest.objectives.find((candidate) => candidate.id === goToButton.objectiveId);
+      if (objective?.kind !== "visit-tile") {
+        return undefined;
+      }
+
+      uiState.isGoToTileMode = true;
+      uiState.goToTileZone = objective.zone;
+      uiState.goToTileIds = objective.tileIds !== undefined ? [...objective.tileIds] : undefined;
+      uiState.goToTileHint = objective.goToTileHint;
+      uiState.isQuestMenuOpen = false;
+      return undefined;
+    }
+
     return undefined;
   }
 
@@ -1624,6 +1909,19 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
     return undefined;
   }
 
+  if (isPointInRect(x, y, uiState.questMenuButtonRect)) {
+    uiState.isQuestMenuOpen = !uiState.isQuestMenuOpen;
+    if (uiState.isQuestMenuOpen) {
+      uiState.isCharacterSheetOpen = false;
+      uiState.isInventoryOpen = false;
+      uiState.isTalentTreeOpen = false;
+      uiState.selectedTalentId = undefined;
+      uiState.isCraftShopOpen = false;
+      ensureQuestSelection(uiState);
+    }
+    return undefined;
+  }
+
   if (isPointInRect(x, y, uiState.xpBarRect)) {
     uiState.isTalentTreeOpen = !uiState.isTalentTreeOpen;
     if (uiState.isTalentTreeOpen) {
@@ -1645,7 +1943,25 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
 
   const clickedTile = getTileAt(uiState, x, y);
   if (clickedTile) {
-    tryTravelToCoord(uiState.model, clickedTile.coord);
+    const traveled = tryTravelToCoord(uiState.model, clickedTile.coord);
+    if (traveled) {
+      const activeTile = getCurrentTile(uiState.model);
+      const progress = recordTileVisited({
+        tileKey: activeTile.key,
+        zone: activeTile.zone,
+        specialTileId:
+          typeof activeTile.metadata.specialTileId === "string"
+            ? activeTile.metadata.specialTileId
+            : undefined,
+      });
+
+      if (progress.length > 0) {
+        const first = progress[0];
+        if (first !== undefined) {
+          uiState.model.notice = `${uiState.model.notice} Quest progress: ${first.currentCount}/${first.targetCount}.`;
+        }
+      }
+    }
   }
 
   return undefined;
@@ -1865,6 +2181,39 @@ function drawActionPanel(uiState: ExploreUiState): void {
     0.62,
   );
 
+  love.graphics.setColor(0.2, 0.28, 0.43, 0.96);
+  love.graphics.rectangle(
+    "fill",
+    uiState.questMenuButtonRect.x,
+    uiState.questMenuButtonRect.y,
+    uiState.questMenuButtonRect.width,
+    uiState.questMenuButtonRect.height,
+    8,
+    8,
+  );
+  love.graphics.setColor(0.73, 0.84, 0.98, 0.95);
+  love.graphics.rectangle(
+    "line",
+    uiState.questMenuButtonRect.x,
+    uiState.questMenuButtonRect.y,
+    uiState.questMenuButtonRect.width,
+    uiState.questMenuButtonRect.height,
+    8,
+    8,
+  );
+
+  love.graphics.setColor(1, 1, 1, 1);
+  love.graphics.printf(
+    uiState.isQuestMenuOpen ? "Close Quests (Q)" : "Open Quests (Q)",
+    uiState.questMenuButtonRect.x,
+    uiState.questMenuButtonRect.y + 9,
+    uiState.questMenuButtonRect.width,
+    "center",
+    0,
+    0.62,
+    0.62,
+  );
+
   const currentTile = getCurrentTile(uiState.model);
   const playerKey = toCoordKey(uiState.model.playerCoord);
   love.graphics.setColor(0.81, 0.87, 0.97, 0.95);
@@ -1923,7 +2272,7 @@ function drawActionPanel(uiState: ExploreUiState): void {
 
   love.graphics.setColor(0.72, 0.8, 0.95, 0.86);
   love.graphics.printf(
-    "Movement: click neighboring hexes | Click XP bar or T: Talents | C: Character | I: Inventory | U: Upgrade Shop | P: Planner Debug | R: Reroll Plan",
+    "Movement: click neighboring hexes | Q: Quest Menu | Click XP bar or T: Talents | C: Character | I: Inventory | U: Upgrade Shop | P: Planner Debug | R: Reroll Plan",
     panelX + 14,
     uiState.height - 62,
     panelWidth - 28,
@@ -1932,6 +2281,160 @@ function drawActionPanel(uiState: ExploreUiState): void {
     0.66,
     0.66,
   );
+
+  if (uiState.isGoToTileMode) {
+    love.graphics.setColor(0.95, 0.89, 0.52, 0.96);
+    love.graphics.printf(
+      uiState.goToTileHint ?? "Go To Tile mode active. Follow highlighted tiles. Press G to clear.",
+      panelX + 14,
+      uiState.height - 86,
+      panelWidth - 28,
+      "left",
+      0,
+      0.6,
+      0.6,
+    );
+  }
+}
+
+function drawQuestMenuOverlay(uiState: ExploreUiState): void {
+  if (!uiState.isQuestMenuOpen) {
+    return;
+  }
+
+  const layout = getQuestMenuLayout(uiState);
+  const entries = listQuestEntriesForCategory(uiState.selectedQuestCategory);
+  const selectedEntry = getSelectedQuestEntry(uiState);
+  const selectedQuest = selectedEntry !== undefined ? getQuestById(selectedEntry.questId) : undefined;
+
+  love.graphics.setColor(0, 0, 0, 0.54);
+  love.graphics.rectangle("fill", 0, 0, uiState.width, uiState.height);
+
+  love.graphics.setColor(0.08, 0.1, 0.15, 0.98);
+  love.graphics.rectangle(
+    "fill",
+    layout.panelRect.x,
+    layout.panelRect.y,
+    layout.panelRect.width,
+    layout.panelRect.height,
+    10,
+    10,
+  );
+  love.graphics.setColor(0.8, 0.88, 0.98, 0.88);
+  love.graphics.rectangle(
+    "line",
+    layout.panelRect.x,
+    layout.panelRect.y,
+    layout.panelRect.width,
+    layout.panelRect.height,
+    10,
+    10,
+  );
+
+  love.graphics.setColor(0.96, 0.98, 1, 1);
+  love.graphics.printf("Quest Journal", layout.panelRect.x + 20, layout.panelRect.y + 16, 260, "left", 0, 0.9, 0.9);
+
+  love.graphics.setColor(0.32, 0.24, 0.24, 0.94);
+  love.graphics.rectangle(
+    "fill",
+    layout.closeButtonRect.x,
+    layout.closeButtonRect.y,
+    layout.closeButtonRect.width,
+    layout.closeButtonRect.height,
+    6,
+    6,
+  );
+  love.graphics.setColor(0.95, 0.77, 0.77, 0.98);
+  love.graphics.rectangle(
+    "line",
+    layout.closeButtonRect.x,
+    layout.closeButtonRect.y,
+    layout.closeButtonRect.width,
+    layout.closeButtonRect.height,
+    6,
+    6,
+  );
+  love.graphics.setColor(1, 1, 1, 0.98);
+  love.graphics.printf("X", layout.closeButtonRect.x, layout.closeButtonRect.y + 5, layout.closeButtonRect.width, "center", 0, 0.62, 0.62);
+
+  for (const tab of layout.categoryTabs) {
+    const selected = tab.category === uiState.selectedQuestCategory;
+    love.graphics.setColor(selected ? 0.26 : 0.17, selected ? 0.38 : 0.24, selected ? 0.5 : 0.35, 0.95);
+    love.graphics.rectangle("fill", tab.rect.x, tab.rect.y, tab.rect.width, tab.rect.height, 7, 7);
+    love.graphics.setColor(selected ? 0.88 : 0.7, selected ? 0.94 : 0.8, 1, 0.95);
+    love.graphics.rectangle("line", tab.rect.x, tab.rect.y, tab.rect.width, tab.rect.height, 7, 7);
+    love.graphics.setColor(1, 1, 1, 1);
+    love.graphics.printf(tab.category.toUpperCase(), tab.rect.x, tab.rect.y + 9, tab.rect.width, "center", 0, 0.56, 0.56);
+  }
+
+  love.graphics.setColor(0.25, 0.31, 0.42, 0.85);
+  love.graphics.rectangle("fill", layout.clearGoToRect.x, layout.clearGoToRect.y, layout.clearGoToRect.width, layout.clearGoToRect.height, 7, 7);
+  love.graphics.setColor(0.78, 0.85, 0.96, 0.95);
+  love.graphics.rectangle("line", layout.clearGoToRect.x, layout.clearGoToRect.y, layout.clearGoToRect.width, layout.clearGoToRect.height, 7, 7);
+  love.graphics.setColor(1, 1, 1, 0.96);
+  love.graphics.printf("Clear Go To (G)", layout.clearGoToRect.x, layout.clearGoToRect.y + 9, layout.clearGoToRect.width, "center", 0, 0.52, 0.52);
+
+  for (const row of layout.questRows) {
+    const entry = entries.find((candidate) => candidate.questId === row.questId);
+    if (!entry) {
+      continue;
+    }
+
+    const selected = row.questId === uiState.selectedQuestId;
+    love.graphics.setColor(selected ? 0.24 : 0.16, selected ? 0.35 : 0.21, selected ? 0.46 : 0.3, 0.96);
+    love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 7, 7);
+    love.graphics.setColor(selected ? 0.86 : 0.68, selected ? 0.92 : 0.78, 1, 0.95);
+    love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 7, 7);
+
+    love.graphics.setColor(1, 1, 1, 0.98);
+    love.graphics.printf(entry.questName, row.rect.x + 8, row.rect.y + 8, row.rect.width - 84, "left", 0, 0.52, 0.52);
+    love.graphics.setColor(0.88, 0.94, 1, 0.9);
+    love.graphics.printf(entry.status, row.rect.x + row.rect.width - 74, row.rect.y + 8, 66, "right", 0, 0.48, 0.48);
+  }
+
+  if (selectedEntry === undefined || selectedQuest === undefined) {
+    love.graphics.setColor(0.82, 0.88, 0.96, 0.88);
+    love.graphics.printf("No quests in this category yet.", layout.panelRect.x + 340, layout.panelRect.y + 126, 460, "left", 0, 0.64, 0.64);
+    return;
+  }
+
+  love.graphics.setColor(0.96, 0.98, 1, 1);
+  love.graphics.printf(selectedQuest.name, layout.panelRect.x + 340, layout.panelRect.y + 108, 460, "left", 0, 0.78, 0.78);
+  love.graphics.setColor(0.78, 0.87, 0.98, 0.92);
+  love.graphics.printf(selectedQuest.summary, layout.panelRect.x + 340, layout.panelRect.y + 132, 460, "left", 0, 0.56, 0.56);
+
+  let objectiveY = layout.panelRect.y + 174;
+  for (const objective of selectedQuest.objectives) {
+    const progress = selectedEntry.objectives.find((candidate) => candidate.id === objective.id);
+    const progressText = progress ? `${progress.currentCount}/${progress.targetCount}` : `0/${objective.targetCount}`;
+
+    love.graphics.setColor(0.2, 0.26, 0.36, 0.92);
+    love.graphics.rectangle("fill", layout.panelRect.x + 330, objectiveY - 6, 470, 42, 7, 7);
+    love.graphics.setColor(0.7, 0.82, 0.95, 0.9);
+    love.graphics.rectangle("line", layout.panelRect.x + 330, objectiveY - 6, 470, 42, 7, 7);
+
+    love.graphics.setColor(0.96, 0.98, 1, 0.98);
+    love.graphics.printf(objective.description, layout.panelRect.x + 344, objectiveY + 2, 300, "left", 0, 0.54, 0.54);
+    love.graphics.setColor(0.84, 0.91, 1, 0.95);
+    love.graphics.printf(progressText, layout.panelRect.x + 658, objectiveY + 2, 120, "right", 0, 0.54, 0.54);
+
+    if (objective.kind === "visit-tile") {
+      const button = layout.objectiveGoToButtons.find((candidate) => candidate.objectiveId === objective.id);
+      if (button !== undefined) {
+        love.graphics.setColor(0.32, 0.36, 0.2, 0.96);
+        love.graphics.rectangle("fill", button.rect.x, button.rect.y, button.rect.width, button.rect.height, 6, 6);
+        love.graphics.setColor(0.92, 0.88, 0.56, 0.95);
+        love.graphics.rectangle("line", button.rect.x, button.rect.y, button.rect.width, button.rect.height, 6, 6);
+        love.graphics.setColor(1, 1, 1, 0.98);
+        love.graphics.printf("Go To", button.rect.x, button.rect.y + 6, button.rect.width, "center", 0, 0.5, 0.5);
+      }
+    }
+
+    objectiveY += 52;
+    if (objectiveY > layout.panelRect.y + layout.panelRect.height - 40) {
+      break;
+    }
+  }
 }
 
 function drawTalentTreeOverlay(uiState: ExploreUiState): void {
@@ -2847,6 +3350,11 @@ export function drawExploreUi(uiState: ExploreUiState, visitCount: number): void
       drawHex(center.x, center.y, uiState.hexSize, "line");
     }
 
+    if (tileMatchesGoToMode(uiState, tile)) {
+      love.graphics.setColor(0.95, 0.86, 0.45, 0.94);
+      drawHex(center.x, center.y, uiState.hexSize * 1.08, "line");
+    }
+
     love.graphics.setColor(1, 1, 1, 0.84);
     love.graphics.printf(tile.name, center.x - 40, center.y - 4, 80, "center", 0, 0.39, 0.39);
   }
@@ -2866,4 +3374,5 @@ export function drawExploreUi(uiState: ExploreUiState, visitCount: number): void
   drawCharacterSheetOverlay(uiState);
   drawInventoryOverlay(uiState);
   drawCraftShopOverlay(uiState);
+  drawQuestMenuOverlay(uiState);
 }

@@ -2,7 +2,7 @@ import {
   getQuestDialogPromptsForNpc,
   getStandardDialogForNpc,
 } from "../../src/planning/dialog-service";
-import { acceptQuest, resetQuestLogForNewRun } from "../../src/planning/quest-log";
+import { acceptQuest, resetQuestLogForNewRun, setQuestStatus } from "../../src/planning/quest-log";
 
 describe("dialog-service", () => {
   beforeEach(() => {
@@ -20,12 +20,26 @@ describe("dialog-service", () => {
     const prompts = getQuestDialogPromptsForNpc("npc:igor");
 
     expect(prompts.some((entry) => entry.questId === "main:defeat-dracula")).toBe(true);
+    expect(prompts.some((entry) => entry.kind === "offer")).toBe(true);
   });
 
   it("hides accepted quests from new offers", () => {
     acceptQuest("main:defeat-dracula");
     const prompts = getQuestDialogPromptsForNpc("npc:igor");
 
-    expect(prompts.some((entry) => entry.questId === "main:defeat-dracula")).toBe(false);
+    expect(prompts.some((entry) => entry.questId === "main:defeat-dracula" && entry.kind === "offer")).toBe(false);
+  });
+
+  it("shows turn-in prompts for ready quests at the turn-in npc", () => {
+    acceptQuest("main:defeat-dracula");
+    setQuestStatus("main:defeat-dracula", "ready-to-turn-in");
+
+    const prompts = getQuestDialogPromptsForNpc("npc:igor");
+
+    expect(
+      prompts.some(
+        (entry) => entry.questId === "main:defeat-dracula" && entry.kind === "turn-in",
+      ),
+    ).toBe(true);
   });
 });

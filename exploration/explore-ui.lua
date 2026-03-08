@@ -2,9 +2,12 @@ local ____lualib = require("lualib_bundle")
 local __TS__StringPadStart = ____lualib.__TS__StringPadStart
 local __TS__New = ____lualib.__TS__New
 local __TS__ArrayFind = ____lualib.__TS__ArrayFind
+local __TS__ArrayFilter = ____lualib.__TS__ArrayFilter
+local __TS__ArraySome = ____lualib.__TS__ArraySome
+local __TS__ArrayMap = ____lualib.__TS__ArrayMap
+local __TS__ArrayIncludes = ____lualib.__TS__ArrayIncludes
 local __TS__NumberToFixed = ____lualib.__TS__NumberToFixed
 local __TS__ArrayFindIndex = ____lualib.__TS__ArrayFindIndex
-local __TS__ArrayMap = ____lualib.__TS__ArrayMap
 local __TS__ArrayPush = ____lualib.__TS__ArrayPush
 local ____exports = {}
 local isPointInRect, asAdjustableShopSide, getShopDieTargetRects, syncShopVisualDice, getShopVisualDieAt, getShopFaceTiles, getShopFaceTileAt
@@ -22,6 +25,12 @@ local ____world_2Dspec_2Dbuilder = require("planning.world-spec-builder")
 local createWorldSpecFromPlan = ____world_2Dspec_2Dbuilder.createWorldSpecFromPlan
 local ____world_2Dvalidator = require("planning.world-validator")
 local validateWorldAgainstSpec = ____world_2Dvalidator.validateWorldAgainstSpec
+local ____quest_2Devents = require("planning.quest-events")
+local recordTileVisited = ____quest_2Devents.recordTileVisited
+local ____content_2Dregistry = require("planning.content-registry")
+local getQuestById = ____content_2Dregistry.getQuestById
+local ____quest_2Dlog = require("planning.quest-log")
+local listQuestEntries = ____quest_2Dlog.listQuestEntries
 local ____world_2Dgenerator = require("exploration.world-generator")
 local applyWorldSpecToExploreState = ____world_2Dgenerator.applyWorldSpecToExploreState
 local ____player_2Dprogression = require("game.player-progression")
@@ -107,7 +116,7 @@ function syncShopVisualDice(self, uiState, dice, layout, _forceRespawn)
                 function(____, entry) return entry.id == target.id end
             )
             if not die then
-                goto __continue127
+                goto __continue152
             end
             local targetX = target.rect.x + target.rect.width * 0.5
             local targetY = target.rect.y + target.rect.height * 0.5
@@ -119,7 +128,7 @@ function syncShopVisualDice(self, uiState, dice, layout, _forceRespawn)
                 size = target.rect.width
             }
         end
-        ::__continue127::
+        ::__continue152::
     end
     uiState.shopVisualDice = nextVisuals
 end
@@ -270,6 +279,9 @@ end
 local function createCraftShopButtonRect(self)
     return {x = 404, y = 52, width = 200, height = 34}
 end
+local function createQuestMenuButtonRect(self)
+    return {x = 616, y = 52, width = 180, height = 34}
+end
 local function createCraftsfolkOptions(self)
     return {{id = "craft:up-down-smith", name = "Up/Down Smith", description = "Simple face tuning specialist for upgrade and downgrade work."}, {id = "craft:face-smith", name = "Face Smith", description = "Copies an existing face onto a die or removes a selected face."}}
 end
@@ -303,6 +315,7 @@ local function refreshLayoutIfNeeded(self, uiState)
     uiState.characterSheetButtonRect = createCharacterSheetButtonRect(nil)
     uiState.inventoryButtonRect = createInventoryButtonRect(nil)
     uiState.craftShopButtonRect = createCraftShopButtonRect(nil)
+    uiState.questMenuButtonRect = createQuestMenuButtonRect(nil)
     uiState.xpBarRect = createXpBarRect(nil)
 end
 local function getButtonAt(self, uiState, x, y)
@@ -312,6 +325,104 @@ local function getButtonAt(self, uiState, x, y)
         end
     end
     return nil
+end
+local function listQuestEntriesForCategory(self, category)
+    return __TS__ArrayFilter(
+        listQuestEntries(nil),
+        function(____, entry) return entry.category == category end
+    )
+end
+local function ensureQuestSelection(self, uiState)
+    local entries = listQuestEntriesForCategory(nil, uiState.selectedQuestCategory)
+    if #entries == 0 then
+        uiState.selectedQuestId = nil
+        return
+    end
+    local selectedExists = __TS__ArraySome(
+        entries,
+        function(____, entry) return entry.questId == uiState.selectedQuestId end
+    )
+    if not selectedExists then
+        local ____uiState_2 = uiState
+        local ____opt_0 = entries[1]
+        ____uiState_2.selectedQuestId = ____opt_0 and ____opt_0.questId
+    end
+end
+local function getSelectedQuestEntry(self, uiState)
+    ensureQuestSelection(nil, uiState)
+    if uiState.selectedQuestId == nil then
+        return nil
+    end
+    return __TS__ArrayFind(
+        listQuestEntriesForCategory(nil, uiState.selectedQuestCategory),
+        function(____, entry) return entry.questId == uiState.selectedQuestId end
+    )
+end
+local function getQuestMenuLayout(self, uiState)
+    local panelWidth = math.min(
+        860,
+        math.floor(uiState.width * 0.88)
+    )
+    local panelHeight = math.min(
+        560,
+        math.floor(uiState.height * 0.9)
+    )
+    local panelX = math.floor((uiState.width - panelWidth) * 0.5)
+    local panelY = math.floor((uiState.height - panelHeight) * 0.5)
+    local categories = {"main", "side", "town"}
+    local categoryTabs = __TS__ArrayMap(
+        categories,
+        function(____, category, index) return {category = category, rect = {x = panelX + 20 + index * 132, y = panelY + 56, width = 120, height = 32}} end
+    )
+    local questRows = {}
+    local rowY = panelY + 104
+    local entries = listQuestEntriesForCategory(nil, uiState.selectedQuestCategory)
+    for ____, entry in ipairs(entries) do
+        if rowY > panelY + panelHeight - 64 then
+            break
+        end
+        questRows[#questRows + 1] = {questId = entry.questId, rect = {x = panelX + 20, y = rowY, width = 280, height = 34}}
+        rowY = rowY + 42
+    end
+    local objectiveGoToButtons = {}
+    local selectedQuest = getSelectedQuestEntry(nil, uiState)
+    if selectedQuest ~= nil then
+        local quest = getQuestById(nil, selectedQuest.questId)
+        local objectiveY = panelY + 146
+        for ____, objective in ipairs(quest.objectives) do
+            if objectiveY > panelY + panelHeight - 64 then
+                break
+            end
+            if objective.kind == "visit-tile" then
+                objectiveGoToButtons[#objectiveGoToButtons + 1] = {objectiveId = objective.id, rect = {x = panelX + panelWidth - 180, y = objectiveY - 2, width = 120, height = 24}}
+            end
+            objectiveY = objectiveY + 52
+        end
+    end
+    return {
+        panelRect = {x = panelX, y = panelY, width = panelWidth, height = panelHeight},
+        closeButtonRect = {x = panelX + panelWidth - 50, y = panelY + 12, width = 34, height = 24},
+        clearGoToRect = {x = panelX + panelWidth - 220, y = panelY + 56, width = 140, height = 32},
+        categoryTabs = categoryTabs,
+        questRows = questRows,
+        objectiveGoToButtons = objectiveGoToButtons
+    }
+end
+local function tileMatchesGoToMode(self, uiState, tile)
+    if not uiState.isGoToTileMode then
+        return false
+    end
+    if uiState.goToTileZone ~= nil and tile.zone ~= uiState.goToTileZone then
+        return false
+    end
+    if uiState.goToTileIds ~= nil and #uiState.goToTileIds > 0 then
+        local specialTileId = type(tile.metadata.specialTileId) == "string" and tile.metadata.specialTileId or nil
+        if specialTileId == nil then
+            return false
+        end
+        return __TS__ArrayIncludes(uiState.goToTileIds, specialTileId)
+    end
+    return true
 end
 local function getCraftShopLayout(self, uiState, dice)
     local panelWidth = math.min(
@@ -404,8 +515,8 @@ local function getCraftShopLayout(self, uiState, dice)
             end
         end
     end
-    local ____opt_2 = selectedDie
-    local selectedSide = ____opt_2 and __TS__ArrayFind(
+    local ____opt_5 = selectedDie
+    local selectedSide = ____opt_5 and __TS__ArrayFind(
         selectedDie and selectedDie.sides,
         function(____, side) return side.id == uiState.selectedUpgradeSideId end
     )
@@ -496,8 +607,8 @@ local function applyShopPropertyAdjustment(self, uiState, dice, operationType)
         dice,
         function(____, die) return die.id == uiState.selectedUpgradeDieId end
     )
-    local ____opt_8 = selectedDie
-    local selectedSide = ____opt_8 and __TS__ArrayFind(
+    local ____opt_11 = selectedDie
+    local selectedSide = ____opt_11 and __TS__ArrayFind(
         selectedDie and selectedDie.sides,
         function(____, side) return side.id == uiState.selectedUpgradeSideId end
     )
@@ -546,8 +657,8 @@ local function appendCopiedFaceInShop(self, uiState, dice)
         dice,
         function(____, die) return die.id == uiState.selectedUpgradeDieId end
     )
-    local ____opt_12 = selectedDie
-    local selectedSide = ____opt_12 and __TS__ArrayFind(
+    local ____opt_15 = selectedDie
+    local selectedSide = ____opt_15 and __TS__ArrayFind(
         selectedDie and selectedDie.sides,
         function(____, side) return side.id == uiState.selectedUpgradeSideId end
     )
@@ -565,8 +676,8 @@ local function appendCopiedFaceInShop(self, uiState, dice)
         uiState.shopStatusText = result.reason or "Could not copy selected face."
         return
     end
-    local ____uiState_playerProgression_16, ____gold_17 = uiState.playerProgression, "gold"
-    ____uiState_playerProgression_16[____gold_17] = ____uiState_playerProgression_16[____gold_17] - FACE_APPEND_COST
+    local ____uiState_playerProgression_19, ____gold_20 = uiState.playerProgression, "gold"
+    ____uiState_playerProgression_19[____gold_20] = ____uiState_playerProgression_19[____gold_20] - FACE_APPEND_COST
     uiState.shopGoldPulseTimer = 0.55
     uiState.shopAwaitingRemoveConfirm = false
     recordAppendFaceCopy(nil, uiState.playerProgression, {dieId = selectedDie.id, sourceSideId = selectedSide.id, newSideId = newSideId})
@@ -583,8 +694,8 @@ local function removeFaceInShop(self, uiState, dice)
         dice,
         function(____, die) return die.id == uiState.selectedUpgradeDieId end
     )
-    local ____opt_18 = selectedDie
-    local selectedSide = ____opt_18 and __TS__ArrayFind(
+    local ____opt_21 = selectedDie
+    local selectedSide = ____opt_21 and __TS__ArrayFind(
         selectedDie and selectedDie.sides,
         function(____, side) return side.id == uiState.selectedUpgradeSideId end
     )
@@ -601,17 +712,17 @@ local function removeFaceInShop(self, uiState, dice)
         uiState.shopStatusText = result.reason or "Could not remove selected face."
         return
     end
-    local ____uiState_playerProgression_22, ____gold_23 = uiState.playerProgression, "gold"
-    ____uiState_playerProgression_22[____gold_23] = ____uiState_playerProgression_22[____gold_23] + FACE_REMOVE_REFUND
+    local ____uiState_playerProgression_25, ____gold_26 = uiState.playerProgression, "gold"
+    ____uiState_playerProgression_25[____gold_26] = ____uiState_playerProgression_25[____gold_26] + FACE_REMOVE_REFUND
     uiState.shopGoldPulseTimer = 0.55
     uiState.shopAwaitingRemoveConfirm = false
     recordRemoveFace(nil, uiState.playerProgression, {dieId = selectedDie.id, sideId = selectedSide.id})
     local remainingSide = selectedDie.sides[1]
     uiState.selectedUpgradeSideId = remainingSide and remainingSide.id
     local adjustableSide = asAdjustableShopSide(nil, remainingSide)
-    local ____uiState_30 = uiState
-    local ____opt_26 = adjustableSide and adjustableSide:getAdjustmentProperties()[1]
-    ____uiState_30.selectedUpgradePropertyId = ____opt_26 and ____opt_26.id
+    local ____uiState_33 = uiState
+    local ____opt_29 = adjustableSide and adjustableSide:getAdjustmentProperties()[1]
+    ____uiState_33.selectedUpgradePropertyId = ____opt_29 and ____opt_29.id
     uiState.shopStatusText = ((("Removed face. Refunded " .. tostring(FACE_REMOVE_REFUND)) .. " gold. Gold now ") .. formatGold(nil, uiState.playerProgression.gold)) .. "."
 end
 local function clearShopHoverState(self, uiState)
@@ -630,49 +741,49 @@ local function openCraftShop(self, uiState)
     uiState.shopFocusedColumn = "craftsfolk"
     uiState.shopFocusedAction = "primary"
     uiState.shopAwaitingRemoveConfirm = false
-    local ____uiState_34 = uiState
-    local ____uiState_selectedCraftsfolkId_33 = uiState.selectedCraftsfolkId
-    if ____uiState_selectedCraftsfolkId_33 == nil then
-        local ____opt_31 = uiState.availableCraftsfolk[1]
-        ____uiState_selectedCraftsfolkId_33 = ____opt_31 and ____opt_31.id
+    local ____uiState_37 = uiState
+    local ____uiState_selectedCraftsfolkId_36 = uiState.selectedCraftsfolkId
+    if ____uiState_selectedCraftsfolkId_36 == nil then
+        local ____opt_34 = uiState.availableCraftsfolk[1]
+        ____uiState_selectedCraftsfolkId_36 = ____opt_34 and ____opt_34.id
     end
-    ____uiState_34.selectedCraftsfolkId = ____uiState_selectedCraftsfolkId_33
+    ____uiState_37.selectedCraftsfolkId = ____uiState_selectedCraftsfolkId_36
     local dice = createPlayerCombatDiceLoadout(nil, uiState.playerProgression)
     local selectedDie = __TS__ArrayFind(
         dice,
         function(____, die) return die.id == uiState.selectedUpgradeDieId end
     ) or dice[1]
     uiState.selectedUpgradeDieId = selectedDie and selectedDie.id
-    local ____uiState_48 = uiState
-    local ____opt_39 = selectedDie
-    local ____opt_37 = ____opt_39 and __TS__ArrayFind(
+    local ____uiState_51 = uiState
+    local ____opt_42 = selectedDie
+    local ____opt_40 = ____opt_42 and __TS__ArrayFind(
         selectedDie and selectedDie.sides,
         function(____, side) return side.id == uiState.selectedUpgradeSideId end
     )
-    local ____temp_47 = ____opt_37 and ____opt_37.id
-    if ____temp_47 == nil then
-        local ____opt_43 = selectedDie and selectedDie.sides[1]
-        ____temp_47 = ____opt_43 and ____opt_43.id
+    local ____temp_50 = ____opt_40 and ____opt_40.id
+    if ____temp_50 == nil then
+        local ____opt_46 = selectedDie and selectedDie.sides[1]
+        ____temp_50 = ____opt_46 and ____opt_46.id
     end
-    ____uiState_48.selectedUpgradeSideId = ____temp_47
-    local ____opt_49 = selectedDie
-    local selectedSide = ____opt_49 and __TS__ArrayFind(
+    ____uiState_51.selectedUpgradeSideId = ____temp_50
+    local ____opt_52 = selectedDie
+    local selectedSide = ____opt_52 and __TS__ArrayFind(
         selectedDie and selectedDie.sides,
         function(____, side) return side.id == uiState.selectedUpgradeSideId end
     )
     local selectedAdjustableSide = asAdjustableShopSide(nil, selectedSide)
-    local ____uiState_64 = uiState
-    local ____opt_55 = selectedAdjustableSide
-    local ____opt_53 = ____opt_55 and __TS__ArrayFind(
+    local ____uiState_67 = uiState
+    local ____opt_58 = selectedAdjustableSide
+    local ____opt_56 = ____opt_58 and __TS__ArrayFind(
         selectedAdjustableSide and selectedAdjustableSide:getAdjustmentProperties(),
         function(____, entry) return entry.id == uiState.selectedUpgradePropertyId end
     )
-    local ____temp_63 = ____opt_53 and ____opt_53.id
-    if ____temp_63 == nil then
-        local ____opt_59 = selectedAdjustableSide and selectedAdjustableSide:getAdjustmentProperties()[1]
-        ____temp_63 = ____opt_59 and ____opt_59.id
+    local ____temp_66 = ____opt_56 and ____opt_56.id
+    if ____temp_66 == nil then
+        local ____opt_62 = selectedAdjustableSide and selectedAdjustableSide:getAdjustmentProperties()[1]
+        ____temp_66 = ____opt_62 and ____opt_62.id
     end
-    ____uiState_64.selectedUpgradePropertyId = ____temp_63
+    ____uiState_67.selectedUpgradePropertyId = ____temp_66
     local layout = getCraftShopLayout(nil, uiState, dice)
     syncShopVisualDice(
         nil,
@@ -693,8 +804,8 @@ local function getShopActionState(self, uiState, dice)
         dice,
         function(____, die) return die.id == uiState.selectedUpgradeDieId end
     )
-    local ____opt_65 = selectedDie
-    local selectedSide = ____opt_65 and __TS__ArrayFind(
+    local ____opt_68 = selectedDie
+    local selectedSide = ____opt_68 and __TS__ArrayFind(
         selectedDie and selectedDie.sides,
         function(____, side) return side.id == uiState.selectedUpgradeSideId end
     )
@@ -702,39 +813,39 @@ local function getShopActionState(self, uiState, dice)
         if not selectedDie or not selectedSide then
             return {canPrimary = false, canSecondary = false, primaryReason = "Select a die face to copy.", secondaryReason = "Select a die face to remove."}
         end
-        local ____temp_71 = uiState.playerProgression.gold >= FACE_APPEND_COST
-        local ____temp_72 = #selectedDie.sides > 1
-        local ____temp_69
+        local ____temp_74 = uiState.playerProgression.gold >= FACE_APPEND_COST
+        local ____temp_75 = #selectedDie.sides > 1
+        local ____temp_72
         if uiState.playerProgression.gold >= FACE_APPEND_COST then
-            ____temp_69 = nil
+            ____temp_72 = nil
         else
-            ____temp_69 = ("Need " .. tostring(FACE_APPEND_COST)) .. " gold to copy a face."
+            ____temp_72 = ("Need " .. tostring(FACE_APPEND_COST)) .. " gold to copy a face."
         end
-        local ____temp_70
+        local ____temp_73
         if #selectedDie.sides > 1 then
-            ____temp_70 = nil
+            ____temp_73 = nil
         else
-            ____temp_70 = "A die must keep at least one face."
+            ____temp_73 = "A die must keep at least one face."
         end
-        return {canPrimary = ____temp_71, canSecondary = ____temp_72, primaryReason = ____temp_69, secondaryReason = ____temp_70}
+        return {canPrimary = ____temp_74, canSecondary = ____temp_75, primaryReason = ____temp_72, secondaryReason = ____temp_73}
     end
     if not isUpDownSmithSelected(nil, uiState) then
         return {canPrimary = false, canSecondary = false, primaryReason = "Select the Up/Down Smith.", secondaryReason = "Select the Up/Down Smith."}
     end
     local canAdjust = uiState.selectedUpgradePropertyId ~= nil
-    local ____canAdjust_73
+    local ____canAdjust_76
     if canAdjust then
-        ____canAdjust_73 = nil
+        ____canAdjust_76 = nil
     else
-        ____canAdjust_73 = "Select a face property first."
+        ____canAdjust_76 = "Select a face property first."
     end
-    local ____canAdjust_74
+    local ____canAdjust_77
     if canAdjust then
-        ____canAdjust_74 = nil
+        ____canAdjust_77 = nil
     else
-        ____canAdjust_74 = "Select a face property first."
+        ____canAdjust_77 = "Select a face property first."
     end
-    return {canPrimary = canAdjust, canSecondary = canAdjust, primaryReason = ____canAdjust_73, secondaryReason = ____canAdjust_74}
+    return {canPrimary = canAdjust, canSecondary = canAdjust, primaryReason = ____canAdjust_76, secondaryReason = ____canAdjust_77}
 end
 local function triggerPrimaryShopAction(self, uiState, dice)
     local actionState = getShopActionState(nil, uiState, dice)
@@ -861,11 +972,11 @@ local function clampShopScrollAfterSelection(self, uiState, layout, dice)
     elseif faceIndex >= layout.faceStartIndex + layout.visibleFaceCount then
         uiState.shopFaceScrollIndex = faceIndex - layout.visibleFaceCount + 1
     end
-    local ____asAdjustableShopSide_81 = asAdjustableShopSide
-    local ____opt_77 = selectedDie
-    local selectedAdjustableSide = ____asAdjustableShopSide_81(
+    local ____asAdjustableShopSide_84 = asAdjustableShopSide
+    local ____opt_80 = selectedDie
+    local selectedAdjustableSide = ____asAdjustableShopSide_84(
         nil,
-        ____opt_77 and __TS__ArrayFind(
+        ____opt_80 and __TS__ArrayFind(
             selectedDie and selectedDie.sides,
             function(____, entry) return entry.id == uiState.selectedUpgradeSideId end
         )
@@ -998,6 +1109,14 @@ function ____exports.createExploreUiState(self, input)
         inventoryButtonRect = createInventoryButtonRect(nil),
         isCraftShopOpen = false,
         craftShopButtonRect = createCraftShopButtonRect(nil),
+        isQuestMenuOpen = false,
+        questMenuButtonRect = createQuestMenuButtonRect(nil),
+        selectedQuestCategory = "main",
+        selectedQuestId = nil,
+        isGoToTileMode = false,
+        goToTileZone = nil,
+        goToTileIds = nil,
+        goToTileHint = nil,
         availableCraftsfolk = createCraftsfolkOptions(nil),
         selectedCraftsfolkId = nil,
         selectedUpgradeDieId = nil,
@@ -1028,6 +1147,28 @@ local function regeneratePlannerSpec(self, uiState)
     uiState.worldValidation = plannerPackage.worldValidation
 end
 function ____exports.onExploreKeyPressed(self, uiState, key)
+    if uiState.isQuestMenuOpen then
+        if key == "escape" or key == "q" then
+            uiState.isQuestMenuOpen = false
+            return true
+        end
+        if key == "left" or key == "right" then
+            local categories = {"main", "side", "town"}
+            local currentIndex = __TS__ArrayFindIndex(
+                categories,
+                function(____, category) return category == uiState.selectedQuestCategory end
+            )
+            local delta = key == "left" and -1 or 1
+            local nextIndex = math.max(
+                0,
+                math.min(#categories - 1, currentIndex + delta)
+            )
+            uiState.selectedQuestCategory = categories[nextIndex + 1] or uiState.selectedQuestCategory
+            ensureQuestSelection(nil, uiState)
+            return true
+        end
+        return true
+    end
     if uiState.isCraftShopOpen then
         if key == "escape" or key == "u" then
             closeCraftShop(nil, uiState)
@@ -1038,8 +1179,8 @@ function ____exports.onExploreKeyPressed(self, uiState, key)
             dice,
             function(____, die) return die.id == uiState.selectedUpgradeDieId end
         ) or dice[1]
-        local ____opt_84 = selectedDie
-        local selectedSide = ____opt_84 and __TS__ArrayFind(
+        local ____opt_87 = selectedDie
+        local selectedSide = ____opt_87 and __TS__ArrayFind(
             selectedDie and selectedDie.sides,
             function(____, side) return side.id == uiState.selectedUpgradeSideId end
         )
@@ -1052,13 +1193,13 @@ function ____exports.onExploreKeyPressed(self, uiState, key)
             dice,
             function(____, entry) return entry.id end
         )
-        local ____opt_88 = selectedDie
-        local faceIds = ____opt_88 and __TS__ArrayMap(
+        local ____opt_91 = selectedDie
+        local faceIds = ____opt_91 and __TS__ArrayMap(
             selectedDie and selectedDie.sides,
             function(____, entry) return entry.id end
         ) or ({})
-        local ____opt_92 = selectedAdjustableSide
-        local propertyIds = ____opt_92 and __TS__ArrayMap(
+        local ____opt_95 = selectedAdjustableSide
+        local propertyIds = ____opt_95 and __TS__ArrayMap(
             selectedAdjustableSide and selectedAdjustableSide:getAdjustmentProperties(),
             function(____, entry) return entry.id end
         ) or ({})
@@ -1117,28 +1258,28 @@ function ____exports.onExploreKeyPressed(self, uiState, key)
                         dice,
                         function(____, entry) return entry.id == nextDieId end
                     )
-                    local ____uiState_100 = uiState
-                    local ____opt_96 = nextDie and nextDie.sides[1]
-                    ____uiState_100.selectedUpgradeSideId = ____opt_96 and ____opt_96.id
+                    local ____uiState_103 = uiState
+                    local ____opt_99 = nextDie and nextDie.sides[1]
+                    ____uiState_103.selectedUpgradeSideId = ____opt_99 and ____opt_99.id
                     local nextAdjustableSide = asAdjustableShopSide(nil, nextDie and nextDie.sides[1])
-                    local ____uiState_107 = uiState
-                    local ____opt_103 = nextAdjustableSide and nextAdjustableSide:getAdjustmentProperties()[1]
-                    ____uiState_107.selectedUpgradePropertyId = ____opt_103 and ____opt_103.id
+                    local ____uiState_110 = uiState
+                    local ____opt_106 = nextAdjustableSide and nextAdjustableSide:getAdjustmentProperties()[1]
+                    ____uiState_110.selectedUpgradePropertyId = ____opt_106 and ____opt_106.id
                     uiState.shopAwaitingRemoveConfirm = false
                 end
             elseif uiState.shopFocusedColumn == "faces" then
                 local nextFaceId = changeShopSelectionByStep(nil, uiState.selectedUpgradeSideId, faceIds, direction)
                 if nextFaceId and nextFaceId ~= uiState.selectedUpgradeSideId then
                     uiState.selectedUpgradeSideId = nextFaceId
-                    local ____opt_108 = selectedDie
-                    local nextSide = ____opt_108 and __TS__ArrayFind(
+                    local ____opt_111 = selectedDie
+                    local nextSide = ____opt_111 and __TS__ArrayFind(
                         selectedDie and selectedDie.sides,
                         function(____, entry) return entry.id == nextFaceId end
                     )
                     local nextAdjustableSide = asAdjustableShopSide(nil, nextSide)
-                    local ____uiState_116 = uiState
-                    local ____opt_112 = nextAdjustableSide and nextAdjustableSide:getAdjustmentProperties()[1]
-                    ____uiState_116.selectedUpgradePropertyId = ____opt_112 and ____opt_112.id
+                    local ____uiState_119 = uiState
+                    local ____opt_115 = nextAdjustableSide and nextAdjustableSide:getAdjustmentProperties()[1]
+                    ____uiState_119.selectedUpgradePropertyId = ____opt_115 and ____opt_115.id
                     uiState.shopAwaitingRemoveConfirm = false
                 end
             elseif uiState.shopFocusedColumn == "properties" then
@@ -1191,6 +1332,25 @@ function ____exports.onExploreKeyPressed(self, uiState, key)
         end
         return true
     end
+    if key == "q" then
+        uiState.isQuestMenuOpen = not uiState.isQuestMenuOpen
+        if uiState.isQuestMenuOpen then
+            uiState.isCharacterSheetOpen = false
+            uiState.isInventoryOpen = false
+            uiState.isTalentTreeOpen = false
+            uiState.selectedTalentId = nil
+            uiState.isCraftShopOpen = false
+            ensureQuestSelection(nil, uiState)
+        end
+        return true
+    end
+    if key == "g" and uiState.isGoToTileMode then
+        uiState.isGoToTileMode = false
+        uiState.goToTileZone = nil
+        uiState.goToTileIds = nil
+        uiState.goToTileHint = nil
+        return true
+    end
     if key == "escape" and (uiState.isCharacterSheetOpen or uiState.isInventoryOpen or uiState.isTalentTreeOpen) then
         uiState.isCharacterSheetOpen = false
         uiState.isInventoryOpen = false
@@ -1237,6 +1397,9 @@ function ____exports.updateExploreUiState(self, uiState, dt)
 end
 function ____exports.onExploreMouseMoved(self, uiState, x, y)
     refreshLayoutIfNeeded(nil, uiState)
+    if uiState.isQuestMenuOpen then
+        return
+    end
     if uiState.isCraftShopOpen then
         local dice = createPlayerCombatDiceLoadout(nil, uiState.playerProgression)
         local layout = getCraftShopLayout(nil, uiState, dice)
@@ -1261,6 +1424,68 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
     if button ~= 1 then
         return nil
     end
+    if uiState.isQuestMenuOpen then
+        local layout = getQuestMenuLayout(nil, uiState)
+        if isPointInRect(nil, x, y, layout.closeButtonRect) then
+            uiState.isQuestMenuOpen = false
+            return nil
+        end
+        if isPointInRect(nil, x, y, layout.clearGoToRect) then
+            uiState.isGoToTileMode = false
+            uiState.goToTileZone = nil
+            uiState.goToTileIds = nil
+            uiState.goToTileHint = nil
+            return nil
+        end
+        for ____, tab in ipairs(layout.categoryTabs) do
+            do
+                if not isPointInRect(nil, x, y, tab.rect) then
+                    goto __continue251
+                end
+                uiState.selectedQuestCategory = tab.category
+                ensureQuestSelection(nil, uiState)
+                return nil
+            end
+            ::__continue251::
+        end
+        for ____, row in ipairs(layout.questRows) do
+            do
+                if not isPointInRect(nil, x, y, row.rect) then
+                    goto __continue254
+                end
+                uiState.selectedQuestId = row.questId
+                return nil
+            end
+            ::__continue254::
+        end
+        for ____, goToButton in ipairs(layout.objectiveGoToButtons) do
+            do
+                if not isPointInRect(nil, x, y, goToButton.rect) then
+                    goto __continue257
+                end
+                local selectedQuest = getSelectedQuestEntry(nil, uiState)
+                if selectedQuest == nil then
+                    return nil
+                end
+                local quest = getQuestById(nil, selectedQuest.questId)
+                local objective = __TS__ArrayFind(
+                    quest.objectives,
+                    function(____, candidate) return candidate.id == goToButton.objectiveId end
+                )
+                if (objective and objective.kind) ~= "visit-tile" then
+                    return nil
+                end
+                uiState.isGoToTileMode = true
+                uiState.goToTileZone = objective.zone
+                uiState.goToTileIds = objective.tileIds ~= nil and ({unpack(objective.tileIds)}) or nil
+                uiState.goToTileHint = objective.goToTileHint
+                uiState.isQuestMenuOpen = false
+                return nil
+            end
+            ::__continue257::
+        end
+        return nil
+    end
     if uiState.isCraftShopOpen then
         local dice = createPlayerCombatDiceLoadout(nil, uiState.playerProgression)
         local layout = getCraftShopLayout(nil, uiState, dice)
@@ -1276,19 +1501,19 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, row in ipairs(layout.craftsfolkRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue218
+                    goto __continue266
                 end
                 uiState.selectedCraftsfolkId = row.id
                 uiState.shopAwaitingRemoveConfirm = false
-                local ____uiState_121 = uiState
-                local ____opt_119 = __TS__ArrayFind(
+                local ____uiState_126 = uiState
+                local ____opt_124 = __TS__ArrayFind(
                     uiState.availableCraftsfolk,
                     function(____, entry) return entry.id == row.id end
                 )
-                ____uiState_121.shopStatusText = "Selected craftsfolk: " .. (____opt_119 and ____opt_119.name or row.id)
+                ____uiState_126.shopStatusText = "Selected craftsfolk: " .. (____opt_124 and ____opt_124.name or row.id)
                 return nil
             end
-            ::__continue218::
+            ::__continue266::
         end
         local clickedVisualDie = getShopVisualDieAt(nil, uiState, x, y)
         if clickedVisualDie then
@@ -1297,13 +1522,13 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
                 dice,
                 function(____, die) return die.id == clickedVisualDie.id end
             )
-            local ____uiState_126 = uiState
-            local ____opt_122 = clickedDie and clickedDie.sides[1]
-            ____uiState_126.selectedUpgradeSideId = ____opt_122 and ____opt_122.id
+            local ____uiState_131 = uiState
+            local ____opt_127 = clickedDie and clickedDie.sides[1]
+            ____uiState_131.selectedUpgradeSideId = ____opt_127 and ____opt_127.id
             local initialAdjustableSide = asAdjustableShopSide(nil, clickedDie and clickedDie.sides[1])
-            local ____uiState_133 = uiState
-            local ____opt_129 = initialAdjustableSide and initialAdjustableSide:getAdjustmentProperties()[1]
-            ____uiState_133.selectedUpgradePropertyId = ____opt_129 and ____opt_129.id
+            local ____uiState_138 = uiState
+            local ____opt_134 = initialAdjustableSide and initialAdjustableSide:getAdjustmentProperties()[1]
+            ____uiState_138.selectedUpgradePropertyId = ____opt_134 and ____opt_134.id
             uiState.shopAwaitingRemoveConfirm = false
             uiState.shopStatusText = "Selected die: " .. (clickedDie and clickedDie.name or clickedVisualDie.id)
             return nil
@@ -1317,15 +1542,15 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         )
         if selectedFaceTile then
             uiState.selectedUpgradeSideId = selectedFaceTile.id
-            local ____opt_136 = selectedDie
-            local selectedSide = ____opt_136 and __TS__ArrayFind(
+            local ____opt_141 = selectedDie
+            local selectedSide = ____opt_141 and __TS__ArrayFind(
                 selectedDie and selectedDie.sides,
                 function(____, side) return side.id == selectedFaceTile.id end
             )
             local adjustableSide = asAdjustableShopSide(nil, selectedSide)
-            local ____uiState_144 = uiState
-            local ____opt_140 = adjustableSide and adjustableSide:getAdjustmentProperties()[1]
-            ____uiState_144.selectedUpgradePropertyId = ____opt_140 and ____opt_140.id
+            local ____uiState_149 = uiState
+            local ____opt_145 = adjustableSide and adjustableSide:getAdjustmentProperties()[1]
+            ____uiState_149.selectedUpgradePropertyId = ____opt_145 and ____opt_145.id
             uiState.shopAwaitingRemoveConfirm = false
             uiState.shopStatusText = "Selected die face."
             return nil
@@ -1333,14 +1558,14 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, row in ipairs(layout.propertyRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue226
+                    goto __continue274
                 end
                 uiState.selectedUpgradePropertyId = row.id
                 uiState.shopAwaitingRemoveConfirm = false
                 uiState.shopStatusText = "Selected face property."
                 return nil
             end
-            ::__continue226::
+            ::__continue274::
         end
         if isPointInRect(nil, x, y, layout.primaryActionButtonRect) then
             uiState.shopFocusedAction = "primary"
@@ -1378,12 +1603,12 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, row in ipairs(layout.talentRowRects) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue236
+                    goto __continue284
                 end
                 uiState.selectedTalentId = row.talentId
                 return nil
             end
-            ::__continue236::
+            ::__continue284::
         end
         return nil
     end
@@ -1409,6 +1634,18 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         end
         return nil
     end
+    if isPointInRect(nil, x, y, uiState.questMenuButtonRect) then
+        uiState.isQuestMenuOpen = not uiState.isQuestMenuOpen
+        if uiState.isQuestMenuOpen then
+            uiState.isCharacterSheetOpen = false
+            uiState.isInventoryOpen = false
+            uiState.isTalentTreeOpen = false
+            uiState.selectedTalentId = nil
+            uiState.isCraftShopOpen = false
+            ensureQuestSelection(nil, uiState)
+        end
+        return nil
+    end
     if isPointInRect(nil, x, y, uiState.xpBarRect) then
         uiState.isTalentTreeOpen = not uiState.isTalentTreeOpen
         if uiState.isTalentTreeOpen then
@@ -1425,7 +1662,24 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
     end
     local clickedTile = getTileAt(nil, uiState, x, y)
     if clickedTile then
-        tryTravelToCoord(nil, uiState.model, clickedTile.coord)
+        local traveled = tryTravelToCoord(nil, uiState.model, clickedTile.coord)
+        if traveled then
+            local activeTile = getCurrentTile(nil, uiState.model)
+            local progress = recordTileVisited(
+                nil,
+                {
+                    tileKey = activeTile.key,
+                    zone = activeTile.zone,
+                    specialTileId = type(activeTile.metadata.specialTileId) == "string" and activeTile.metadata.specialTileId or nil
+                }
+            )
+            if #progress > 0 then
+                local first = progress[1]
+                if first ~= nil then
+                    uiState.model.notice = ((((uiState.model.notice .. " Quest progress: ") .. tostring(first.currentCount)) .. "/") .. tostring(first.targetCount)) .. "."
+                end
+            end
+        end
     end
     return nil
 end
@@ -1702,6 +1956,37 @@ local function drawActionPanel(self, uiState)
         0.62,
         0.62
     )
+    love.graphics.setColor(0.2, 0.28, 0.43, 0.96)
+    love.graphics.rectangle(
+        "fill",
+        uiState.questMenuButtonRect.x,
+        uiState.questMenuButtonRect.y,
+        uiState.questMenuButtonRect.width,
+        uiState.questMenuButtonRect.height,
+        8,
+        8
+    )
+    love.graphics.setColor(0.73, 0.84, 0.98, 0.95)
+    love.graphics.rectangle(
+        "line",
+        uiState.questMenuButtonRect.x,
+        uiState.questMenuButtonRect.y,
+        uiState.questMenuButtonRect.width,
+        uiState.questMenuButtonRect.height,
+        8,
+        8
+    )
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf(
+        uiState.isQuestMenuOpen and "Close Quests (Q)" or "Open Quests (Q)",
+        uiState.questMenuButtonRect.x,
+        uiState.questMenuButtonRect.y + 9,
+        uiState.questMenuButtonRect.width,
+        "center",
+        0,
+        0.62,
+        0.62
+    )
     local currentTile = getCurrentTile(nil, uiState.model)
     local playerKey = toCoordKey(nil, uiState.model.playerCoord)
     love.graphics.setColor(0.81, 0.87, 0.97, 0.95)
@@ -1773,7 +2058,7 @@ local function drawActionPanel(self, uiState)
     end
     love.graphics.setColor(0.72, 0.8, 0.95, 0.86)
     love.graphics.printf(
-        "Movement: click neighboring hexes | Click XP bar or T: Talents | C: Character | I: Inventory | U: Upgrade Shop | P: Planner Debug | R: Reroll Plan",
+        "Movement: click neighboring hexes | Q: Quest Menu | Click XP bar or T: Talents | C: Character | I: Inventory | U: Upgrade Shop | P: Planner Debug | R: Reroll Plan",
         panelX + 14,
         uiState.height - 62,
         panelWidth - 28,
@@ -1782,6 +2067,347 @@ local function drawActionPanel(self, uiState)
         0.66,
         0.66
     )
+    if uiState.isGoToTileMode then
+        love.graphics.setColor(0.95, 0.89, 0.52, 0.96)
+        love.graphics.printf(
+            uiState.goToTileHint or "Go To Tile mode active. Follow highlighted tiles. Press G to clear.",
+            panelX + 14,
+            uiState.height - 86,
+            panelWidth - 28,
+            "left",
+            0,
+            0.6,
+            0.6
+        )
+    end
+end
+local function drawQuestMenuOverlay(self, uiState)
+    if not uiState.isQuestMenuOpen then
+        return
+    end
+    local layout = getQuestMenuLayout(nil, uiState)
+    local entries = listQuestEntriesForCategory(nil, uiState.selectedQuestCategory)
+    local selectedEntry = getSelectedQuestEntry(nil, uiState)
+    local selectedQuest = selectedEntry ~= nil and getQuestById(nil, selectedEntry.questId) or nil
+    love.graphics.setColor(0, 0, 0, 0.54)
+    love.graphics.rectangle(
+        "fill",
+        0,
+        0,
+        uiState.width,
+        uiState.height
+    )
+    love.graphics.setColor(0.08, 0.1, 0.15, 0.98)
+    love.graphics.rectangle(
+        "fill",
+        layout.panelRect.x,
+        layout.panelRect.y,
+        layout.panelRect.width,
+        layout.panelRect.height,
+        10,
+        10
+    )
+    love.graphics.setColor(0.8, 0.88, 0.98, 0.88)
+    love.graphics.rectangle(
+        "line",
+        layout.panelRect.x,
+        layout.panelRect.y,
+        layout.panelRect.width,
+        layout.panelRect.height,
+        10,
+        10
+    )
+    love.graphics.setColor(0.96, 0.98, 1, 1)
+    love.graphics.printf(
+        "Quest Journal",
+        layout.panelRect.x + 20,
+        layout.panelRect.y + 16,
+        260,
+        "left",
+        0,
+        0.9,
+        0.9
+    )
+    love.graphics.setColor(0.32, 0.24, 0.24, 0.94)
+    love.graphics.rectangle(
+        "fill",
+        layout.closeButtonRect.x,
+        layout.closeButtonRect.y,
+        layout.closeButtonRect.width,
+        layout.closeButtonRect.height,
+        6,
+        6
+    )
+    love.graphics.setColor(0.95, 0.77, 0.77, 0.98)
+    love.graphics.rectangle(
+        "line",
+        layout.closeButtonRect.x,
+        layout.closeButtonRect.y,
+        layout.closeButtonRect.width,
+        layout.closeButtonRect.height,
+        6,
+        6
+    )
+    love.graphics.setColor(1, 1, 1, 0.98)
+    love.graphics.printf(
+        "X",
+        layout.closeButtonRect.x,
+        layout.closeButtonRect.y + 5,
+        layout.closeButtonRect.width,
+        "center",
+        0,
+        0.62,
+        0.62
+    )
+    for ____, tab in ipairs(layout.categoryTabs) do
+        local selected = tab.category == uiState.selectedQuestCategory
+        love.graphics.setColor(selected and 0.26 or 0.17, selected and 0.38 or 0.24, selected and 0.5 or 0.35, 0.95)
+        love.graphics.rectangle(
+            "fill",
+            tab.rect.x,
+            tab.rect.y,
+            tab.rect.width,
+            tab.rect.height,
+            7,
+            7
+        )
+        love.graphics.setColor(selected and 0.88 or 0.7, selected and 0.94 or 0.8, 1, 0.95)
+        love.graphics.rectangle(
+            "line",
+            tab.rect.x,
+            tab.rect.y,
+            tab.rect.width,
+            tab.rect.height,
+            7,
+            7
+        )
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.printf(
+            string.upper(tab.category),
+            tab.rect.x,
+            tab.rect.y + 9,
+            tab.rect.width,
+            "center",
+            0,
+            0.56,
+            0.56
+        )
+    end
+    love.graphics.setColor(0.25, 0.31, 0.42, 0.85)
+    love.graphics.rectangle(
+        "fill",
+        layout.clearGoToRect.x,
+        layout.clearGoToRect.y,
+        layout.clearGoToRect.width,
+        layout.clearGoToRect.height,
+        7,
+        7
+    )
+    love.graphics.setColor(0.78, 0.85, 0.96, 0.95)
+    love.graphics.rectangle(
+        "line",
+        layout.clearGoToRect.x,
+        layout.clearGoToRect.y,
+        layout.clearGoToRect.width,
+        layout.clearGoToRect.height,
+        7,
+        7
+    )
+    love.graphics.setColor(1, 1, 1, 0.96)
+    love.graphics.printf(
+        "Clear Go To (G)",
+        layout.clearGoToRect.x,
+        layout.clearGoToRect.y + 9,
+        layout.clearGoToRect.width,
+        "center",
+        0,
+        0.52,
+        0.52
+    )
+    for ____, row in ipairs(layout.questRows) do
+        do
+            local entry = __TS__ArrayFind(
+                entries,
+                function(____, candidate) return candidate.questId == row.questId end
+            )
+            if not entry then
+                goto __continue318
+            end
+            local selected = row.questId == uiState.selectedQuestId
+            love.graphics.setColor(selected and 0.24 or 0.16, selected and 0.35 or 0.21, selected and 0.46 or 0.3, 0.96)
+            love.graphics.rectangle(
+                "fill",
+                row.rect.x,
+                row.rect.y,
+                row.rect.width,
+                row.rect.height,
+                7,
+                7
+            )
+            love.graphics.setColor(selected and 0.86 or 0.68, selected and 0.92 or 0.78, 1, 0.95)
+            love.graphics.rectangle(
+                "line",
+                row.rect.x,
+                row.rect.y,
+                row.rect.width,
+                row.rect.height,
+                7,
+                7
+            )
+            love.graphics.setColor(1, 1, 1, 0.98)
+            love.graphics.printf(
+                entry.questName,
+                row.rect.x + 8,
+                row.rect.y + 8,
+                row.rect.width - 84,
+                "left",
+                0,
+                0.52,
+                0.52
+            )
+            love.graphics.setColor(0.88, 0.94, 1, 0.9)
+            love.graphics.printf(
+                entry.status,
+                row.rect.x + row.rect.width - 74,
+                row.rect.y + 8,
+                66,
+                "right",
+                0,
+                0.48,
+                0.48
+            )
+        end
+        ::__continue318::
+    end
+    if selectedEntry == nil or selectedQuest == nil then
+        love.graphics.setColor(0.82, 0.88, 0.96, 0.88)
+        love.graphics.printf(
+            "No quests in this category yet.",
+            layout.panelRect.x + 340,
+            layout.panelRect.y + 126,
+            460,
+            "left",
+            0,
+            0.64,
+            0.64
+        )
+        return
+    end
+    love.graphics.setColor(0.96, 0.98, 1, 1)
+    love.graphics.printf(
+        selectedQuest.name,
+        layout.panelRect.x + 340,
+        layout.panelRect.y + 108,
+        460,
+        "left",
+        0,
+        0.78,
+        0.78
+    )
+    love.graphics.setColor(0.78, 0.87, 0.98, 0.92)
+    love.graphics.printf(
+        selectedQuest.summary,
+        layout.panelRect.x + 340,
+        layout.panelRect.y + 132,
+        460,
+        "left",
+        0,
+        0.56,
+        0.56
+    )
+    local objectiveY = layout.panelRect.y + 174
+    for ____, objective in ipairs(selectedQuest.objectives) do
+        local progress = __TS__ArrayFind(
+            selectedEntry.objectives,
+            function(____, candidate) return candidate.id == objective.id end
+        )
+        local progressText = progress and (tostring(progress.currentCount) .. "/") .. tostring(progress.targetCount) or "0/" .. tostring(objective.targetCount)
+        love.graphics.setColor(0.2, 0.26, 0.36, 0.92)
+        love.graphics.rectangle(
+            "fill",
+            layout.panelRect.x + 330,
+            objectiveY - 6,
+            470,
+            42,
+            7,
+            7
+        )
+        love.graphics.setColor(0.7, 0.82, 0.95, 0.9)
+        love.graphics.rectangle(
+            "line",
+            layout.panelRect.x + 330,
+            objectiveY - 6,
+            470,
+            42,
+            7,
+            7
+        )
+        love.graphics.setColor(0.96, 0.98, 1, 0.98)
+        love.graphics.printf(
+            objective.description,
+            layout.panelRect.x + 344,
+            objectiveY + 2,
+            300,
+            "left",
+            0,
+            0.54,
+            0.54
+        )
+        love.graphics.setColor(0.84, 0.91, 1, 0.95)
+        love.graphics.printf(
+            progressText,
+            layout.panelRect.x + 658,
+            objectiveY + 2,
+            120,
+            "right",
+            0,
+            0.54,
+            0.54
+        )
+        if objective.kind == "visit-tile" then
+            local button = __TS__ArrayFind(
+                layout.objectiveGoToButtons,
+                function(____, candidate) return candidate.objectiveId == objective.id end
+            )
+            if button ~= nil then
+                love.graphics.setColor(0.32, 0.36, 0.2, 0.96)
+                love.graphics.rectangle(
+                    "fill",
+                    button.rect.x,
+                    button.rect.y,
+                    button.rect.width,
+                    button.rect.height,
+                    6,
+                    6
+                )
+                love.graphics.setColor(0.92, 0.88, 0.56, 0.95)
+                love.graphics.rectangle(
+                    "line",
+                    button.rect.x,
+                    button.rect.y,
+                    button.rect.width,
+                    button.rect.height,
+                    6,
+                    6
+                )
+                love.graphics.setColor(1, 1, 1, 0.98)
+                love.graphics.printf(
+                    "Go To",
+                    button.rect.x,
+                    button.rect.y + 6,
+                    button.rect.width,
+                    "center",
+                    0,
+                    0.5,
+                    0.5
+                )
+            end
+        end
+        objectiveY = objectiveY + 52
+        if objectiveY > layout.panelRect.y + layout.panelRect.height - 40 then
+            break
+        end
+    end
 end
 local function drawTalentTreeOverlay(self, uiState)
     if not uiState.isTalentTreeOpen then
@@ -1850,7 +2476,7 @@ local function drawTalentTreeOverlay(self, uiState)
                 function(____, entry) return entry.id == row.talentId end
             )
             if not talent then
-                goto __continue262
+                goto __continue332
             end
             local isSelected = uiState.selectedTalentId == talent.id
             if isSelected then
@@ -1915,7 +2541,7 @@ local function drawTalentTreeOverlay(self, uiState)
                 0.56
             )
         end
-        ::__continue262::
+        ::__continue332::
     end
     local canConfirm = canConfirmSelectedTalent(nil, uiState)
     love.graphics.setColor(canConfirm and 0.26 or 0.2, canConfirm and 0.5 or 0.22, canConfirm and 0.31 or 0.25, canConfirm and 0.95 or 0.72)
@@ -2245,8 +2871,8 @@ local function drawCraftShopOverlay(self, uiState)
     if not uiState.selectedUpgradeDieId and selectedDie then
         uiState.selectedUpgradeDieId = selectedDie.id
     end
-    local ____opt_147 = selectedDie
-    local selectedSide = ____opt_147 and __TS__ArrayFind(
+    local ____opt_152 = selectedDie
+    local selectedSide = ____opt_152 and __TS__ArrayFind(
         selectedDie and selectedDie.sides,
         function(____, side) return side.id == uiState.selectedUpgradeSideId end
     )
@@ -2548,8 +3174,8 @@ local function drawCraftShopOverlay(self, uiState)
     )
     local faceTiles = getShopFaceTiles(nil, layout, selectedDie)
     for ____, tile in ipairs(faceTiles) do
-        local ____opt_155 = selectedDie
-        local side = ____opt_155 and __TS__ArrayFind(
+        local ____opt_160 = selectedDie
+        local side = ____opt_160 and __TS__ArrayFind(
             selectedDie and selectedDie.sides,
             function(____, entry) return entry.id == tile.id end
         )
@@ -2683,8 +3309,8 @@ local function drawCraftShopOverlay(self, uiState)
         )
     else
         for ____, row in ipairs(layout.propertyRows) do
-            local ____opt_161 = selectedAdjustableSide
-            local property = ____opt_161 and __TS__ArrayFind(
+            local ____opt_166 = selectedAdjustableSide
+            local property = ____opt_166 and __TS__ArrayFind(
                 selectedAdjustableSide and selectedAdjustableSide:getAdjustmentProperties(),
                 function(____, entry) return entry.id == row.id end
             )
@@ -3068,6 +3694,16 @@ function ____exports.drawExploreUi(self, uiState, visitCount)
                 "line"
             )
         end
+        if tileMatchesGoToMode(nil, uiState, tile) then
+            love.graphics.setColor(0.95, 0.86, 0.45, 0.94)
+            drawHex(
+                nil,
+                center.x,
+                center.y,
+                uiState.hexSize * 1.08,
+                "line"
+            )
+        end
         love.graphics.setColor(1, 1, 1, 0.84)
         love.graphics.printf(
             tile.name,
@@ -3100,5 +3736,6 @@ function ____exports.drawExploreUi(self, uiState, visitCount)
     drawCharacterSheetOverlay(nil, uiState)
     drawInventoryOverlay(nil, uiState)
     drawCraftShopOverlay(nil, uiState)
+    drawQuestMenuOverlay(nil, uiState)
 end
 return ____exports

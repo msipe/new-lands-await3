@@ -77,6 +77,7 @@ import {
     updateMainMenuUiState,
 } from "./main-menu-ui";
 import { resetQuestLogForNewRun } from "./planning/quest-log";
+import { recordEnemyDefeated } from "./planning/quest-events";
 
 let sceneState = createInitialSceneState();
 let previousScene = sceneState.current;
@@ -191,6 +192,7 @@ love.update = (dt: number) => {
 
         if (activeCombat.state.phase === "resolved") {
             if (!hasGrantedCombatProgression && activeCombat.state.enemy.hp <= 0 && activeCombat.state.player.hp > 0) {
+                recordEnemyDefeated(activeCombat.state.enemy.id);
                 const levelResult = recordCombatVictory(playerProgression, activeCombat.state.enemy.level);
                 const goldReward = calculateCombatGoldReward(activeCombat.state.enemy.level);
                 grantPlayerGold(playerProgression, goldReward);

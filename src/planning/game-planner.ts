@@ -103,7 +103,7 @@ function cloneQuest(quest: QuestTemplate): QuestTemplate {
 }
 
 function toRequirementTemplate(
-  requirement: ContentQuest["requirements"][number],
+  requirement: ContentQuest["worldRequirements"][number],
 ): RequirementTemplate {
   const metadata: Record<string, string | number | boolean> = {
     ...requirement.metadata,
@@ -132,8 +132,8 @@ function toQuestTemplate(questId: string): QuestTemplate {
     id: quest.id,
     name: quest.name,
     summary: quest.summary,
-    type: quest.type,
-    requirementTemplates: quest.requirements.map((entry) => toRequirementTemplate(entry)),
+    type: quest.category,
+    requirementTemplates: quest.worldRequirements.map((entry) => toRequirementTemplate(entry)),
   };
 }
 

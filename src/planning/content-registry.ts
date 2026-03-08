@@ -17,13 +17,35 @@ function cloneEnemyAbilities(abilities: readonly unknown[]): ContentEnemy["abili
   });
 }
 
+function cloneQuestObjective(objective: ContentQuest["objectives"][number]): ContentQuest["objectives"][number] {
+  if (objective.kind === "kill-enemy") {
+    return {
+      ...objective,
+      enemyIds: [...objective.enemyIds],
+    };
+  }
+
+  if (objective.kind === "collect-item") {
+    return {
+      ...objective,
+      itemIds: [...objective.itemIds],
+    };
+  }
+
+  return {
+    ...objective,
+    tileIds: objective.tileIds !== undefined ? [...objective.tileIds] : undefined,
+  };
+}
+
 const NPCS: ContentNpc[] = RAW_NPCS.map((entry) => ({
   ...entry,
   standardDialog: [...entry.standardDialog],
 }));
 const QUESTS: ContentQuest[] = RAW_QUESTS.map((entry) => ({
   ...entry,
-  requirements: entry.requirements.map((req) => ({
+  objectives: entry.objectives.map((objective) => cloneQuestObjective(objective)),
+  worldRequirements: entry.worldRequirements.map((req) => ({
     ...req,
     tags: [...req.tags],
     metadata: { ...req.metadata },
@@ -109,7 +131,8 @@ export function listNpcs(): ContentNpc[] {
 export function listQuests(): ContentQuest[] {
   return QUESTS.map((entry) => ({
     ...entry,
-    requirements: entry.requirements.map((req) => ({
+    objectives: entry.objectives.map((objective) => cloneQuestObjective(objective)),
+    worldRequirements: entry.worldRequirements.map((req) => ({
       ...req,
       tags: [...req.tags],
       metadata: { ...req.metadata },

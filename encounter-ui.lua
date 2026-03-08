@@ -8,6 +8,9 @@ local getQuestDialogPromptsForNpc = ____dialog_2Dservice.getQuestDialogPromptsFo
 local getStandardDialogForNpc = ____dialog_2Dservice.getStandardDialogForNpc
 local ____quest_2Dlog = require("planning.quest-log")
 local acceptQuest = ____quest_2Dlog.acceptQuest
+local turnInQuest = ____quest_2Dlog.turnInQuest
+local ____quest_2Devents = require("planning.quest-events")
+local recordNpcInteracted = ____quest_2Devents.recordNpcInteracted
 function getSelectedLocation(self, uiState)
     if uiState.selectedLocationId == nil then
         return nil
@@ -142,6 +145,7 @@ local function refreshDialogForSelection(self, uiState)
         return
     end
     local lines = getStandardDialogForNpc(nil, character.npcId)
+    recordNpcInteracted(nil, character.npcId)
     local prompts = getQuestDialogPromptsForNpc(nil, character.npcId)
     uiState.dialogMode = "standard"
     uiState.dialogText = lines[1] or character.description
@@ -259,9 +263,17 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
         end
         if uiState.dialogMode == "quest" and isInRect(nil, x, y, uiState.dialogButtons.yes) then
             if uiState.selectedQuestPrompt ~= nil then
-                acceptQuest(nil, uiState.selectedQuestPrompt.questId)
-                uiState.questResponseText = "Accepted: " .. uiState.selectedQuestPrompt.questName
-                refreshDialogForSelection(nil, uiState)
+                if uiState.selectedQuestPrompt.kind == "turn-in" then
+                    local questName = uiState.selectedQuestPrompt.questName
+                    turnInQuest(nil, uiState.selectedQuestPrompt.questId)
+                    refreshDialogForSelection(nil, uiState)
+                    uiState.questResponseText = "Turned in: " .. questName
+                else
+                    local questName = uiState.selectedQuestPrompt.questName
+                    acceptQuest(nil, uiState.selectedQuestPrompt.questId)
+                    refreshDialogForSelection(nil, uiState)
+                    uiState.questResponseText = "Accepted: " .. questName
+                end
             else
                 uiState.questResponseText = "No quest selected."
             end

@@ -3,6 +3,7 @@ import {
   onExploreKeyPressed,
   onExploreMouseReleased,
 } from "../../src/exploration/explore-ui";
+import { acceptQuest, getQuestState, resetQuestLogForNewRun } from "../../src/planning/quest-log";
 
 describe("explore-ui talent tree", () => {
   beforeAll(() => {
@@ -14,6 +15,10 @@ describe("explore-ui talent tree", () => {
     };
 
     (global as unknown as { love: unknown }).love = loveMock;
+  });
+
+  beforeEach(() => {
+    resetQuestLogForNewRun();
   });
 
   it("toggles talent tree when clicking XP bar", () => {
@@ -204,5 +209,58 @@ describe("explore-ui talent tree", () => {
     expect(uiState.isTalentTreeOpen).toBe(false);
     expect(uiState.playerProgression.talents[0].rank).toBe(1);
     expect(uiState.playerProgression.unspentTalentPoints).toBe(0);
+  });
+
+  it("emits tile-visit quest progress when travel succeeds", () => {
+    const uiState = createExploreUiState();
+    acceptQuest("side:grave-sigil");
+
+    const target = uiState.model.tileByKey["1,0"];
+    target.zone = "mountain";
+
+    const sqrt3 = Math.sqrt(3);
+    const clickX = uiState.mapCenterX + uiState.hexSize * (sqrt3 * target.coord.q + (sqrt3 * 0.5) * target.coord.r);
+    const clickY = uiState.mapCenterY + uiState.hexSize * (1.5 * target.coord.r);
+
+    onExploreMouseReleased(uiState, clickX, clickY, 1);
+
+    const entry = getQuestState("side:grave-sigil");
+    const objective = entry?.objectives.find((candidate) => candidate.id === "obj:visit-cursed-mountains");
+
+    expect(objective?.currentCount).toBe(1);
+    expect(entry?.status).toBe("in-progress");
+  });
+
+  it("toggles quest menu with keyboard and captures branch clicks", () => {
+    const uiState = createExploreUiState();
+    acceptQuest("main:defeat-dracula");
+
+    expect(onExploreKeyPressed(uiState, "q")).toBe(true);
+    expect(uiState.isQuestMenuOpen).toBe(true);
+
+    const branch = uiState.buttons[0];
+    const action = onExploreMouseReleased(uiState, branch.rect.x + 6, branch.rect.y + 6, 1);
+    expect(action).toBeUndefined();
+    expect(uiState.isQuestMenuOpen).toBe(true);
+
+    expect(onExploreKeyPressed(uiState, "escape")).toBe(true);
+    expect(uiState.isQuestMenuOpen).toBe(false);
+  });
+
+  it("activates go-to mode from a visit-tile objective", () => {
+    const uiState = createExploreUiState();
+    acceptQuest("main:defeat-dracula");
+
+    const questButtonX = uiState.questMenuButtonRect.x + 8;
+    const questButtonY = uiState.questMenuButtonRect.y + 8;
+    onExploreMouseReleased(uiState, questButtonX, questButtonY, 1);
+    expect(uiState.isQuestMenuOpen).toBe(true);
+
+    // First objective Go To button in 1120x620 test layout.
+    onExploreMouseReleased(uiState, 820, 182, 1);
+
+    expect(uiState.isQuestMenuOpen).toBe(false);
+    expect(uiState.isGoToTileMode).toBe(true);
+    expect(uiState.goToTileIds).toContain("tile:draculas-castle");
   });
 });

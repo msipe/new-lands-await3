@@ -81,9 +81,9 @@ local function toQuestTemplate(self, questId)
         id = quest.id,
         name = quest.name,
         summary = quest.summary,
-        type = quest.type,
+        type = quest.category,
         requirementTemplates = __TS__ArrayMap(
-            quest.requirements,
+            quest.worldRequirements,
             function(____, entry) return toRequirementTemplate(nil, entry) end
         )
     }

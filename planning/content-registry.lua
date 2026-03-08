@@ -30,6 +30,27 @@ local function cloneEnemyAbilities(self, abilities)
         end
     )
 end
+local function cloneQuestObjective(self, objective)
+    if objective.kind == "kill-enemy" then
+        return __TS__ObjectAssign(
+            {},
+            objective,
+            {enemyIds = {unpack(objective.enemyIds)}}
+        )
+    end
+    if objective.kind == "collect-item" then
+        return __TS__ObjectAssign(
+            {},
+            objective,
+            {itemIds = {unpack(objective.itemIds)}}
+        )
+    end
+    return __TS__ObjectAssign(
+        {},
+        objective,
+        {tileIds = objective.tileIds ~= nil and ({unpack(objective.tileIds)}) or nil}
+    )
+end
 local NPCS = __TS__ArrayMap(
     RAW_NPCS,
     function(____, entry) return __TS__ObjectAssign(
@@ -43,17 +64,23 @@ local QUESTS = __TS__ArrayMap(
     function(____, entry) return __TS__ObjectAssign(
         {},
         entry,
-        {requirements = __TS__ArrayMap(
-            entry.requirements,
-            function(____, req) return __TS__ObjectAssign(
-                {},
-                req,
-                {
-                    tags = {unpack(req.tags)},
-                    metadata = __TS__ObjectAssign({}, req.metadata)
-                }
-            ) end
-        )}
+        {
+            objectives = __TS__ArrayMap(
+                entry.objectives,
+                function(____, objective) return cloneQuestObjective(nil, objective) end
+            ),
+            worldRequirements = __TS__ArrayMap(
+                entry.worldRequirements,
+                function(____, req) return __TS__ObjectAssign(
+                    {},
+                    req,
+                    {
+                        tags = {unpack(req.tags)},
+                        metadata = __TS__ObjectAssign({}, req.metadata)
+                    }
+                ) end
+            )
+        }
     ) end
 )
 local TILES = __TS__ArrayMap(
@@ -200,17 +227,23 @@ function ____exports.listQuests(self)
         function(____, entry) return __TS__ObjectAssign(
             {},
             entry,
-            {requirements = __TS__ArrayMap(
-                entry.requirements,
-                function(____, req) return __TS__ObjectAssign(
-                    {},
-                    req,
-                    {
-                        tags = {unpack(req.tags)},
-                        metadata = __TS__ObjectAssign({}, req.metadata)
-                    }
-                ) end
-            )}
+            {
+                objectives = __TS__ArrayMap(
+                    entry.objectives,
+                    function(____, objective) return cloneQuestObjective(nil, objective) end
+                ),
+                worldRequirements = __TS__ArrayMap(
+                    entry.worldRequirements,
+                    function(____, req) return __TS__ObjectAssign(
+                        {},
+                        req,
+                        {
+                            tags = {unpack(req.tags)},
+                            metadata = __TS__ObjectAssign({}, req.metadata)
+                        }
+                    ) end
+                )
+            }
         ) end
     )
 end

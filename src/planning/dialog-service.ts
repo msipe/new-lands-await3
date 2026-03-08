@@ -1,36 +1,31 @@
 import { getNpcById, listQuests } from "./content-registry";
-import { isQuestAccepted } from "./quest-log";
+import { isQuestAccepted, listQuestEntries } from "./quest-log";
 
 export type QuestDialogPrompt = {
+  kind: "offer" | "turn-in";
   questId: string;
   questName: string;
   prompt: string;
 };
 
-const QUEST_PROMPTS_BY_NPC_ID: Record<string, QuestDialogPrompt[]> = {};
+const QUEST_OFFERS_BY_NPC_ID: Record<string, QuestDialogPrompt[]> = {};
 
 function buildQuestPromptMap(): void {
   const quests = listQuests();
 
   for (const quest of quests) {
-    for (const requirement of quest.requirements) {
-      if (requirement.kind !== "npc-presence") {
-        continue;
-      }
-
-      const npcId = requirement.metadata.npcId;
-      if (typeof npcId !== "string") {
-        continue;
-      }
-
-      const bucket = QUEST_PROMPTS_BY_NPC_ID[npcId] ?? [];
-      bucket.push({
-        questId: quest.id,
-        questName: quest.name,
-        prompt: `Quest offer: ${quest.summary}`,
-      });
-      QUEST_PROMPTS_BY_NPC_ID[npcId] = bucket;
+    if (quest.offerNpcId === undefined) {
+      continue;
     }
+
+    const bucket = QUEST_OFFERS_BY_NPC_ID[quest.offerNpcId] ?? [];
+    bucket.push({
+      kind: "offer",
+      questId: quest.id,
+      questName: quest.name,
+      prompt: `Quest offer: ${quest.summary}`,
+    });
+    QUEST_OFFERS_BY_NPC_ID[quest.offerNpcId] = bucket;
   }
 }
 
@@ -42,6 +37,28 @@ export function getStandardDialogForNpc(npcId: string): string[] {
 }
 
 export function getQuestDialogPromptsForNpc(npcId: string): QuestDialogPrompt[] {
-  const prompts = QUEST_PROMPTS_BY_NPC_ID[npcId] ?? [];
-  return prompts.filter((entry) => !isQuestAccepted(entry.questId)).map((entry) => ({ ...entry }));
+  const prompts: QuestDialogPrompt[] = [];
+
+  const offers = QUEST_OFFERS_BY_NPC_ID[npcId] ?? [];
+  for (const offer of offers) {
+    if (isQuestAccepted(offer.questId)) {
+      continue;
+    }
+
+    prompts.push({ ...offer });
+  }
+
+  const readyToTurnIn = listQuestEntries().filter(
+    (entry) => entry.turnInNpcId === npcId && entry.status === "ready-to-turn-in",
+  );
+  for (const entry of readyToTurnIn) {
+    prompts.push({
+      kind: "turn-in",
+      questId: entry.questId,
+      questName: entry.questName,
+      prompt: `Turn in: ${entry.questName}`,
+    });
+  }
+
+  return prompts;
 }
