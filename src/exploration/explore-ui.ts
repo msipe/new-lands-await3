@@ -30,7 +30,7 @@ import {
   createPlayerProgression,
   type PlayerProgressionState,
 } from "../game/player-progression";
-import { createPlayerCombatDiceLoadout } from "../game/player-combat-dice";
+import { createPlayerCombatDiceLoadout } from "../game/dice-constructs/player-combat-dice";
 import {
   appendCopiedFaceEntry,
   applyFaceAdjustmentEntry,

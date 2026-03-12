@@ -11,6 +11,7 @@ export type DieConstruct = {
   id: string;
   name: string;
   description: string;
+  energyCost: number;
   sideBuilders: DieSideBuilder[];
   metadata?: DieConstructMetadata;
 };

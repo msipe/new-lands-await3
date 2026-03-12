@@ -8,6 +8,7 @@ export const ENEMY_DIE_CONSTRUCTS: DieConstruct[] = [
     id: "slime-claw",
     name: "Slime Claw",
     description: "Heavy-handed slime swipe with occasional sustain.",
+    energyCost: 1,
     metadata: { tags: ["enemy", "slime"] },
     sideBuilders: [
       (sideId) => new ShieldBash(sideId),
@@ -22,6 +23,7 @@ export const ENEMY_DIE_CONSTRUCTS: DieConstruct[] = [
     id: "slime-jab",
     name: "Slime Jab",
     description: "Quick poke die with low but consistent pressure.",
+    energyCost: 1,
     metadata: { tags: ["enemy", "slime"] },
     sideBuilders: [
       (sideId) => new SwordSlash(sideId),
@@ -36,6 +38,7 @@ export const ENEMY_DIE_CONSTRUCTS: DieConstruct[] = [
     id: "slime-ooze",
     name: "Slime Ooze",
     description: "Recovery-focused die that can still peck at opponents.",
+    energyCost: 1,
     metadata: { tags: ["enemy", "slime", "support"] },
     sideBuilders: [
       (sideId) => new MinorMend(sideId),
@@ -50,6 +53,7 @@ export const ENEMY_DIE_CONSTRUCTS: DieConstruct[] = [
     id: "hex-bolt",
     name: "Hex Bolt",
     description: "Hexer die that leans into heavier hits.",
+    energyCost: 1,
     metadata: { tags: ["enemy", "goblin"] },
     sideBuilders: [
       (sideId) => new ShieldBash(sideId),
@@ -64,6 +68,7 @@ export const ENEMY_DIE_CONSTRUCTS: DieConstruct[] = [
     id: "knife-toss",
     name: "Knife Toss",
     description: "Fast dagger tosses with intermittent defense.",
+    energyCost: 1,
     metadata: { tags: ["enemy", "goblin"] },
     sideBuilders: [
       (sideId) => new SwordSlash(sideId),
@@ -78,6 +83,7 @@ export const ENEMY_DIE_CONSTRUCTS: DieConstruct[] = [
     id: "brew-sip",
     name: "Brew Sip",
     description: "Potion sip die that patches up allies while poking.",
+    energyCost: 1,
     metadata: { tags: ["enemy", "goblin", "support"] },
     sideBuilders: [
       (sideId) => new MinorMend(sideId),

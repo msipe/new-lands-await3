@@ -13,7 +13,7 @@ import {
 } from "./dice";
 import { getDieConstructById } from "./dice-constructs";
 import { createDieFromConstruct } from "./dice-factory";
-import { createPlayerCombatDiceLoadout } from "./player-combat-dice";
+import { createPlayerCombatDiceLoadout } from "./dice-constructs/player-combat-dice";
 import { buildRollCombatLogLines } from "./combat-log";
 import { getTransientDiePopupDataFromEvents } from "./transient-die";
 import { getEnemyById, listEnemies } from "../planning/content-registry";
@@ -78,6 +78,8 @@ export type CombatResolutionPopup = {
 export type CombatEncounterState = {
   player: CombatActor;
   enemy: CombatActor;
+  playerEnergyMax: number;
+  playerEnergyCurrent: number;
   round: number;
   phase: "player-turn" | "enemy-turn" | "resolved";
   playerRollIndex: number;
@@ -88,6 +90,19 @@ export type CombatEncounterState = {
   combatLog: string[];
   pendingResolutionPopups: CombatResolutionPopup[];
 };
+
+function getPlayerEnergyMax(playerProgression: PlayerProgressionState): number {
+  if (playerProgression.classId === "class:warrior") {
+    return 3;
+  }
+
+  return 3;
+}
+
+function canPlayerAffordAnyRemainingDie(state: CombatEncounterState): boolean {
+  const remainingDice = state.player.dice.filter((die) => !state.rolledPlayerDieIds.includes(die.id));
+  return remainingDice.some((die) => die.energyCost <= state.playerEnergyCurrent);
+}
 
 function enterEnemyTurn(state: CombatEncounterState): void {
   state.phase = "enemy-turn";
@@ -324,6 +339,8 @@ export function createCombatEncounter(
   const state: CombatEncounterState = {
     player,
     enemy,
+    playerEnergyMax: getPlayerEnergyMax(playerProgression),
+    playerEnergyCurrent: getPlayerEnergyMax(playerProgression),
     round: 1,
     phase: "enemy-turn",
     playerRollIndex: 0,
@@ -345,6 +362,7 @@ export function createCombatEncounter(
 
 function startNextRound(state: CombatEncounterState, randomSource: RandomSource): void {
   state.round += 1;
+  state.playerEnergyCurrent = state.playerEnergyMax;
   state.playerRollIndex = 0;
   state.rolledPlayerDieIds = [];
   state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
@@ -357,15 +375,11 @@ function startNextRound(state: CombatEncounterState, randomSource: RandomSource)
   enterEnemyTurn(state);
 }
 
-function beginEnemyResolutionIfNeeded(
+function resolveEnemyIntentAndAdvanceRound(
   state: CombatEncounterState,
   eventBus: CombatEventBus,
   randomSource: RandomSource,
 ): CombatEncounterState {
-  if (state.rolledPlayerDieIds.length < state.player.dice.length) {
-    return state;
-  }
-
   eventBus.emitAction({ type: CombatActionType.PlayerTurnEnded });
 
   if (state.enemy.hp <= 0) {
@@ -414,6 +428,10 @@ export function rollPlayerDie(
     return state;
   }
 
+  if (die.energyCost > state.playerEnergyCurrent) {
+    return state;
+  }
+
   const side = die.roll(randomSource);
 
   const eventModifier = (side as CombatEventModifierSide).createCombatEventModifier?.();
@@ -441,6 +459,7 @@ export function rollPlayerDie(
   queueResolutionPopup(state, "player", die.id, side);
   queueSpawnedDiePopupFromEvents(state, "player", die.id, events, side);
 
+  state.playerEnergyCurrent = Math.max(0, state.playerEnergyCurrent - die.energyCost);
   state.rolledPlayerDieIds.push(die.id);
   state.playerRollIndex = state.rolledPlayerDieIds.length;
 
@@ -450,7 +469,7 @@ export function rollPlayerDie(
     return state;
   }
 
-  return beginEnemyResolutionIfNeeded(state, eventBus, randomSource);
+  return state;
 }
 
 export function rollNextPlayerDie(
@@ -462,12 +481,38 @@ export function rollNextPlayerDie(
     return state;
   }
 
-  const nextDie = state.player.dice.find((die) => !state.rolledPlayerDieIds.includes(die.id));
+  const nextDie = state.player.dice.find(
+    (die) => !state.rolledPlayerDieIds.includes(die.id) && die.energyCost <= state.playerEnergyCurrent,
+  );
   if (!nextDie) {
-    return beginEnemyResolutionIfNeeded(state, eventBus, randomSource);
+    return state;
   }
 
   return rollPlayerDie(state, eventBus, nextDie.id, randomSource);
+}
+
+export function canEndPlayerTurn(state: CombatEncounterState): boolean {
+  if (state.phase !== "player-turn") {
+    return false;
+  }
+
+  if (state.playerEnergyCurrent <= 0) {
+    return true;
+  }
+
+  return !canPlayerAffordAnyRemainingDie(state);
+}
+
+export function endPlayerTurn(
+  state: CombatEncounterState,
+  eventBus: CombatEventBus,
+  randomSource: RandomSource = defaultRandomSource,
+): CombatEncounterState {
+  if (!canEndPlayerTurn(state)) {
+    return state;
+  }
+
+  return resolveEnemyIntentAndAdvanceRound(state, eventBus, randomSource);
 }
 
 export function resolveEnemyDie(

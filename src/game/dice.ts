@@ -55,6 +55,7 @@ export type DieInput = {
   id: string;
   name: string;
   sides: DieSide[];
+  energyCost?: number;
 };
 
 export const defaultRandomSource: RandomSource = {
@@ -69,6 +70,7 @@ export class Die {
   readonly id: string;
   name: string;
   readonly sides: DieSide[];
+  readonly energyCost: number;
 
   private readonly rollHooks: DieRollHook[];
 
@@ -76,6 +78,7 @@ export class Die {
     this.id = input.id;
     this.name = input.name;
     this.sides = [...input.sides];
+    this.energyCost = Math.max(0, Math.floor(input.energyCost ?? 1));
     this.rollHooks = [];
   }
 

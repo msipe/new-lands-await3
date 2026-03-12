@@ -21,6 +21,7 @@ import {
     onCombatMousePressed,
     onCombatMouseReleased,
     consumeRequestedSceneAdvance,
+    consumeRequestedPlayerTurnEnd,
     setResolvedContinueEnabled,
     type CombatUiState,
     updateCombatUiState,
@@ -48,12 +49,13 @@ import { getCurrentTile } from "./exploration/explore-state";
 import {
     createCombatEncounter,
     drainResolutionPopups,
+    endPlayerTurn,
     resolveEnemyDie,
     rollPlayerDie,
     type CombatEncounterState,
 } from "./game/combat-encounter";
 import { CombatEventBus } from "./game/combat-event-bus";
-import { createPlayerCombatDiceLoadout } from "./game/player-combat-dice";
+import { createPlayerCombatDiceLoadout } from "./game/dice-constructs/player-combat-dice";
 import {
     advanceScene,
     chooseExploreBranch,
@@ -93,6 +95,64 @@ let hasGrantedCombatProgression = false;
 let playerProgression: PlayerProgressionState = createPlayerProgression();
 
 const COMBAT_RESOLVE_BEAT_SECONDS = 0.5;
+const TEXT_SCALE_MULTIPLIER = 1.2;
+const TEXT_MIN_SCALE = 0.6;
+let textScalingPatched = false;
+
+function scaleTextFactor(scale: number | undefined): number {
+    if (scale === undefined) {
+        return TEXT_SCALE_MULTIPLIER;
+    }
+
+    return Math.max(TEXT_MIN_SCALE, scale * TEXT_SCALE_MULTIPLIER);
+}
+
+function patchTextReadabilityScaling(): void {
+    if (textScalingPatched) {
+        return;
+    }
+
+    const originalPrint = love.graphics.print;
+    const originalPrintf = love.graphics.printf;
+
+    love.graphics.print = ((
+        text: string,
+        x?: number,
+        y?: number,
+        r?: number,
+        sx?: number,
+        sy?: number,
+        ox?: number,
+        oy?: number,
+        kx?: number,
+        ky?: number,
+    ) => {
+        const scaledX = scaleTextFactor(sx);
+        const scaledY = scaleTextFactor(sy);
+        return originalPrint(text, x, y, r, scaledX, scaledY, ox, oy, kx, ky);
+    }) as typeof love.graphics.print;
+
+    love.graphics.printf = ((
+        text: string,
+        x: number,
+        y: number,
+        limit: number,
+        align?: "left" | "center" | "right" | "justify",
+        r?: number,
+        sx?: number,
+        sy?: number,
+        ox?: number,
+        oy?: number,
+        kx?: number,
+        ky?: number,
+    ) => {
+        const scaledX = scaleTextFactor(sx);
+        const scaledY = scaleTextFactor(sy);
+        return originalPrintf(text, x, y, limit, align, r, scaledX, scaledY, ox, oy, kx, ky);
+    }) as typeof love.graphics.printf;
+
+    textScalingPatched = true;
+}
 
 function createCombatForCurrentTile(): { state: CombatEncounterState; eventBus: CombatEventBus } {
     const currentTile = activeExploreUi ? getCurrentTile(activeExploreUi.model) : undefined;
@@ -104,8 +164,9 @@ function createCombatForCurrentTile(): { state: CombatEncounterState; eventBus: 
 
 love.load = () => {
     love.window.setTitle("new-lands-await3");
-    love.window.setMode(1120, 620);
+    love.window.setMode(1456, 806);
     love.graphics.setBackgroundColor(0.16, 0.16, 0.16);
+    patchTextReadabilityScaling();
     mainMenuUi = createMainMenuUiState();
 };
 
@@ -183,6 +244,10 @@ love.update = (dt: number) => {
         const settledEnemyDieIds = drainSettledEnemyDieIds(activeCombatUi);
         for (const dieId of settledEnemyDieIds) {
             resolveEnemyDie(activeCombat.state, activeCombat.eventBus, dieId);
+        }
+
+        if (consumeRequestedPlayerTurnEnd(activeCombatUi)) {
+            endPlayerTurn(activeCombat.state, activeCombat.eventBus);
         }
 
         const resolutionPopups = drainResolutionPopups(activeCombat.state);

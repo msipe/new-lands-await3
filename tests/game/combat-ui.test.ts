@@ -1,4 +1,5 @@
 import {
+  consumeRequestedPlayerTurnEnd,
   createCombatUiState,
   enqueueCombatResolutionPopups,
   isCombatInspectorOpen,
@@ -146,10 +147,13 @@ describe("combat ui", () => {
       die.spin = 0;
     }
 
+    const thrownCount = uiState.pendingPlayerDieIds.length;
+    expect(thrownCount).toBeGreaterThan(0);
+
     updateCombatUiState(uiState, encounter.state, 1 / 60);
 
-    expect(uiState.readyPlayerDieIds).toHaveLength(encounter.state.player.dice.length);
-    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(encounter.state.player.dice.length);
+    expect(uiState.readyPlayerDieIds).toHaveLength(thrownCount);
+    expect(drainSettledPlayerDieIds(uiState)).toHaveLength(thrownCount);
   });
 
   it("queues throw during enemy turn and executes it when player turn is available", () => {
@@ -452,5 +456,25 @@ describe("combat ui", () => {
 
     expect(uiState.drag).toBeUndefined();
     expect(die.state).toBe("parked");
+  });
+
+  it("auto-requests end turn when player cannot afford any remaining die", () => {
+    const encounter = createCombatEncounter();
+    const uiState = createCombatUiState(encounter.state);
+
+    encounter.state.phase = "player-turn";
+    encounter.state.playerEnergyCurrent = 0;
+    const affordableAtZeroEnergyIds = encounter.state.player.dice
+      .filter((die) => die.energyCost <= encounter.state.playerEnergyCurrent)
+      .map((die) => die.id);
+    encounter.state.rolledPlayerDieIds = [...affordableAtZeroEnergyIds];
+    uiState.rolledPlayerDieIds = [...affordableAtZeroEnergyIds];
+    uiState.pendingRound = undefined;
+    uiState.pendingPlayerDieIds = [];
+    uiState.readyPlayerDieIds = [];
+
+    updateCombatUiState(uiState, encounter.state, 1 / 60);
+
+    expect(consumeRequestedPlayerTurnEnd(uiState)).toBe(true);
   });
 });

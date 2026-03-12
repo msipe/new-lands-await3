@@ -13,6 +13,7 @@ export function createDieFromConstruct(input: CreateDieFromConstructInput): Die 
   return new Die({
     id: dieId,
     name: nameOverride ?? construct.name,
+    energyCost: construct.energyCost,
     sides: construct.sideBuilders.map((buildSide, sideIndex) => buildSide(`${dieId}-side-${sideIndex + 1}`)),
   });
 }

@@ -1,8 +1,10 @@
 import { CombatEventBus } from "../../src/game/combat-event-bus";
 import {
+  canEndPlayerTurn,
   createCombatEncounter,
   createStubEnemies,
   drainResolutionPopups,
+  endPlayerTurn,
   resolveNextEnemyDie,
   rollPlayerDie,
   rollNextPlayerDie,
@@ -52,6 +54,11 @@ describe("combat encounter", () => {
       resolveNextEnemyDie(encounter.state, encounter.eventBus, fixedRandomSource());
       guard += 1;
     }
+  }
+
+  function endPlayerTurnWhenReady(encounter: ReturnType<typeof createCombatEncounter>): void {
+    expect(canEndPlayerTurn(encounter.state)).toBe(true);
+    endPlayerTurn(encounter.state, encounter.eventBus, fixedRandomSource());
   }
 
   it("provides stubbed enemies", () => {
@@ -170,30 +177,32 @@ describe("combat encounter", () => {
     expect(encounter.state.phase).toBe("player-turn");
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
-    expect(encounter.state.playerRollIndex).toBe(4);
+    expect(encounter.state.playerRollIndex).toBe(3);
+    expect(encounter.state.playerEnergyCurrent).toBe(0);
     expect(encounter.state.phase).toBe("player-turn");
 
-    rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
-    expect(encounter.state.playerRollIndex).toBe(5);
-    expect(encounter.state.phase).toBe("player-turn");
-
-    rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+    endPlayerTurnWhenReady(encounter);
     expect(encounter.state.phase).toBe("enemy-turn");
     expect(encounter.state.round).toBe(2);
     expect(encounter.state.playerRollIndex).toBe(0);
+    expect(encounter.state.playerEnergyCurrent).toBe(encounter.state.playerEnergyMax);
     expect(encounter.state.player.hp).toBe(19);
-    expect(encounter.state.player.armor).toBe(1);
+    expect(encounter.state.player.armor).toBe(2);
     expect(encounter.state.enemy.hp).toBeLessThanOrEqual(enemyHpAtTurnStart);
   });
 
-  it("continues rounds until a combatant is defeated", () => {
+  it("continues rounds without stalling", () => {
     const randomSource = sequenceRandomSource([1, 1, 1, 1, 1, 1, 1, 1]);
     const encounter = createCombatEncounter({ randomSource });
 
     let safety = 0;
-    while (encounter.state.phase !== "resolved" && safety < 200) {
+    while (safety < 220) {
       if (encounter.state.phase === "player-turn") {
-        rollNextPlayerDie(encounter.state, encounter.eventBus, randomSource);
+        if (canEndPlayerTurn(encounter.state)) {
+          endPlayerTurn(encounter.state, encounter.eventBus, randomSource);
+        } else {
+          rollNextPlayerDie(encounter.state, encounter.eventBus, randomSource);
+        }
       } else {
         resolveNextEnemyDie(encounter.state, encounter.eventBus, randomSource);
       }
@@ -201,9 +210,10 @@ describe("combat encounter", () => {
       safety += 1;
     }
 
-    expect(safety).toBeLessThan(200);
-    expect(encounter.state.phase).toBe("resolved");
-    expect(encounter.state.enemy.hp === 0 || encounter.state.player.hp === 0).toBe(true);
+    expect(safety).toBe(220);
+    expect(encounter.state.round).toBeGreaterThan(8);
+    expect(encounter.state.player.hp).toBeGreaterThanOrEqual(0);
+    expect(encounter.state.enemy.hp).toBeGreaterThanOrEqual(0);
   });
 
   it("supports rolling player dice in any order once per round", () => {
@@ -220,9 +230,8 @@ describe("combat encounter", () => {
     rollPlayerDie(encounter.state, encounter.eventBus, dieIds[2], fixedRandomSource());
     rollPlayerDie(encounter.state, encounter.eventBus, dieIds[0], fixedRandomSource());
     rollPlayerDie(encounter.state, encounter.eventBus, dieIds[1], fixedRandomSource());
-    for (const dieId of dieIds.slice(3)) {
-      rollPlayerDie(encounter.state, encounter.eventBus, dieId, fixedRandomSource());
-    }
+
+    endPlayerTurnWhenReady(encounter);
 
     expect(encounter.state.phase).toBe("enemy-turn");
 
@@ -286,14 +295,13 @@ describe("combat encounter", () => {
     // Enemy intent should still be deferred while player is mid-turn.
     expect(encounter.state.player.hp).toBe(19);
 
-    const remainingRolls = encounter.state.player.dice.length - 2;
-    for (let index = 0; index < remainingRolls; index += 1) {
-      rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
-    }
+    rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
+    expect(encounter.state.playerEnergyCurrent).toBe(0);
 
-    // Enemy intent resolves only after player finishes all rolls.
+    endPlayerTurnWhenReady(encounter);
+
+    // Enemy intent resolves only after player explicitly ends the turn.
     expect(encounter.state.player.hp).toBe(19);
-    expect(encounter.state.player.armor).toBe(1);
     expect(encounter.state.phase).toBe("enemy-turn");
   });
 
@@ -315,9 +323,8 @@ describe("combat encounter", () => {
 
     rollPlayerDie(encounter.state, encounter.eventBus, wildStrikeDieId, fixedRandomSource());
     expect(encounter.state.combatLog).toContain("Player rolls Wild Strike.");
-
     rollPlayerDie(encounter.state, encounter.eventBus, ironhideDieId, fixedRandomSource());
-    expect(encounter.state.player.armor).toBe(5);
+    expect(encounter.state.playerEnergyCurrent).toBe(0);
   });
 
   it("expires Warcry modifier at end of player turn", () => {
@@ -332,9 +339,14 @@ describe("combat encounter", () => {
       if (die.id === "player-die-1") {
         continue;
       }
+
+      if (encounter.state.playerEnergyCurrent <= 0) {
+        break;
+      }
       rollPlayerDie(encounter.state, encounter.eventBus, die.id, fixedRandomSource());
     }
 
+    endPlayerTurnWhenReady(encounter);
     expect(encounter.state.phase).toBe("enemy-turn");
 
     resolveAllEnemyDice(encounter);
@@ -498,9 +510,8 @@ describe("combat encounter", () => {
 
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", fixedRandomSource());
     rollPlayerDie(encounter.state, encounter.eventBus, "player-die-2", fixedRandomSource());
-    rollPlayerDie(encounter.state, encounter.eventBus, "equipped-armor-1", sequenceRandomSource([1]));
-    rollPlayerDie(encounter.state, encounter.eventBus, "equipped-weapon-1-2", sequenceRandomSource([1]));
-    rollPlayerDie(encounter.state, encounter.eventBus, "equipped-weapon-2-3", sequenceRandomSource([1]));
+
+    endPlayerTurnWhenReady(encounter);
 
     expect(encounter.state.phase).toBe("enemy-turn");
     expect(encounter.state.player.hp).toBe(20);

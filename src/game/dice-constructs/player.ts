@@ -9,6 +9,7 @@ export const PLAYER_DIE_CONSTRUCTS: DieConstruct[] = [
     id: "spark-die",
     name: "Spark Die",
     description: "Reliable skirmish die with steady offense and chip sustain.",
+    energyCost: 1,
     metadata: { tags: ["starter", "balanced"] },
     sideBuilders: [
       (sideId) => new ShieldBash(sideId),
@@ -23,6 +24,7 @@ export const PLAYER_DIE_CONSTRUCTS: DieConstruct[] = [
     id: "ward-die",
     name: "Ward Die",
     description: "Aggressive starter die that favors frequent damage rolls.",
+    energyCost: 1,
     metadata: { tags: ["starter", "aggressive"] },
     sideBuilders: [
       (sideId) => new SwordSlash(sideId),
@@ -37,6 +39,7 @@ export const PLAYER_DIE_CONSTRUCTS: DieConstruct[] = [
     id: "mend-die",
     name: "Mend Die",
     description: "Stabilizing starter die with sustain and defensive pressure.",
+    energyCost: 1,
     metadata: { tags: ["starter", "support"] },
     sideBuilders: [
       (sideId) => new MinorMend(sideId),

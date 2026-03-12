@@ -54,6 +54,7 @@ type VisualDie = {
   flashTimer?: number;
   spawnedInspectorName?: string;
   spawnedInspectorSides?: { label: string; description: string }[];
+  spawnedInspectorEnergyCost?: number;
 };
 
 type DragState = {
@@ -138,6 +139,7 @@ export type CombatUiState = {
   inspector?: DiceInspectorState;
   resolvedContinueEnabled: boolean;
   requestedSceneAdvance: boolean;
+  requestedPlayerTurnEnd: boolean;
 };
 
 const BACKGROUND = { r: 0.16, g: 0.16, b: 0.16 };
@@ -145,6 +147,8 @@ const WHITE = { r: 1, g: 1, b: 1 };
 const GREEN = { r: 0.2, g: 0.72, b: 0.33 };
 const GRAY = { r: 0.62, g: 0.64, b: 0.67 };
 const BLACK = { r: 0, g: 0, b: 0 };
+const ENERGY_ORB_ACTIVE = { r: 0.98, g: 0.62, b: 0.16 };
+const ENERGY_ORB_INACTIVE = { r: 0.31, g: 0.21, b: 0.14 };
 const RESOLVE_FLASH_DURATION = 0.26;
 const POPUP_DURATION = 0.9;
 const FACE_ROLL_MIN_INTERVAL = 0.04;
@@ -701,6 +705,7 @@ export function createCombatUiState(state: CombatEncounterState): CombatUiState 
     inspector: undefined,
     resolvedContinueEnabled: false,
     requestedSceneAdvance: false,
+    requestedPlayerTurnEnd: false,
   };
 
   ensurePlayerDice(uiState, state);
@@ -818,26 +823,16 @@ function settleAllPendingPlayerDice(uiState: CombatUiState): void {
   uiState.pendingPlayerDieIds = [];
 }
 
-function commitReadyPlayerDice(uiState: CombatUiState): void {
-  for (const dieId of uiState.readyPlayerDieIds) {
-    if (!uiState.settledPlayerDieIds.includes(dieId)) {
-      uiState.settledPlayerDieIds.push(dieId);
-    }
-  }
-
-  uiState.readyPlayerDieIds = [];
-}
-
 function canAdvancePlayerTurn(uiState: CombatUiState, state: CombatEncounterState): boolean {
   if (state.phase !== "player-turn" || uiState.pendingRound !== undefined) {
     return false;
   }
 
-  return (
-    uiState.rolledPlayerDieIds.length === state.player.dice.length &&
-    uiState.pendingPlayerDieIds.length === 0 &&
-    uiState.readyPlayerDieIds.length > 0
-  );
+  if (uiState.pendingPlayerDieIds.length > 0 || uiState.readyPlayerDieIds.length > 0) {
+    return false;
+  }
+
+  return !canAffordAnyUnthrownDie(uiState, state);
 }
 
 function updateEnemyPresentation(uiState: CombatUiState, state: CombatEncounterState, dt: number): void {
@@ -912,6 +907,7 @@ function executePlayerThrow(
   if (
     uiState.rolledPlayerDieIds.includes(dragged.combatDieId) ||
     !canPlayerThrow(uiState, state) ||
+    getDieEnergyCost(state, dragged.combatDieId) > getProjectedPlayerEnergy(uiState, state) ||
     !isInsideArena(uiState, x, y)
   ) {
     dragged.state = "parked";
@@ -976,7 +972,7 @@ export function fastForwardCombatUi(uiState: CombatUiState, state: CombatEncount
     }
 
     if (canAdvancePlayerTurn(uiState, state)) {
-      commitReadyPlayerDice(uiState);
+      uiState.requestedPlayerTurnEnd = true;
     }
 
     return;
@@ -1050,6 +1046,10 @@ export function updateCombatUiState(uiState: CombatUiState, state: CombatEncount
   updateDieFlashes(uiState, dt);
   updateFloatingPopups(uiState, dt);
   enqueueSettledPlayerDice(uiState);
+
+  if (canAdvancePlayerTurn(uiState, state)) {
+    uiState.requestedPlayerTurnEnd = true;
+  }
 }
 
 export function drainSettledPlayerDieIds(uiState: CombatUiState): string[] {
@@ -1059,6 +1059,7 @@ export function drainSettledPlayerDieIds(uiState: CombatUiState): string[] {
 
   const settled = [...uiState.settledPlayerDieIds];
   uiState.settledPlayerDieIds = [];
+  uiState.readyPlayerDieIds = uiState.readyPlayerDieIds.filter((dieId) => !settled.includes(dieId));
   return settled;
 }
 
@@ -1067,6 +1068,56 @@ type TurnButtonState = {
   enabled: boolean;
   label: string;
 };
+
+function getDieEnergyCost(state: CombatEncounterState, dieId: string): number {
+  const die = state.player.dice.find((entry) => entry.id === dieId);
+  if (!die) {
+    return 0;
+  }
+
+  return Math.max(0, die.energyCost);
+}
+
+function getProjectedPendingEnergySpend(uiState: CombatUiState, state: CombatEncounterState): number {
+  let pendingSpend = 0;
+
+  for (const dieId of uiState.rolledPlayerDieIds) {
+    if (state.rolledPlayerDieIds.includes(dieId)) {
+      continue;
+    }
+
+    pendingSpend += getDieEnergyCost(state, dieId);
+  }
+
+  return pendingSpend;
+}
+
+function getProjectedPlayerEnergy(uiState: CombatUiState, state: CombatEncounterState): number {
+  return Math.max(0, state.playerEnergyCurrent - getProjectedPendingEnergySpend(uiState, state));
+}
+
+function canAffordAnyUnthrownDie(uiState: CombatUiState, state: CombatEncounterState): boolean {
+  const projectedEnergy = getProjectedPlayerEnergy(uiState, state);
+
+  for (const die of state.player.dice) {
+    const dieId = die.id;
+    if (
+      uiState.rolledPlayerDieIds.includes(dieId) ||
+      uiState.pendingPlayerDieIds.includes(dieId) ||
+      uiState.readyPlayerDieIds.includes(dieId) ||
+      uiState.settledPlayerDieIds.includes(dieId) ||
+      state.rolledPlayerDieIds.includes(dieId)
+    ) {
+      continue;
+    }
+
+    if (die.energyCost <= projectedEnergy) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 export function setResolvedContinueEnabled(uiState: CombatUiState, enabled: boolean): void {
   uiState.resolvedContinueEnabled = enabled;
@@ -1078,6 +1129,15 @@ export function consumeRequestedSceneAdvance(uiState: CombatUiState): boolean {
   }
 
   uiState.requestedSceneAdvance = false;
+  return true;
+}
+
+export function consumeRequestedPlayerTurnEnd(uiState: CombatUiState): boolean {
+  if (!uiState.requestedPlayerTurnEnd) {
+    return false;
+  }
+
+  uiState.requestedPlayerTurnEnd = false;
   return true;
 }
 
@@ -1191,6 +1251,7 @@ export function enqueueCombatResolutionPopups(
           label: side.label,
           description: typeof side.describe === "function" ? side.describe() : side.label,
         })),
+        spawnedInspectorEnergyCost: spawnedInspectDie.energyCost,
       });
 
       uiState.floatingPopups.push({
@@ -1226,7 +1287,11 @@ export function enqueueCombatResolutionPopups(
 }
 
 export function canPlayerThrow(uiState: CombatUiState, state: CombatEncounterState): boolean {
-  return state.phase === "player-turn" && uiState.pendingRound === undefined;
+  return (
+    state.phase === "player-turn" &&
+    uiState.pendingRound === undefined &&
+    canAffordAnyUnthrownDie(uiState, state)
+  );
 }
 
 function canDragPlayerDie(
@@ -1250,6 +1315,10 @@ function canDragPlayerDie(
     uiState.settledPlayerDieIds.includes(dieId) ||
     state.rolledPlayerDieIds.includes(dieId)
   ) {
+    return false;
+  }
+
+  if (getDieEnergyCost(state, dieId) > getProjectedPlayerEnergy(uiState, state)) {
     return false;
   }
 
@@ -1405,6 +1474,26 @@ function getDieFromInspector(uiState: CombatUiState, state: CombatEncounterState
   return dice.find((die) => die.id === inspector.combatDieId);
 }
 
+function getInspectorEnergyCost(uiState: CombatUiState, state: CombatEncounterState): number | undefined {
+  const inspector = uiState.inspector;
+  if (!inspector) {
+    return undefined;
+  }
+
+  if (inspector.spawnedDieId) {
+    const spawnedDie = findVisualDieById(uiState, inspector.spawnedDieId);
+    return spawnedDie?.spawnedInspectorEnergyCost;
+  }
+
+  if (!inspector.combatDieId) {
+    return undefined;
+  }
+
+  const dice = inspector.owner === "player" ? state.player.dice : state.enemy.dice;
+  const die = dice.find((entry) => entry.id === inspector.combatDieId);
+  return die ? Math.max(0, die.energyCost) : undefined;
+}
+
 function describeDieSide(side: { label: string; describe?: () => string }): string {
   if (typeof side.describe === "function") {
     return side.describe();
@@ -1435,10 +1524,13 @@ function drawDieInspector(uiState: CombatUiState, state: CombatEncounterState): 
   love.graphics.rectangle("line", panel.x, panel.y, panel.width, panel.height, 8, 8);
 
   const ownerLabel = uiState.inspector?.owner === "player" ? "Ally" : "Enemy";
+  const inspectorEnergyCost = getInspectorEnergyCost(uiState, state);
+  const energyLabel = inspectorEnergyCost === undefined ? "Energy Cost: -" : `Energy Cost: ${inspectorEnergyCost}`;
   love.graphics.setColor(1, 1, 1);
   love.graphics.print(`${ownerLabel} Die: ${die.name}`, panel.x + 20, panel.y + 14);
   love.graphics.setColor(0.78, 0.83, 0.9);
   love.graphics.print(`${die.sides.length} faces`, panel.x + 20, panel.y + 40);
+  love.graphics.print(energyLabel, panel.x + 170, panel.y + 40);
 
   love.graphics.setColor(0.2, 0.24, 0.31, 0.95);
   love.graphics.rectangle("fill", closeButtonRect.x, closeButtonRect.y, closeButtonRect.width, closeButtonRect.height, 5, 5);
@@ -1571,6 +1663,11 @@ export function onCombatMousePressed(
     if (isPointInsideRect(x, y, turnButtonRect)) {
       if (state.phase === "resolved") {
         uiState.requestedSceneAdvance = true;
+        return;
+      }
+
+      if (state.phase === "player-turn") {
+        uiState.requestedPlayerTurnEnd = true;
         return;
       }
 
@@ -1913,6 +2010,37 @@ function drawCombatResolutionBanner(state: CombatEncounterState): void {
   love.graphics.printf(subtitle, x, y + 58, bannerWidth, "center", 0, 0.72, 0.72);
 }
 
+function drawEnergyOrbs(currentEnergy: number, maxEnergy: number, x: number, y: number): void {
+  const count = Math.max(0, Math.floor(maxEnergy));
+  const activeCount = Math.max(0, Math.min(count, Math.floor(currentEnergy)));
+
+  if (count <= 0) {
+    return;
+  }
+
+  const radius = 6;
+  const gap = 8;
+  let cursorX = x;
+
+  for (let index = 0; index < count; index += 1) {
+    const active = index < activeCount;
+    const fill = active ? ENERGY_ORB_ACTIVE : ENERGY_ORB_INACTIVE;
+
+    love.graphics.setColor(fill.r, fill.g, fill.b, active ? 0.96 : 0.84);
+    love.graphics.circle("fill", cursorX, y, radius);
+
+    if (active) {
+      love.graphics.setColor(1, 0.9, 0.68, 0.82);
+      love.graphics.circle("fill", cursorX - 1.8, y - 1.8, radius * 0.34);
+    }
+
+    love.graphics.setColor(1, 0.9, 0.7, active ? 0.52 : 0.28);
+    love.graphics.circle("line", cursorX, y, radius);
+
+    cursorX += radius * 2 + gap;
+  }
+}
+
 export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState): void {
   const layout = uiState.layout;
   const playerHpRatio = state.player.maxHp <= 0 ? 0 : state.player.hp / state.player.maxHp;
@@ -2002,22 +2130,27 @@ export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState
   drawFloatingResolutionPopups(uiState);
   drawCombatResolutionBanner(state);
 
+  const projectedEnergy = Math.max(0, Math.floor(getProjectedPlayerEnergy(uiState, state)));
+  const visibleEnergy = state.phase === "player-turn" ? projectedEnergy : state.playerEnergyCurrent;
+
   love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b);
   love.graphics.print(`Round ${state.round}`, layout.arenaX + 12, layout.arenaY + 10);
   love.graphics.print(`Combat: ${state.phase}`, layout.arenaX + 12, layout.arenaY + 34);
+  love.graphics.print("Energy", layout.poolX + 14, layout.poolY + 14);
+  drawEnergyOrbs(visibleEnergy, state.playerEnergyMax, layout.poolX + 80, layout.poolY + 24);
 
   if (state.phase === "resolved") {
     love.graphics.print("Combat resolved.", layout.poolX + layout.poolWidth - 180, layout.poolY + 14);
   } else if (uiState.pendingRound !== undefined) {
     love.graphics.print("Gathering dice for next round... (Space to skip)", layout.poolX + layout.poolWidth - 360, layout.poolY + 14);
-  } else if (state.phase === "player-turn" && !canAdvancePlayerTurn(uiState, state)) {
-    const thrown = uiState.rolledPlayerDieIds.length;
-    const total = state.player.dice.length;
-    love.graphics.print(`Roll and settle dice (${thrown}/${total}) then press Next Turn or Space`, layout.poolX + 14, layout.poolY + 14);
-  } else if (canPlayerThrow(uiState, state)) {
-    love.graphics.print("Right-click die to inspect, left-drag into arena to throw", layout.poolX + layout.poolWidth - 420, layout.poolY + 14);
-  } else {
+  } else if (state.phase === "enemy-turn") {
     love.graphics.print("Right-click any die to inspect. Enemy dice resolving... (Space to skip)", layout.poolX + layout.poolWidth - 468, layout.poolY + 14);
+  } else if (state.phase === "player-turn" && canPlayerThrow(uiState, state)) {
+    love.graphics.print("Right-click die to inspect, left-drag into arena to throw", layout.poolX + layout.poolWidth - 420, layout.poolY + 14);
+  } else if (state.phase === "player-turn" && !canAdvancePlayerTurn(uiState, state)) {
+    love.graphics.print(`Throw dice while you have energy (${projectedEnergy} remaining).`, layout.poolX + 180, layout.poolY + 14);
+  } else {
+    love.graphics.print("Out of energy. Press Next Turn or Space.", layout.poolX + layout.poolWidth - 320, layout.poolY + 14);
   }
 
   if (uiState.inspector) {
