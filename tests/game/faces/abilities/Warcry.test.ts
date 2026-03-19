@@ -39,4 +39,12 @@ describe("Warcry", () => {
     });
     expect(face.label).toBe("Warcry +2");
   });
+
+  it("exposes power as double the positive attack modifier", () => {
+    const positive = new Warcry("warcry-power-positive", 3);
+    const negative = new Warcry("warcry-power-negative", -2);
+
+    expect(positive.power).toBe(6);
+    expect(negative.power).toBe(0);
+  });
 });

@@ -9,9 +9,11 @@ import {
   rollPlayerDie,
   rollNextPlayerDie,
 } from "../../src/game/combat-encounter";
-import { EffectType } from "../../src/game/dice";
-import { FaceAdjustmentModalityType } from "../../src/game/faces";
-import { createPlayerCombatDiceLoadout } from "../../src/game/player-combat-dice";
+import { Die, EffectType } from "../../src/game/dice";
+import { DealDamage, FaceAdjustmentModalityType } from "../../src/game/faces";
+import { DealSelfDamage } from "../../src/game/faces/abilities/DealSelfDamage";
+import { FocusUp } from "../../src/game/faces/abilities/FocusUp";
+import { createPlayerCombatDiceLoadout } from "../../src/game/dice-constructs/player-combat-dice";
 import {
   createPlayerProgression,
   recordFaceAdjustment,
@@ -78,7 +80,7 @@ describe("combat encounter", () => {
   it("creates six-sided player class + starter equipment dice", () => {
     const { state } = createCombatEncounter({ randomSource: fixedRandomSource() });
 
-    expect(state.player.dice).toHaveLength(6);
+    expect(state.player.dice).toHaveLength(7);
     for (const die of state.player.dice) {
       expect(die.sides).toHaveLength(6);
     }
@@ -105,8 +107,222 @@ describe("combat encounter", () => {
       playerProgression: progression,
     });
 
-    expect(state.player.dice).toHaveLength(4);
+    expect(state.player.dice).toHaveLength(5);
     expect(state.player.dice.some((die) => die.id.includes("equipped-weapon-1"))).toBe(true);
+  });
+
+  it("captures die power snapshots with total score, ordering, and tied critical tags", () => {
+    const customDie = new Die({
+      id: "test-power-die",
+      name: "Power Test Die",
+      sides: [
+        new DealDamage("side-a", "A", 3),
+        new DealDamage("side-b", "B", 3),
+        new DealDamage("side-c", "C", 1),
+        new DealDamage("side-d", "D", 1),
+        new DealDamage("side-e", "E", 1),
+        new DealDamage("side-f", "F", 1),
+      ],
+      energyCost: 1,
+    });
+
+    const { state } = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerDice: [customDie],
+    });
+
+    const snapshot = state.diePowerById["test-power-die"];
+    expect(snapshot).toBeDefined();
+    expect(snapshot?.totalPower).toBe(10);
+    expect(snapshot?.orderedFaces.map((face) => face.power)).toEqual([3, 3, 1, 1, 1, 1]);
+
+    const critHitCount = snapshot?.orderedFaces.filter((face) => face.isCriticalHit).length ?? 0;
+    const critMissCount = snapshot?.orderedFaces.filter((face) => face.isCriticalMiss).length ?? 0;
+    expect(critHitCount).toBe(2);
+    expect(critMissCount).toBe(4);
+  });
+
+  it("keeps critical tags and ordering fixed after combat starts", () => {
+    const strongest = new DealDamage("stable-side-strong", "Strong", 3);
+    const weakest = new DealDamage("stable-side-weak", "Weak", 1);
+    const customDie = new Die({
+      id: "stable-power-die",
+      name: "Stable Power Die",
+      sides: [
+        strongest,
+        weakest,
+        new DealDamage("stable-side-3", "Side 3", 1),
+        new DealDamage("stable-side-4", "Side 4", 1),
+        new DealDamage("stable-side-5", "Side 5", 1),
+        new DealDamage("stable-side-6", "Side 6", 1),
+      ],
+      energyCost: 1,
+    });
+
+    const { state } = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerDice: [customDie],
+    });
+
+    const before = state.diePowerById["stable-power-die"];
+    expect(before?.orderedFaces[0]?.sideId).toBe("stable-side-strong");
+
+    // Mutate live face values after encounter start; snapshot should remain immutable.
+    strongest.applyAdjustment({
+      propertyId: "damage",
+      type: FaceAdjustmentModalityType.Reduce,
+      steps: 2,
+    });
+    weakest.applyAdjustment({
+      propertyId: "damage",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 2,
+    });
+
+    const after = state.diePowerById["stable-power-die"];
+    expect(after).toEqual(before);
+    expect(after?.orderedFaces[0]?.sideId).toBe("stable-side-strong");
+  });
+
+  it("annotates popup text with CRIT and positive power tone", () => {
+    const customDie = new Die({
+      id: "popup-crit-die",
+      name: "Popup Crit Die",
+      sides: [
+        new DealDamage("popup-crit", "Big Hit", 4),
+        new DealDamage("popup-normal", "Chip", 1),
+      ],
+      energyCost: 1,
+    });
+    const encounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerDice: [customDie],
+    });
+
+    resolveAllEnemyDice(encounter);
+    rollPlayerDie(encounter.state, encounter.eventBus, customDie.id, fixedRandomSource());
+
+    const popups = drainResolutionPopups(encounter.state).filter((popup) => popup.source === "player");
+    expect(popups.length).toBeGreaterThan(0);
+    expect(popups[0].text).toContain("CRIT");
+    expect(popups[0].sidePowerTone).toBe("positive");
+  });
+
+  it("annotates popup text with CRITICAL MISS and negative power tone", () => {
+    const customDie = new Die({
+      id: "popup-miss-die",
+      name: "Popup Miss Die",
+      sides: [
+        new DealDamage("popup-high", "Strike", 2),
+        new DealSelfDamage("popup-low", "Backfire", 2),
+      ],
+      energyCost: 1,
+    });
+    const encounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerDice: [customDie],
+    });
+
+    resolveAllEnemyDice(encounter);
+    rollPlayerDie(
+      encounter.state,
+      encounter.eventBus,
+      customDie.id,
+      { nextInt: () => 1 },
+    );
+
+    const popups = drainResolutionPopups(encounter.state).filter((popup) => popup.source === "player");
+    expect(popups.length).toBeGreaterThan(0);
+    expect(popups[0].text).toContain("CRITICAL MISS");
+    expect(popups[0].sidePowerTone).toBe("negative");
+    expect((popups[0].sidePower ?? 0)).toBeLessThan(0);
+  });
+
+  it("allows focus-up crit conversion to affect a different die", () => {
+    const focusDie = new Die({
+      id: "focus-die",
+      name: "Focus Up Die",
+      energyCost: 1,
+      sides: [
+        new FocusUp("focus-side-1", "critical-hit"),
+      ],
+    });
+    const attackDie = new Die({
+      id: "attack-die",
+      name: "Attack Die",
+      energyCost: 1,
+      sides: [
+        new DealDamage("attack-side-low", "Low", 1),
+        new DealDamage("attack-side-high", "High", 4),
+      ],
+    });
+
+    const encounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerDice: [focusDie, attackDie],
+    });
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    rollPlayerDie(encounter.state, encounter.eventBus, "focus-die", fixedRandomSource());
+    expect(encounter.state.queuedPlayerRollConversions).toHaveLength(1);
+
+    // Roll low side intentionally; conversion should force critical/high side.
+    rollPlayerDie(
+      encounter.state,
+      encounter.eventBus,
+      "attack-die",
+      { nextInt: () => 0 },
+    );
+
+    const popups = drainResolutionPopups(encounter.state).filter((popup) => popup.dieId === "attack-die");
+    const attackPopup = popups[0];
+    expect(attackPopup?.text).toContain("CRIT");
+    expect(attackPopup?.sideLabel).toContain("High");
+    expect(encounter.state.queuedPlayerRollConversions).toHaveLength(0);
+  });
+
+  it("keeps focus-up conversion queued across turn boundaries", () => {
+    const focusDie = new Die({
+      id: "focus-die",
+      name: "Focus Up Die",
+      energyCost: 1,
+      sides: [new FocusUp("focus-side-1", "critical-hit")],
+    });
+    const heavyDie = new Die({
+      id: "heavy-die",
+      name: "Heavy Die",
+      energyCost: 3,
+      sides: [
+        new DealDamage("heavy-low", "Heavy Low", 1),
+        new DealDamage("heavy-high", "Heavy High", 5),
+      ],
+    });
+
+    const encounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerDice: [focusDie, heavyDie],
+    });
+
+    resolveAllEnemyDice(encounter);
+    rollPlayerDie(encounter.state, encounter.eventBus, "focus-die", fixedRandomSource());
+    expect(encounter.state.queuedPlayerRollConversions).toHaveLength(1);
+
+    // Cannot afford heavy die this turn, so we end turn and ensure conversion persists.
+    expect(canEndPlayerTurn(encounter.state)).toBe(true);
+    endPlayerTurn(encounter.state, encounter.eventBus, fixedRandomSource());
+    expect(encounter.state.phase).toBe("enemy-turn");
+    expect(encounter.state.queuedPlayerRollConversions).toHaveLength(1);
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    rollPlayerDie(encounter.state, encounter.eventBus, "heavy-die", { nextInt: () => 0 });
+    const popups = drainResolutionPopups(encounter.state).filter((popup) => popup.dieId === "heavy-die");
+    expect(popups[0]?.text).toContain("CRIT");
+    expect(popups[0]?.sideLabel).toContain("Heavy High");
+    expect(encounter.state.queuedPlayerRollConversions).toHaveLength(0);
   });
 
   it("removes persisted faces from dice used in combat rolls", () => {

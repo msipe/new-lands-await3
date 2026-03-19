@@ -1,4 +1,8 @@
-import type { CombatEncounterState, CombatResolutionPopup } from "./game/combat-encounter";
+import {
+  getDiePowerSnapshot,
+  type CombatEncounterState,
+  type CombatResolutionPopup,
+} from "./game/combat-encounter";
 import { createDieFromConstruct } from "./game/dice-factory";
 import { getDieConstructById } from "./game/dice-constructs";
 
@@ -53,8 +57,25 @@ type VisualDie = {
   parkDuration?: number;
   flashTimer?: number;
   spawnedInspectorName?: string;
-  spawnedInspectorSides?: { label: string; description: string }[];
+  spawnedInspectorSides?: InspectorSideView[];
   spawnedInspectorEnergyCost?: number;
+  spawnedInspectorTotalPower?: number;
+};
+
+type InspectorSideView = {
+  id: string;
+  label: string;
+  description: string;
+  power: number;
+  baseIndex: number;
+  isCriticalHit: boolean;
+  isCriticalMiss: boolean;
+};
+
+type InspectorDieView = {
+  name: string;
+  sides: InspectorSideView[];
+  totalPower: number;
 };
 
 type DragState = {
@@ -95,6 +116,7 @@ type FloatingResolutionPopup = {
   y: number;
   text: string;
   source: Owner;
+  powerTone?: "positive" | "negative" | "neutral";
   timer: number;
 };
 
@@ -1227,6 +1249,18 @@ export function enqueueCombatResolutionPopups(
         construct: spawnedConstruct,
         dieId: `spawned-inspector-${popup.dieId}`,
       });
+      const spawnedInspectorSides = buildSortedInspectorSidesFromRaw(
+        spawnedInspectDie.sides.map((side, index) => ({
+          id: side.id,
+          label: side.label,
+          description: typeof side.describe === "function" ? side.describe() : side.label,
+          power: typeof side.power === "number" && Number.isFinite(side.power) ? roundPower(side.power) : 0,
+          baseIndex: index,
+        })),
+      );
+      const spawnedInspectorTotalPower = roundPower(
+        spawnedInspectorSides.reduce((sum, side) => sum + side.power, 0),
+      );
 
       uiState.arenaPlayerDice.push({
         id: `spawned-${popup.dieId}-${Math.random().toString(16).slice(2, 8)}`,
@@ -1247,11 +1281,9 @@ export function enqueueCombatResolutionPopups(
         state: "arena",
         flashTimer: RESOLVE_FLASH_DURATION,
         spawnedInspectorName: popup.spawnedDie.dieLabel,
-        spawnedInspectorSides: spawnedInspectDie.sides.map((side) => ({
-          label: side.label,
-          description: typeof side.describe === "function" ? side.describe() : side.label,
-        })),
+        spawnedInspectorSides,
         spawnedInspectorEnergyCost: spawnedInspectDie.energyCost,
+        spawnedInspectorTotalPower,
       });
 
       uiState.floatingPopups.push({
@@ -1259,6 +1291,7 @@ export function enqueueCombatResolutionPopups(
         y: spawnY - 32,
         text: popup.text,
         source: popup.source,
+        powerTone: popup.sidePowerTone,
         timer: POPUP_DURATION,
       });
       continue;
@@ -1281,6 +1314,7 @@ export function enqueueCombatResolutionPopups(
       y: die.y - die.size * 0.72,
       text: popup.text,
       source: popup.source,
+      powerTone: popup.sidePowerTone,
       timer: POPUP_DURATION,
     });
   }
@@ -1428,23 +1462,98 @@ function getInspectorLayout(faceCount: number): InspectorLayout {
   };
 }
 
-function getInspectorSideIndexAt(uiState: CombatUiState, state: CombatEncounterState, x: number, y: number): number | undefined {
-  const die = getDieFromInspector(uiState, state);
+function roundPower(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function buildSortedInspectorSidesFromRaw(
+  rawSides: Array<{
+    id: string;
+    label: string;
+    description: string;
+    power: number;
+    baseIndex: number;
+  }>,
+): InspectorSideView[] {
+  const sorted = [...rawSides].sort((left, right) => {
+    if (right.power !== left.power) {
+      return right.power - left.power;
+    }
+
+    return left.baseIndex - right.baseIndex;
+  });
+
+  const highestPower = sorted[0]?.power ?? 0;
+  const lowestPower = sorted[sorted.length - 1]?.power ?? 0;
+
+  return sorted.map((side) => ({
+    ...side,
+    isCriticalHit: side.power === highestPower,
+    isCriticalMiss: side.power === lowestPower,
+  }));
+}
+
+function buildInspectorViewFromCombatDie(
+  state: CombatEncounterState,
+  dieId: string,
+  owner: Owner,
+): InspectorDieView | undefined {
+  const dice = owner === "player" ? state.player.dice : state.enemy.dice;
+  const die = dice.find((entry) => entry.id === dieId);
   if (!die) {
     return undefined;
   }
 
-  const layout = getInspectorLayout(die.sides.length);
-  for (const tile of layout.tiles) {
-    if (isPointInsideRect(x, y, tile.rect)) {
-      return tile.sideIndex;
+  const sideById: Record<string, (typeof die.sides)[number]> = {};
+  die.sides.forEach((side) => {
+    sideById[side.id] = side;
+  });
+
+  const snapshot = getDiePowerSnapshot(state, die.id);
+  if (snapshot && snapshot.orderedFaces.length > 0) {
+    const orderedSides: InspectorSideView[] = [];
+    for (const face of snapshot.orderedFaces) {
+      const side = sideById[face.sideId];
+      if (!side) {
+        continue;
+      }
+
+      orderedSides.push({
+        id: side.id,
+        label: side.label,
+        description: describeDieSide(side),
+        power: face.power,
+        baseIndex: face.baseIndex,
+        isCriticalHit: face.isCriticalHit,
+        isCriticalMiss: face.isCriticalMiss,
+      });
     }
+
+    return {
+      name: die.name,
+      sides: orderedSides,
+      totalPower: snapshot.totalPower,
+    };
   }
 
-  return undefined;
+  const fallbackSides = buildSortedInspectorSidesFromRaw(
+    die.sides.map((side, index) => ({
+      id: side.id,
+      label: side.label,
+      description: describeDieSide(side),
+      power: typeof side.power === "number" ? roundPower(side.power) : 0,
+      baseIndex: index,
+    })),
+  );
+
+  return {
+    name: die.name,
+    sides: fallbackSides,
+    totalPower: roundPower(fallbackSides.reduce((sum, side) => sum + side.power, 0)),
+  };
 }
 
-function getDieFromInspector(uiState: CombatUiState, state: CombatEncounterState) {
+function getInspectorDieView(uiState: CombatUiState, state: CombatEncounterState): InspectorDieView | undefined {
   const inspector = uiState.inspector;
   if (!inspector) {
     return undefined;
@@ -1458,11 +1567,11 @@ function getDieFromInspector(uiState: CombatUiState, state: CombatEncounterState
 
     return {
       name: spawnedDie.spawnedInspectorName,
-      sides: spawnedDie.spawnedInspectorSides.map((side, index) => ({
-        id: `spawned-side-${index + 1}`,
-        label: side.label,
-        describe: () => side.description,
-      })),
+      sides: spawnedDie.spawnedInspectorSides,
+      totalPower: roundPower(
+        spawnedDie.spawnedInspectorTotalPower ??
+          spawnedDie.spawnedInspectorSides.reduce((sum, side) => sum + side.power, 0),
+      ),
     };
   }
 
@@ -1470,8 +1579,23 @@ function getDieFromInspector(uiState: CombatUiState, state: CombatEncounterState
     return undefined;
   }
 
-  const dice = inspector.owner === "player" ? state.player.dice : state.enemy.dice;
-  return dice.find((die) => die.id === inspector.combatDieId);
+  return buildInspectorViewFromCombatDie(state, inspector.combatDieId, inspector.owner);
+}
+
+function getInspectorSideIndexAt(uiState: CombatUiState, state: CombatEncounterState, x: number, y: number): number | undefined {
+  const inspectorDie = getInspectorDieView(uiState, state);
+  if (!inspectorDie) {
+    return undefined;
+  }
+
+  const layout = getInspectorLayout(inspectorDie.sides.length);
+  for (const tile of layout.tiles) {
+    if (isPointInsideRect(x, y, tile.rect)) {
+      return tile.sideIndex;
+    }
+  }
+
+  return undefined;
 }
 
 function getInspectorEnergyCost(uiState: CombatUiState, state: CombatEncounterState): number | undefined {
@@ -1503,13 +1627,13 @@ function describeDieSide(side: { label: string; describe?: () => string }): stri
 }
 
 function drawDieInspector(uiState: CombatUiState, state: CombatEncounterState): void {
-  const die = getDieFromInspector(uiState, state);
-  if (!die) {
+  const inspectorDie = getInspectorDieView(uiState, state);
+  if (!inspectorDie) {
     uiState.inspector = undefined;
     return;
   }
 
-  const layout = getInspectorLayout(die.sides.length);
+  const layout = getInspectorLayout(inspectorDie.sides.length);
   const panel = layout.panel;
   const diagramRect = layout.diagramRect;
   const detailsRect = layout.detailsRect;
@@ -1526,11 +1650,13 @@ function drawDieInspector(uiState: CombatUiState, state: CombatEncounterState): 
   const ownerLabel = uiState.inspector?.owner === "player" ? "Ally" : "Enemy";
   const inspectorEnergyCost = getInspectorEnergyCost(uiState, state);
   const energyLabel = inspectorEnergyCost === undefined ? "Energy Cost: -" : `Energy Cost: ${inspectorEnergyCost}`;
+  const powerLabel = `Total Power: ${inspectorDie.totalPower}`;
   love.graphics.setColor(1, 1, 1);
-  love.graphics.print(`${ownerLabel} Die: ${die.name}`, panel.x + 20, panel.y + 14);
+  love.graphics.print(`${ownerLabel} Die: ${inspectorDie.name}`, panel.x + 20, panel.y + 14);
   love.graphics.setColor(0.78, 0.83, 0.9);
-  love.graphics.print(`${die.sides.length} faces`, panel.x + 20, panel.y + 40);
+  love.graphics.print(`${inspectorDie.sides.length} faces`, panel.x + 20, panel.y + 40);
   love.graphics.print(energyLabel, panel.x + 170, panel.y + 40);
+  love.graphics.print(powerLabel, panel.x + 320, panel.y + 40);
 
   love.graphics.setColor(0.2, 0.24, 0.31, 0.95);
   love.graphics.rectangle("fill", closeButtonRect.x, closeButtonRect.y, closeButtonRect.width, closeButtonRect.height, 5, 5);
@@ -1547,7 +1673,7 @@ function drawDieInspector(uiState: CombatUiState, state: CombatEncounterState): 
   const activeSideIndex = uiState.inspector?.hoveredSideIndex ?? uiState.inspector?.selectedSideIndex;
 
   for (const tile of layout.tiles) {
-    const side = die.sides[tile.sideIndex];
+    const side = inspectorDie.sides[tile.sideIndex];
     const label = layout.denseMode ? `${tile.sideIndex + 1}` : side.label;
     const tileLabelScale = layout.denseMode ? 0.6 : 0.8;
     const isActive = activeSideIndex === tile.sideIndex;
@@ -1593,8 +1719,13 @@ function drawDieInspector(uiState: CombatUiState, state: CombatEncounterState): 
       detailsTextScale,
     );
   } else {
-    const activeSide = die.sides[activeSideIndex];
-    const detailsLine = `Face ${activeSideIndex + 1}: ${activeSide.label} - ${describeDieSide(activeSide)}`;
+    const activeSide = inspectorDie.sides[activeSideIndex];
+    const criticalTags = [
+      activeSide.isCriticalHit ? "CRITICAL HIT" : undefined,
+      activeSide.isCriticalMiss ? "CRITICAL MISS" : undefined,
+    ].filter((tag): tag is string => tag !== undefined);
+    const criticalSuffix = criticalTags.length > 0 ? ` [${criticalTags.join(" | ")}]` : "";
+    const detailsLine = `Face ${activeSideIndex + 1}: ${activeSide.label} (Power ${activeSide.power})${criticalSuffix} - ${activeSide.description}`;
     love.graphics.printf(
       detailsLine,
       detailsRect.x + 14,
@@ -1677,13 +1808,13 @@ export function onCombatMousePressed(
   }
 
   if (uiState.inspector) {
-    const die = getDieFromInspector(uiState, state);
-    if (!die) {
+    const inspectorDie = getInspectorDieView(uiState, state);
+    if (!inspectorDie) {
       uiState.inspector = undefined;
       return;
     }
 
-    const inspectorLayout = getInspectorLayout(die.sides.length);
+    const inspectorLayout = getInspectorLayout(inspectorDie.sides.length);
     if (isPointInsideRect(x, y, inspectorLayout.closeButtonRect)) {
       uiState.inspector = undefined;
       uiState.drag = undefined;
@@ -1966,7 +2097,12 @@ function drawFloatingResolutionPopups(uiState: CombatUiState): void {
   for (const popup of uiState.floatingPopups) {
     const alpha = Math.max(0, Math.min(1, popup.timer / POPUP_DURATION));
 
-    if (popup.source === "player") {
+    if (popup.powerTone === "positive") {
+      love.graphics.setColor(0.72, 0.96, 0.78, alpha);
+    } else if (popup.powerTone === "negative") {
+      love.graphics.setColor(0.96, 0.56, 0.56, alpha);
+    } else if (popup.source === "player") {
+      // Preserve prior source-based fallback when tone is neutral/unknown.
       love.graphics.setColor(0.72, 0.96, 0.78, alpha);
     } else {
       love.graphics.setColor(0.96, 0.84, 0.72, alpha);

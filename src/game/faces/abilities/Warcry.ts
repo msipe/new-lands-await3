@@ -34,6 +34,10 @@ export class Warcry extends Face {
     return `Warcry ${this.attackModifier >= 0 ? "+" : ""}${this.attackModifier}`;
   }
 
+  protected getPower(): number {
+    return Math.max(0, this.attackModifier * 2);
+  }
+
   cloneWithId(newId: string): Warcry {
     return new Warcry(newId, this.attackModifier);
   }

@@ -7,7 +7,7 @@ import {
 } from "../face-adjustments";
 import type { PlayerProgressionState } from "../player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "../player-items";
-import { Ironhide, Miss, WildStrike, Warcry } from "../faces";
+import { FocusUp, Ironhide, Miss, WildStrike, Warcry } from "../faces";
 
 function createWarcryDie(): Die {
   return new Die({
@@ -57,6 +57,22 @@ function createIronhideDie(): Die {
   });
 }
 
+function createFocusUpDie(): Die {
+  return new Die({
+    id: "player-die-4",
+    name: "Focus Up Die",
+    energyCost: 1,
+    sides: [
+      new FocusUp("player-die-4-side-1", "critical-hit"),
+      new FocusUp("player-die-4-side-2", "critical-hit"),
+      new FocusUp("player-die-4-side-3", "power-up"),
+      new FocusUp("player-die-4-side-4", "power-up"),
+      new FocusUp("player-die-4-side-5", "power-down"),
+      new FocusUp("player-die-4-side-6", "critical-miss"),
+    ],
+  });
+}
+
 export function createWarriorStarterCombatDice(progression?: PlayerProgressionState): Die[] {
   const mainhandWeaponDiceId = progression?.items.equipped["weapon-1"]?.diceId;
 
@@ -64,6 +80,7 @@ export function createWarriorStarterCombatDice(progression?: PlayerProgressionSt
     createWarcryDie(),
     createWildStrikeDie(mainhandWeaponDiceId),
     createIronhideDie(),
+    createFocusUpDie(),
   ];
 }
 

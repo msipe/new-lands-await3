@@ -23,6 +23,7 @@ export { MinorMend } from "./abilities/MinorMend";
 export { WildStrike } from "./abilities/WildStrike";
 export { Warcry } from "./abilities/Warcry";
 export { Ironhide } from "./abilities/Ironhide";
+export { FocusUp } from "./abilities/FocusUp";
 
 export { RestorationCharm } from "./items/RestorationCharm";
 

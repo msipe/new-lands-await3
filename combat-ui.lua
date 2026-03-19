@@ -9,12 +9,18 @@ local __TS__ArrayFind = ____lualib.__TS__ArrayFind
 local __TS__ObjectAssign = ____lualib.__TS__ObjectAssign
 local __TS__ArrayIncludes = ____lualib.__TS__ArrayIncludes
 local __TS__MathSign = ____lualib.__TS__MathSign
+local __TS__NumberIsFinite = ____lualib.__TS__NumberIsFinite
+local __TS__ArrayReduce = ____lualib.__TS__ArrayReduce
 local __TS__NumberToString = ____lualib.__TS__NumberToString
 local __TS__ArrayPushArray = ____lualib.__TS__ArrayPushArray
+local __TS__ArraySort = ____lualib.__TS__ArraySort
+local __TS__ArrayForEach = ____lualib.__TS__ArrayForEach
 local __TS__StringSlice = ____lualib.__TS__StringSlice
 local __TS__ArraySlice = ____lualib.__TS__ArraySlice
 local ____exports = {}
-local isDieSettled, getDieEnergyCost, getProjectedPendingEnergySpend, getProjectedPlayerEnergy, canAffordAnyUnthrownDie, findVisualDieById, getDieFromInspector
+local isDieSettled, getDieEnergyCost, getProjectedPendingEnergySpend, getProjectedPlayerEnergy, canAffordAnyUnthrownDie, roundPower, buildSortedInspectorSidesFromRaw, describeDieSide
+local ____combat_2Dencounter = require("game.combat-encounter")
+local getDiePowerSnapshot = ____combat_2Dencounter.getDiePowerSnapshot
 local ____dice_2Dfactory = require("game.dice-factory")
 local createDieFromConstruct = ____dice_2Dfactory.createDieFromConstruct
 local ____dice_2Dconstructs = require("game.dice-constructs.index")
@@ -68,62 +74,36 @@ function canAffordAnyUnthrownDie(self, uiState, state)
     end
     return false
 end
-function findVisualDieById(self, uiState, dieId)
-    local ____array_21 = __TS__SparseArrayNew(unpack(uiState.playerDice))
-    __TS__SparseArrayPush(
-        ____array_21,
-        unpack(uiState.arenaPlayerDice)
-    )
-    __TS__SparseArrayPush(
-        ____array_21,
-        unpack(uiState.enemyArenaDice)
-    )
-    __TS__SparseArrayPush(
-        ____array_21,
-        unpack(uiState.enemyParkedDice)
-    )
-    __TS__SparseArrayPush(
-        ____array_21,
-        unpack(uiState.enemyPendingDice)
-    )
-    return __TS__ArrayFind(
-        {__TS__SparseArraySpread(____array_21)},
-        function(____, die) return die.id == dieId end
-    )
-end
 function ____exports.canPlayerThrow(self, uiState, state)
     return state.phase == "player-turn" and uiState.pendingRound == nil and canAffordAnyUnthrownDie(nil, uiState, state)
 end
-function getDieFromInspector(self, uiState, state)
-    local inspector = uiState.inspector
-    if not inspector then
-        return nil
-    end
-    if inspector.spawnedDieId then
-        local spawnedDie = findVisualDieById(nil, uiState, inspector.spawnedDieId)
-        if not spawnedDie or not spawnedDie.spawnedInspectorSides or not spawnedDie.spawnedInspectorName then
-            return nil
+function roundPower(self, value)
+    return math.floor(value * 1000 + 0.5) / 1000
+end
+function buildSortedInspectorSidesFromRaw(self, rawSides)
+    local sorted = __TS__ArraySort(
+        {unpack(rawSides)},
+        function(____, left, right)
+            if right.power ~= left.power then
+                return right.power - left.power
+            end
+            return left.baseIndex - right.baseIndex
         end
-        return {
-            name = spawnedDie.spawnedInspectorName,
-            sides = __TS__ArrayMap(
-                spawnedDie.spawnedInspectorSides,
-                function(____, side, index) return {
-                    id = "spawned-side-" .. tostring(index + 1),
-                    label = side.label,
-                    describe = function() return side.description end
-                } end
-            )
-        }
-    end
-    if not inspector.combatDieId then
-        return nil
-    end
-    local dice = inspector.owner == "player" and state.player.dice or state.enemy.dice
-    return __TS__ArrayFind(
-        dice,
-        function(____, die) return die.id == inspector.combatDieId end
     )
+    local ____opt_33 = sorted[1]
+    local highestPower = ____opt_33 and ____opt_33.power or 0
+    local ____opt_35 = sorted[#sorted]
+    local lowestPower = ____opt_35 and ____opt_35.power or 0
+    return __TS__ArrayMap(
+        sorted,
+        function(____, side) return __TS__ObjectAssign({}, side, {isCriticalHit = side.power == highestPower, isCriticalMiss = side.power == lowestPower}) end
+    )
+end
+function describeDieSide(self, side)
+    if type(side.describe) == "function" then
+        return side:describe()
+    end
+    return side.label
 end
 local BACKGROUND = {r = 0.16, g = 0.16, b = 0.16}
 local WHITE = {r = 1, g = 1, b = 1}
@@ -1043,6 +1023,29 @@ local function findVisualDieByCombatId(self, uiState, dieId)
         function(____, die) return die.combatDieId == dieId end
     )
 end
+local function findVisualDieById(self, uiState, dieId)
+    local ____array_21 = __TS__SparseArrayNew(unpack(uiState.playerDice))
+    __TS__SparseArrayPush(
+        ____array_21,
+        unpack(uiState.arenaPlayerDice)
+    )
+    __TS__SparseArrayPush(
+        ____array_21,
+        unpack(uiState.enemyArenaDice)
+    )
+    __TS__SparseArrayPush(
+        ____array_21,
+        unpack(uiState.enemyParkedDice)
+    )
+    __TS__SparseArrayPush(
+        ____array_21,
+        unpack(uiState.enemyPendingDice)
+    )
+    return __TS__ArrayFind(
+        {__TS__SparseArraySpread(____array_21)},
+        function(____, die) return die.id == dieId end
+    )
+end
 function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
     for ____, popup in ipairs(popups) do
         do
@@ -1055,6 +1058,27 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                 local launchVy = (sourceDie and sourceDie.vy or 0) * 0.2 - (190 + math.random() * 120)
                 local spawnedConstruct = getDieConstructById(nil, popup.spawnedDie.constructId)
                 local spawnedInspectDie = createDieFromConstruct(nil, {construct = spawnedConstruct, dieId = "spawned-inspector-" .. popup.dieId})
+                local spawnedInspectorSides = buildSortedInspectorSidesFromRaw(
+                    nil,
+                    __TS__ArrayMap(
+                        spawnedInspectDie.sides,
+                        function(____, side, index) return {
+                            id = side.id,
+                            label = side.label,
+                            description = type(side.describe) == "function" and side:describe() or side.label,
+                            power = type(side.power) == "number" and __TS__NumberIsFinite(side.power) and roundPower(nil, side.power) or 0,
+                            baseIndex = index
+                        } end
+                    )
+                )
+                local spawnedInspectorTotalPower = roundPower(
+                    nil,
+                    __TS__ArrayReduce(
+                        spawnedInspectorSides,
+                        function(____, sum, side) return sum + side.power end,
+                        0
+                    )
+                )
                 local ____uiState_arenaPlayerDice_30 = uiState.arenaPlayerDice
                 ____uiState_arenaPlayerDice_30[#____uiState_arenaPlayerDice_30 + 1] = {
                     id = (("spawned-" .. popup.dieId) .. "-") .. string.sub(
@@ -1082,14 +1106,9 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                     state = "arena",
                     flashTimer = RESOLVE_FLASH_DURATION,
                     spawnedInspectorName = popup.spawnedDie.dieLabel,
-                    spawnedInspectorSides = __TS__ArrayMap(
-                        spawnedInspectDie.sides,
-                        function(____, side) return {
-                            label = side.label,
-                            description = type(side.describe) == "function" and side:describe() or side.label
-                        } end
-                    ),
-                    spawnedInspectorEnergyCost = spawnedInspectDie.energyCost
+                    spawnedInspectorSides = spawnedInspectorSides,
+                    spawnedInspectorEnergyCost = spawnedInspectDie.energyCost,
+                    spawnedInspectorTotalPower = spawnedInspectorTotalPower
                 }
                 local ____uiState_floatingPopups_31 = uiState.floatingPopups
                 ____uiState_floatingPopups_31[#____uiState_floatingPopups_31 + 1] = {
@@ -1097,6 +1116,7 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                     y = spawnY - 32,
                     text = popup.text,
                     source = popup.source,
+                    powerTone = popup.sidePowerTone,
                     timer = POPUP_DURATION
                 }
                 goto __continue189
@@ -1117,6 +1137,7 @@ function ____exports.enqueueCombatResolutionPopups(self, uiState, popups)
                 y = die.y - die.size * 0.72,
                 text = popup.text,
                 source = popup.source,
+                powerTone = popup.sidePowerTone,
                 timer = POPUP_DURATION
             }
         end
@@ -1251,12 +1272,105 @@ local function getInspectorLayout(self, faceCount)
         denseMode = faceCount > 20
     }
 end
-local function getInspectorSideIndexAt(self, uiState, state, x, y)
-    local die = getDieFromInspector(nil, uiState, state)
+local function buildInspectorViewFromCombatDie(self, state, dieId, owner)
+    local dice = owner == "player" and state.player.dice or state.enemy.dice
+    local die = __TS__ArrayFind(
+        dice,
+        function(____, entry) return entry.id == dieId end
+    )
     if not die then
         return nil
     end
-    local layout = getInspectorLayout(nil, #die.sides)
+    local sideById = {}
+    __TS__ArrayForEach(
+        die.sides,
+        function(____, side)
+            sideById[side.id] = side
+        end
+    )
+    local snapshot = getDiePowerSnapshot(nil, state, die.id)
+    if snapshot and #snapshot.orderedFaces > 0 then
+        local orderedSides = {}
+        for ____, face in ipairs(snapshot.orderedFaces) do
+            do
+                local side = sideById[face.sideId]
+                if not side then
+                    goto __continue224
+                end
+                orderedSides[#orderedSides + 1] = {
+                    id = side.id,
+                    label = side.label,
+                    description = describeDieSide(nil, side),
+                    power = face.power,
+                    baseIndex = face.baseIndex,
+                    isCriticalHit = face.isCriticalHit,
+                    isCriticalMiss = face.isCriticalMiss
+                }
+            end
+            ::__continue224::
+        end
+        return {name = die.name, sides = orderedSides, totalPower = snapshot.totalPower}
+    end
+    local fallbackSides = buildSortedInspectorSidesFromRaw(
+        nil,
+        __TS__ArrayMap(
+            die.sides,
+            function(____, side, index) return {
+                id = side.id,
+                label = side.label,
+                description = describeDieSide(nil, side),
+                power = type(side.power) == "number" and roundPower(nil, side.power) or 0,
+                baseIndex = index
+            } end
+        )
+    )
+    return {
+        name = die.name,
+        sides = fallbackSides,
+        totalPower = roundPower(
+            nil,
+            __TS__ArrayReduce(
+                fallbackSides,
+                function(____, sum, side) return sum + side.power end,
+                0
+            )
+        )
+    }
+end
+local function getInspectorDieView(self, uiState, state)
+    local inspector = uiState.inspector
+    if not inspector then
+        return nil
+    end
+    if inspector.spawnedDieId then
+        local spawnedDie = findVisualDieById(nil, uiState, inspector.spawnedDieId)
+        if not spawnedDie or not spawnedDie.spawnedInspectorSides or not spawnedDie.spawnedInspectorName then
+            return nil
+        end
+        return {
+            name = spawnedDie.spawnedInspectorName,
+            sides = spawnedDie.spawnedInspectorSides,
+            totalPower = roundPower(
+                nil,
+                spawnedDie.spawnedInspectorTotalPower or __TS__ArrayReduce(
+                    spawnedDie.spawnedInspectorSides,
+                    function(____, sum, side) return sum + side.power end,
+                    0
+                )
+            )
+        }
+    end
+    if not inspector.combatDieId then
+        return nil
+    end
+    return buildInspectorViewFromCombatDie(nil, state, inspector.combatDieId, inspector.owner)
+end
+local function getInspectorSideIndexAt(self, uiState, state, x, y)
+    local inspectorDie = getInspectorDieView(nil, uiState, state)
+    if not inspectorDie then
+        return nil
+    end
+    local layout = getInspectorLayout(nil, #inspectorDie.sides)
     for ____, tile in ipairs(layout.tiles) do
         if isPointInsideRect(nil, x, y, tile.rect) then
             return tile.sideIndex
@@ -1283,19 +1397,13 @@ local function getInspectorEnergyCost(self, uiState, state)
     )
     return die and math.max(0, die.energyCost) or nil
 end
-local function describeDieSide(self, side)
-    if type(side.describe) == "function" then
-        return side:describe()
-    end
-    return side.label
-end
 local function drawDieInspector(self, uiState, state)
-    local die = getDieFromInspector(nil, uiState, state)
-    if not die then
+    local inspectorDie = getInspectorDieView(nil, uiState, state)
+    if not inspectorDie then
         uiState.inspector = nil
         return
     end
-    local layout = getInspectorLayout(nil, #die.sides)
+    local layout = getInspectorLayout(nil, #inspectorDie.sides)
     local panel = layout.panel
     local diagramRect = layout.diagramRect
     local detailsRect = layout.detailsRect
@@ -1328,19 +1436,21 @@ local function drawDieInspector(self, uiState, state)
         8,
         8
     )
-    local ____opt_35 = uiState.inspector
-    local ownerLabel = (____opt_35 and ____opt_35.owner) == "player" and "Ally" or "Enemy"
+    local ____opt_39 = uiState.inspector
+    local ownerLabel = (____opt_39 and ____opt_39.owner) == "player" and "Ally" or "Enemy"
     local inspectorEnergyCost = getInspectorEnergyCost(nil, uiState, state)
     local energyLabel = inspectorEnergyCost == nil and "Energy Cost: -" or "Energy Cost: " .. tostring(inspectorEnergyCost)
+    local powerLabel = "Total Power: " .. tostring(inspectorDie.totalPower)
     love.graphics.setColor(1, 1, 1)
-    love.graphics.print((ownerLabel .. " Die: ") .. die.name, panel.x + 20, panel.y + 14)
+    love.graphics.print((ownerLabel .. " Die: ") .. inspectorDie.name, panel.x + 20, panel.y + 14)
     love.graphics.setColor(0.78, 0.83, 0.9)
     love.graphics.print(
-        tostring(#die.sides) .. " faces",
+        tostring(#inspectorDie.sides) .. " faces",
         panel.x + 20,
         panel.y + 40
     )
     love.graphics.print(energyLabel, panel.x + 170, panel.y + 40)
+    love.graphics.print(powerLabel, panel.x + 320, panel.y + 40)
     love.graphics.setColor(0.2, 0.24, 0.31, 0.95)
     love.graphics.rectangle(
         "fill",
@@ -1392,15 +1502,15 @@ local function drawDieInspector(self, uiState, state)
         6,
         6
     )
-    local ____opt_37 = uiState.inspector
-    local ____temp_41 = ____opt_37 and ____opt_37.hoveredSideIndex
-    if ____temp_41 == nil then
-        local ____opt_39 = uiState.inspector
-        ____temp_41 = ____opt_39 and ____opt_39.selectedSideIndex
+    local ____opt_41 = uiState.inspector
+    local ____temp_45 = ____opt_41 and ____opt_41.hoveredSideIndex
+    if ____temp_45 == nil then
+        local ____opt_43 = uiState.inspector
+        ____temp_45 = ____opt_43 and ____opt_43.selectedSideIndex
     end
-    local activeSideIndex = ____temp_41
+    local activeSideIndex = ____temp_45
     for ____, tile in ipairs(layout.tiles) do
-        local side = die.sides[tile.sideIndex + 1]
+        local side = inspectorDie.sides[tile.sideIndex + 1]
         local label = layout.denseMode and tostring(tile.sideIndex + 1) or side.label
         local tileLabelScale = layout.denseMode and 0.6 or 0.8
         local isActive = activeSideIndex == tile.sideIndex
@@ -1474,8 +1584,13 @@ local function drawDieInspector(self, uiState, state)
             detailsTextScale
         )
     else
-        local activeSide = die.sides[activeSideIndex + 1]
-        local detailsLine = (((("Face " .. tostring(activeSideIndex + 1)) .. ": ") .. activeSide.label) .. " - ") .. describeDieSide(nil, activeSide)
+        local activeSide = inspectorDie.sides[activeSideIndex + 1]
+        local criticalTags = __TS__ArrayFilter(
+            {activeSide.isCriticalHit and "CRITICAL HIT" or nil, activeSide.isCriticalMiss and "CRITICAL MISS" or nil},
+            function(____, tag) return tag ~= nil end
+        )
+        local criticalSuffix = #criticalTags > 0 and (" [" .. table.concat(criticalTags, " | ")) .. "]" or ""
+        local detailsLine = (((((((("Face " .. tostring(activeSideIndex + 1)) .. ": ") .. activeSide.label) .. " (Power ") .. tostring(activeSide.power)) .. ")") .. criticalSuffix) .. " - ") .. activeSide.description
         love.graphics.printf(
             detailsLine,
             detailsRect.x + 14,
@@ -1541,12 +1656,12 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
         end
     end
     if uiState.inspector then
-        local die = getDieFromInspector(nil, uiState, state)
-        if not die then
+        local inspectorDie = getInspectorDieView(nil, uiState, state)
+        if not inspectorDie then
             uiState.inspector = nil
             return
         end
-        local inspectorLayout = getInspectorLayout(nil, #die.sides)
+        local inspectorLayout = getInspectorLayout(nil, #inspectorDie.sides)
         if isPointInsideRect(nil, x, y, inspectorLayout.closeButtonRect) then
             uiState.inspector = nil
             uiState.drag = nil
@@ -1573,15 +1688,15 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
     for ____, die in ipairs(uiState.playerDice) do
         do
             if die.state == "arena" then
-                goto __continue260
+                goto __continue275
             end
             if not canDragPlayerDie(nil, uiState, state, die) then
-                goto __continue260
+                goto __continue275
             end
             local half = die.size / 2
             local inside = x >= die.x - half and x <= die.x + half and y >= die.y - half and y <= die.y + half
             if not inside then
-                goto __continue260
+                goto __continue275
             end
             die.state = "dragging"
             die.x = x
@@ -1597,7 +1712,7 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
             }
             return
         end
-        ::__continue260::
+        ::__continue275::
     end
 end
 function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
@@ -1622,9 +1737,9 @@ function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
     local dragged = __TS__ArrayFind(
         uiState.playerDice,
         function(____, die)
-            local ____die_id_44 = die.id
-            local ____opt_42 = uiState.drag
-            return ____die_id_44 == (____opt_42 and ____opt_42.dieId)
+            local ____die_id_48 = die.id
+            local ____opt_46 = uiState.drag
+            return ____die_id_48 == (____opt_46 and ____opt_46.dieId)
         end
     )
     if not dragged then
@@ -1923,7 +2038,11 @@ local function drawFloatingResolutionPopups(self, uiState)
             0,
             math.min(1, popup.timer / POPUP_DURATION)
         )
-        if popup.source == "player" then
+        if popup.powerTone == "positive" then
+            love.graphics.setColor(0.72, 0.96, 0.78, alpha)
+        elseif popup.powerTone == "negative" then
+            love.graphics.setColor(0.96, 0.56, 0.56, alpha)
+        elseif popup.source == "player" then
             love.graphics.setColor(0.72, 0.96, 0.78, alpha)
         else
             love.graphics.setColor(0.96, 0.84, 0.72, alpha)

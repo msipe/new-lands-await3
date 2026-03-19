@@ -44,4 +44,18 @@ describe("DealDamage", () => {
     expect(afterReduce?.value).toBe(3);
     expect(afterReduce?.pointValue).toBe(3);
   });
+
+  it("exposes power based on damage value", () => {
+    const face = new DealDamage("deal-damage-power", "Strike", 2);
+
+    expect(face.power).toBe(2);
+
+    face.applyAdjustment({
+      propertyId: "damage",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 3,
+    });
+
+    expect(face.power).toBe(5);
+  });
 });

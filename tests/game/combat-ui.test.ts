@@ -356,6 +356,15 @@ describe("combat ui", () => {
     expect(spawned).toBeDefined();
     expect(spawned?.combatDieId).toBeUndefined();
     expect(spawned?.label).toBe("Sword Slash");
+    const spawnedInspectorSides = spawned?.spawnedInspectorSides ?? [];
+    expect(spawnedInspectorSides.length).toBeGreaterThan(0);
+    expect(
+      spawnedInspectorSides.every((side, index, sides) =>
+        index === 0 ? true : sides[index - 1].power >= side.power,
+      ),
+    ).toBe(true);
+    expect(spawnedInspectorSides.some((side) => side.isCriticalHit)).toBe(true);
+    expect(spawnedInspectorSides.some((side) => side.isCriticalMiss)).toBe(true);
     expect(uiState.floatingPopups).toHaveLength(1);
     expect(uiState.floatingPopups[0].text).toBe("Transient Sword Slash");
 

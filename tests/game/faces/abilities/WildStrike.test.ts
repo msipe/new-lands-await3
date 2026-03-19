@@ -255,4 +255,33 @@ describe("WildStrike", () => {
     });
     expect(face.label).toBe("Wild Strike 2x both hands +3");
   });
+
+  it("exposes non-linear power that scales with attacks, bonus damage, and weapon choice", () => {
+    const face = new WildStrike("wild-strike-power", 1, "rusty-sword-die");
+    const baselinePower = face.power;
+
+    face.applyAdjustment({
+      propertyId: "attack_times",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 1,
+    });
+    const withExtraAttackPower = face.power;
+    expect(withExtraAttackPower).toBeGreaterThan(baselinePower);
+
+    face.applyAdjustment({
+      propertyId: "extra_damage",
+      type: FaceAdjustmentModalityType.Improve,
+      steps: 2,
+    });
+    const withExtraDamagePower = face.power;
+    expect(withExtraDamagePower).toBeGreaterThan(withExtraAttackPower);
+
+    face.applyAdjustment({
+      propertyId: "weapon_choice",
+      type: FaceAdjustmentModalityType.Select,
+      value: "both_hands",
+    });
+    const bothHandsPower = face.power;
+    expect(bothHandsPower).toBeGreaterThan(withExtraDamagePower);
+  });
 });

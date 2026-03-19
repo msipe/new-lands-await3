@@ -16,6 +16,10 @@ import { createDieFromConstruct } from "./dice-factory";
 import { createPlayerCombatDiceLoadout } from "./dice-constructs/player-combat-dice";
 import { buildRollCombatLogLines } from "./combat-log";
 import { getTransientDiePopupDataFromEvents } from "./transient-die";
+import type {
+  PlayerRollConversionRequest,
+  QueuedPlayerRollConversion,
+} from "./player-roll-conversions";
 import { getEnemyById, listEnemies } from "../planning/content-registry";
 import type { ContentEnemy } from "../planning/content-types";
 import { createPlayerProgression, type PlayerProgressionState } from "./player-progression";
@@ -28,6 +32,20 @@ type CombatActor = {
   maxHp: number;
   armor: number;
   dice: Die[];
+};
+
+export type DieFacePowerSnapshot = {
+  sideId: string;
+  baseIndex: number;
+  power: number;
+  isCriticalHit: boolean;
+  isCriticalMiss: boolean;
+};
+
+export type DiePowerSnapshot = {
+  dieId: string;
+  totalPower: number;
+  orderedFaces: DieFacePowerSnapshot[];
 };
 
 export type EnemyStub = {
@@ -68,6 +86,10 @@ export type CombatResolutionPopup = {
   dieId: string;
   text: string;
   sideLabel?: string;
+  sidePower?: number;
+  sidePowerTone?: "positive" | "negative" | "neutral";
+  isCriticalHit?: boolean;
+  isCriticalMiss?: boolean;
   spawnedDie?: {
     constructId: string;
     dieLabel: string;
@@ -87,9 +109,77 @@ export type CombatEncounterState = {
   pendingEnemyDieIds: string[];
   resolvedEnemyDieIds: string[];
   enemyIntent: PendingEnemyIntent;
+  diePowerById: Record<string, DiePowerSnapshot>;
+  queuedPlayerRollConversions: QueuedPlayerRollConversion[];
+  nextPlayerRollConversionId: number;
   combatLog: string[];
   pendingResolutionPopups: CombatResolutionPopup[];
 };
+
+function roundPower(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function getSidePower(side: DieSide): number {
+  return typeof side.power === "number" && Number.isFinite(side.power) ? side.power : 0;
+}
+
+function buildDiePowerSnapshot(die: Die): DiePowerSnapshot {
+  const faces = die.sides.map((side, index) => ({
+    sideId: side.id,
+    baseIndex: index,
+    power: roundPower(getSidePower(side)),
+  }));
+
+  const totalPower = roundPower(faces.reduce((sum, face) => sum + face.power, 0));
+  const sortedFaces = [...faces].sort((left, right) => {
+    if (right.power !== left.power) {
+      return right.power - left.power;
+    }
+
+    return left.baseIndex - right.baseIndex;
+  });
+
+  const highestPower = sortedFaces[0]?.power ?? 0;
+  const lowestPower = sortedFaces[sortedFaces.length - 1]?.power ?? 0;
+
+  return {
+    dieId: die.id,
+    totalPower,
+    orderedFaces: sortedFaces.map((face) => ({
+      ...face,
+      isCriticalHit: face.power === highestPower,
+      isCriticalMiss: face.power === lowestPower,
+    })),
+  };
+}
+
+function buildCombatDiePowerSnapshotById(actors: CombatActor[]): Record<string, DiePowerSnapshot> {
+  const byId: Record<string, DiePowerSnapshot> = {};
+
+  for (const actor of actors) {
+    for (const die of actor.dice) {
+      byId[die.id] = buildDiePowerSnapshot(die);
+    }
+  }
+
+  return byId;
+}
+
+export function getDiePowerSnapshot(
+  state: CombatEncounterState,
+  dieId: string,
+): DiePowerSnapshot | undefined {
+  return state.diePowerById[dieId];
+}
+
+function getDieFacePowerSnapshot(
+  state: CombatEncounterState,
+  dieId: string,
+  sideId: string,
+): DieFacePowerSnapshot | undefined {
+  return state.diePowerById[dieId]?.orderedFaces.find((face) => face.sideId === sideId);
+}
 
 function getPlayerEnergyMax(playerProgression: PlayerProgressionState): number {
   if (playerProgression.classId === "class:warrior") {
@@ -120,14 +210,30 @@ function queueResolutionPopup(
   dieId: string,
   side: DieSide,
 ): void {
-  const popupText =
+  const basePopupText =
     typeof side.getResolvePopupText === "function" ? side.getResolvePopupText() : side.label;
+  const facePower = getDieFacePowerSnapshot(state, dieId, side.id);
+  const tags: string[] = [];
+  if (facePower?.isCriticalHit) {
+    tags.push("CRIT");
+  }
+  if (facePower?.isCriticalMiss) {
+    tags.push("CRITICAL MISS");
+  }
+
+  const popupText = tags.length > 0 ? `${tags.join(" | ")}: ${basePopupText}` : basePopupText;
+  const sidePower = facePower?.power;
+  const sidePowerTone = sidePower === undefined ? undefined : sidePower > 0 ? "positive" : sidePower < 0 ? "negative" : "neutral";
 
   state.pendingResolutionPopups.push({
     source,
     dieId,
     text: popupText,
     sideLabel: side.label,
+    sidePower,
+    sidePowerTone,
+    isCriticalHit: facePower?.isCriticalHit,
+    isCriticalMiss: facePower?.isCriticalMiss,
   });
 }
 
@@ -222,6 +328,142 @@ type SpawnedDiePopupSide = DieSide & {
     popupText?: string;
   }>;
 };
+
+type PlayerRollConversionProviderSide = DieSide & {
+  getPlayerRollConversionRequests?: () => PlayerRollConversionRequest[];
+};
+
+function getSideIndexById(die: Die, sideId: string): number {
+  return die.sides.findIndex((side) => side.id === sideId);
+}
+
+function getCriticalSideIndex(
+  state: CombatEncounterState,
+  die: Die,
+  criticalType: "hit" | "miss",
+  selectedSideIndex: number,
+): number {
+  const snapshot = state.diePowerById[die.id];
+  if (!snapshot || snapshot.orderedFaces.length === 0) {
+    return selectedSideIndex;
+  }
+
+  const candidates = snapshot.orderedFaces.filter((face) =>
+    criticalType === "hit" ? face.isCriticalHit : face.isCriticalMiss,
+  );
+
+  if (candidates.length === 0) {
+    return selectedSideIndex;
+  }
+
+  const selectedSide = die.sides[selectedSideIndex];
+  if (selectedSide && candidates.some((face) => face.sideId === selectedSide.id)) {
+    return selectedSideIndex;
+  }
+
+  const chosen = candidates[0];
+  const chosenIndex = getSideIndexById(die, chosen.sideId);
+  return chosenIndex >= 0 ? chosenIndex : selectedSideIndex;
+}
+
+function getShiftedPowerSideIndex(
+  state: CombatEncounterState,
+  die: Die,
+  selectedSideIndex: number,
+  shift: -1 | 1,
+): number {
+  const snapshot = state.diePowerById[die.id];
+  const selectedSide = die.sides[selectedSideIndex];
+  if (!snapshot || !selectedSide) {
+    return selectedSideIndex;
+  }
+
+  const selectedFace = snapshot.orderedFaces.find((face) => face.sideId === selectedSide.id);
+  if (!selectedFace) {
+    return selectedSideIndex;
+  }
+
+  const uniquePowerLevels = [...new Set(snapshot.orderedFaces.map((face) => face.power))];
+  const currentLevelIndex = uniquePowerLevels.findIndex((power) => power === selectedFace.power);
+  if (currentLevelIndex === -1) {
+    return selectedSideIndex;
+  }
+
+  const targetLevelIndex = Math.max(
+    0,
+    Math.min(
+      uniquePowerLevels.length - 1,
+      shift > 0 ? currentLevelIndex - 1 : currentLevelIndex + 1,
+    ),
+  );
+  const targetPower = uniquePowerLevels[targetLevelIndex];
+  if (targetPower === selectedFace.power) {
+    return selectedSideIndex;
+  }
+
+  const targetFace = snapshot.orderedFaces.find((face) => face.power === targetPower);
+  if (!targetFace) {
+    return selectedSideIndex;
+  }
+
+  const targetIndex = getSideIndexById(die, targetFace.sideId);
+  return targetIndex >= 0 ? targetIndex : selectedSideIndex;
+}
+
+function applyQueuedPlayerRollConversion(
+  state: CombatEncounterState,
+  die: Die,
+  selectedSideIndex: number,
+): { selectedSideIndex: number; applied?: QueuedPlayerRollConversion } {
+  const conversion = state.queuedPlayerRollConversions.shift();
+  if (!conversion) {
+    return { selectedSideIndex };
+  }
+
+  switch (conversion.kind) {
+    case "to-critical-hit":
+      return {
+        selectedSideIndex: getCriticalSideIndex(state, die, "hit", selectedSideIndex),
+        applied: conversion,
+      };
+    case "to-critical-miss":
+      return {
+        selectedSideIndex: getCriticalSideIndex(state, die, "miss", selectedSideIndex),
+        applied: conversion,
+      };
+    case "shift-power":
+      return {
+        selectedSideIndex: getShiftedPowerSideIndex(state, die, selectedSideIndex, conversion.shift),
+        applied: conversion,
+      };
+    default:
+      return { selectedSideIndex, applied: conversion };
+  }
+}
+
+function queuePlayerRollConversionsFromSide(
+  state: CombatEncounterState,
+  dieId: string,
+  side: DieSide,
+): void {
+  const provider = side as PlayerRollConversionProviderSide;
+  const requests = provider.getPlayerRollConversionRequests?.() ?? [];
+  if (requests.length === 0) {
+    return;
+  }
+
+  for (const request of requests) {
+    const queued: QueuedPlayerRollConversion = {
+      ...request,
+      id: `player-roll-conversion-${state.nextPlayerRollConversionId}`,
+      sourceDieId: dieId,
+      sourceSideId: side.id,
+    };
+    state.nextPlayerRollConversionId += 1;
+    state.queuedPlayerRollConversions.push(queued);
+    state.combatLog.push(`Focus effect queued: ${request.description}`);
+  }
+}
 
 function resolveImmediateEvents(
   state: CombatEncounterState,
@@ -336,6 +578,7 @@ export function createCombatEncounter(
   };
 
   const enemyIntent = buildEnemyIntent(enemy, randomSource);
+  const diePowerById = buildCombatDiePowerSnapshotById([player, enemy]);
   const state: CombatEncounterState = {
     player,
     enemy,
@@ -348,6 +591,9 @@ export function createCombatEncounter(
     pendingEnemyDieIds: [],
     resolvedEnemyDieIds: [],
     enemyIntent,
+    diePowerById,
+    queuedPlayerRollConversions: [],
+    nextPlayerRollConversionId: 1,
     combatLog: [
       `Round 1 begins.`,
       `${enemy.name} prepares ${enemyIntent.pendingPlayerDamage} damage and ${enemyIntent.pendingEnemyHealing} healing.`,
@@ -432,7 +678,15 @@ export function rollPlayerDie(
     return state;
   }
 
-  const side = die.roll(randomSource);
+  const rollResult = die.rollWithDetails(randomSource);
+  const convertedRoll = applyQueuedPlayerRollConversion(state, die, rollResult.selectedSideIndex);
+  const side = die.sides[convertedRoll.selectedSideIndex] ?? rollResult.side;
+
+  if (convertedRoll.applied) {
+    state.combatLog.push(
+      `Focus effect applied: ${convertedRoll.applied.description} on ${die.name}.`,
+    );
+  }
 
   const eventModifier = (side as CombatEventModifierSide).createCombatEventModifier?.();
   if (eventModifier) {
@@ -458,6 +712,7 @@ export function rollPlayerDie(
   resolveImmediateEvents(state, eventBus, events);
   queueResolutionPopup(state, "player", die.id, side);
   queueSpawnedDiePopupFromEvents(state, "player", die.id, events, side);
+  queuePlayerRollConversionsFromSide(state, die.id, side);
 
   state.playerEnergyCurrent = Math.max(0, state.playerEnergyCurrent - die.energyCost);
   state.rolledPlayerDieIds.push(die.id);

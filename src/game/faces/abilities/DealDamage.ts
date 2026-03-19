@@ -50,6 +50,10 @@ export class DealDamage extends Face {
     return `${super.getLabel()} +${this.damage}`;
   }
 
+  protected getPower(): number {
+    return Math.max(0, this.damage);
+  }
+
   cloneWithId(newId: string): DealDamage {
     return new DealDamage(newId, this.getBaseLabel(), this.damage);
   }

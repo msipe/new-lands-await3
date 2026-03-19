@@ -142,6 +142,9 @@ export class WildStrike extends Face {
   static readonly attackTimesPointWeight = 2;
   static readonly extraDamagePointWeight = 1;
   static readonly attackTimesBonusSynergyWeight = 0.5;
+  static readonly attackCountPowerExponent = 1.35;
+  static readonly bonusDamageSynergyScale = 0.75;
+  static readonly attackBonusComboScale = 0.6;
 
   private attackCount = 1;
   private weaponChoice: WildStrikeWeaponChoice = "mainhand";
@@ -183,6 +186,22 @@ export class WildStrike extends Face {
 
   protected getLabel(): string {
     return `Wild Strike ${this.attackCount}x ${this.weaponChoice.replace("_", " ")} +${this.bonusDamage}`;
+  }
+
+  protected getPower(): number {
+    const safeAttackCount = Math.max(WildStrike.minAttackCount, Math.floor(this.attackCount));
+    const safeBonusDamage = Math.max(WildStrike.minExtraDamage, Math.floor(this.bonusDamage));
+
+    // We intentionally make multi-attacks scale super-linearly so each added hit is
+    // more valuable than the previous one, then compound by bonus damage synergy.
+    const attackCurve = safeAttackCount ** WildStrike.attackCountPowerExponent;
+    const bonusSynergy =
+      safeBonusDamage * (1 + Math.log2(safeAttackCount + 1) * WildStrike.bonusDamageSynergyScale);
+    const comboPower =
+      safeAttackCount * safeBonusDamage * WildStrike.attackBonusComboScale;
+    const weaponMultiplier = WildStrike.getWeaponChoicePowerMultiplier(this.weaponChoice);
+
+    return WildStrike.roundPower((attackCurve + bonusSynergy + comboPower) * weaponMultiplier);
   }
 
   cloneWithId(newId: string): WildStrike {
@@ -247,6 +266,18 @@ export class WildStrike extends Face {
       case "mainhand":
       default:
         return 0;
+    }
+  }
+
+  private static getWeaponChoicePowerMultiplier(choice: WildStrikeWeaponChoice): number {
+    switch (choice) {
+      case "both_hands":
+        return 1.35;
+      case "offhand":
+        return 0.9;
+      case "mainhand":
+      default:
+        return 1;
     }
   }
 

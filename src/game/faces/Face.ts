@@ -31,6 +31,10 @@ export abstract class Face implements DieSide {
     return this.getLabel();
   }
 
+  get power(): number {
+    return this.getPower();
+  }
+
   resolve(context: SideResolveContext): CombatEvent[] {
     this.rollCount += 1;
 
@@ -61,6 +65,26 @@ export abstract class Face implements DieSide {
 
   protected getBaseLabel(): string {
     return this.baseLabel;
+  }
+
+  protected getPower(): number {
+    return this.getDefaultPowerFromAdjustments();
+  }
+
+  protected getDefaultPowerFromAdjustments(): number {
+    const total = this.getAdjustmentProperties().reduce((sum, property) => {
+      if (typeof property.pointValue !== "number" || Number.isNaN(property.pointValue)) {
+        return sum;
+      }
+
+      return sum + property.pointValue;
+    }, 0);
+
+    return Face.roundPower(total);
+  }
+
+  protected static roundPower(value: number): number {
+    return Math.round(value * 1000) / 1000;
   }
 
   abstract cloneWithId(newId: string): Face;
