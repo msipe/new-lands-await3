@@ -16,7 +16,6 @@ describe("explore-state", () => {
     expect(center.zone).toBe("town");
     expect(center.name.length).toBeGreaterThan(0);
     expect(center.description.length).toBeGreaterThan(0);
-    expect(center.encounterPlaceholders.length).toBeGreaterThan(0);
     expect(center.locations.length).toBeGreaterThan(0);
     expect(center.locations[0].characters.length).toBeGreaterThanOrEqual(0);
     expect(center.status).toBe("active");

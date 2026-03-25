@@ -13,6 +13,7 @@ local ____exports = {}
 local ____content_2Dregistry_2Dgenerated = require("planning.content-registry-generated")
 local RAW_BIG_BADS = ____content_2Dregistry_2Dgenerated.RAW_BIG_BADS
 local RAW_ENEMIES = ____content_2Dregistry_2Dgenerated.RAW_ENEMIES
+local RAW_EXPLORATION_FLOWS = ____content_2Dregistry_2Dgenerated.RAW_EXPLORATION_FLOWS
 local RAW_ITEMS = ____content_2Dregistry_2Dgenerated.RAW_ITEMS
 local RAW_NPCS = ____content_2Dregistry_2Dgenerated.RAW_NPCS
 local RAW_QUESTS = ____content_2Dregistry_2Dgenerated.RAW_QUESTS
@@ -90,20 +91,30 @@ local TILES = __TS__ArrayMap(
         entry,
         {
             color = entry.color and ({entry.color[1], entry.color[2], entry.color[3], entry.color[4]}) or nil,
-            encounterPlaceholders = entry.encounterPlaceholders and __TS__ArrayMap(
-                entry.encounterPlaceholders,
-                function(____, placeholder) return {
-                    id = placeholder.id,
-                    weight = placeholder.weight,
-                    tags = {unpack(placeholder.tags)}
-                } end
-            ) or nil,
             enemyPool = entry.enemyPool and __TS__ArrayMap(
                 entry.enemyPool,
                 function(____, enemyEntry) return {enemyId = enemyEntry.enemyId, weight = enemyEntry.weight} end
             ) or nil,
             tags = {unpack(entry.tags)},
             enemyIds = entry.enemyIds ~= nil and ({unpack(entry.enemyIds)}) or nil
+        }
+    ) end
+)
+local EXPLORATION_FLOWS = __TS__ArrayMap(
+    RAW_EXPLORATION_FLOWS,
+    function(____, entry) return __TS__ObjectAssign(
+        {},
+        entry,
+        {
+            tags = {unpack(entry.tags)},
+            levels = __TS__ArrayMap(
+                entry.levels,
+                function(____, level) return __TS__ObjectAssign(
+                    {},
+                    level,
+                    {combatHook = level.combatHook ~= nil and __TS__ObjectAssign({}, level.combatHook) or nil}
+                ) end
+            )
         }
     ) end
 )
@@ -255,20 +266,43 @@ function ____exports.listTiles(self)
             entry,
             {
                 color = entry.color and ({entry.color[1], entry.color[2], entry.color[3], entry.color[4]}) or nil,
-                encounterPlaceholders = entry.encounterPlaceholders and __TS__ArrayMap(
-                    entry.encounterPlaceholders,
-                    function(____, placeholder) return {
-                        id = placeholder.id,
-                        weight = placeholder.weight,
-                        tags = {unpack(placeholder.tags)}
-                    } end
-                ) or nil,
                 enemyPool = entry.enemyPool and __TS__ArrayMap(
                     entry.enemyPool,
                     function(____, enemyEntry) return {enemyId = enemyEntry.enemyId, weight = enemyEntry.weight} end
                 ) or nil,
                 tags = {unpack(entry.tags)},
                 enemyIds = entry.enemyIds ~= nil and ({unpack(entry.enemyIds)}) or nil
+            }
+        ) end
+    )
+end
+function ____exports.getExplorationFlowById(self, id)
+    return assertFound(
+        nil,
+        __TS__ArrayFind(
+            EXPLORATION_FLOWS,
+            function(____, entry) return entry.id == id end
+        ),
+        "exploration flow",
+        id
+    )
+end
+function ____exports.listExplorationFlows(self)
+    return __TS__ArrayMap(
+        EXPLORATION_FLOWS,
+        function(____, entry) return __TS__ObjectAssign(
+            {},
+            entry,
+            {
+                tags = {unpack(entry.tags)},
+                levels = __TS__ArrayMap(
+                    entry.levels,
+                    function(____, level) return __TS__ObjectAssign(
+                        {},
+                        level,
+                        {combatHook = level.combatHook ~= nil and __TS__ObjectAssign({}, level.combatHook) or nil}
+                    ) end
+                )
             }
         ) end
     )

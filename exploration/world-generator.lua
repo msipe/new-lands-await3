@@ -19,6 +19,7 @@ local getHexDistance = ____explore_2Dstate.getHexDistance
 local ____content_2Dregistry = require("planning.content-registry")
 local getNpcById = ____content_2Dregistry.getNpcById
 local getTileById = ____content_2Dregistry.getTileById
+local listExplorationFlows = ____content_2Dregistry.listExplorationFlows
 local listNpcs = ____content_2Dregistry.listNpcs
 local START_TILE_KEY = "0,0"
 local NPCS_PER_TOWN = 3
@@ -43,14 +44,7 @@ local function applyTemplateToTile(self, tile, template)
     tile.name = template.name
     tile.description = template.description
     tile.color = {template.color[1], template.color[2], template.color[3], template.color[4]}
-    tile.encounterPlaceholders = __TS__ArrayMap(
-        template.encounterPlaceholders,
-        function(____, entry) return {
-            id = entry.id,
-            weight = entry.weight,
-            tags = {unpack(entry.tags)}
-        } end
-    )
+    tile.explorationFlowId = nil
     tile.enemyPool = __TS__ArrayMap(
         template.enemyPool,
         function(____, entry) return {enemyId = entry.enemyId, weight = entry.weight} end
@@ -105,7 +99,7 @@ local function ensureZoneMinimums(self, state, spec)
                 function(____, tile) return tile.zone == requirement.zone end
             )
             if currentCount >= requirement.minCount then
-                goto __continue14
+                goto __continue13
             end
             local needed = requirement.minCount - currentCount
             local candidates = pickCandidateTiles(nil, state, requirement.zone)
@@ -121,7 +115,7 @@ local function ensureZoneMinimums(self, state, spec)
                 end
             end
         end
-        ::__continue14::
+        ::__continue13::
     end
 end
 local function pickReplacementZone(self, tileKey, seed)
@@ -175,7 +169,7 @@ local function ensureSpecialTiles(self, state, spec)
                 function(____, tile) return tile.metadata.specialTileId == special.id end
             )
             if #existing >= special.minCount then
-                goto __continue32
+                goto __continue31
             end
             local preferredZone = special.preferredZone
             local candidatePool = __TS__ArrayFilter(
@@ -194,7 +188,7 @@ local function ensureSpecialTiles(self, state, spec)
                 end
             )
             if #candidatePool == 0 then
-                goto __continue32
+                goto __continue31
             end
             __TS__ArraySort(
                 candidatePool,
@@ -220,7 +214,7 @@ local function ensureSpecialTiles(self, state, spec)
                 )
             end
         end
-        ::__continue32::
+        ::__continue31::
     end
 end
 local function getTownPlacementSlots(self, state, spec)
@@ -339,7 +333,7 @@ local function placeTownNpcs(self, state, spec)
     for ____, npc in ipairs(requiredNpcs) do
         do
             if usedNpcIds[npc.id] == true then
-                goto __continue68
+                goto __continue67
             end
             local candidates = __TS__ArrayFilter(
                 {unpack(slots)},
@@ -364,7 +358,7 @@ local function placeTownNpcs(self, state, spec)
                 usedNpcIds[npc.id] = true
             end
         end
-        ::__continue68::
+        ::__continue67::
     end
     local ambientPool = __TS__ArrayFilter(
         listNpcs(nil),
@@ -377,7 +371,7 @@ local function placeTownNpcs(self, state, spec)
     for ____, npc in ipairs(ambientPool) do
         do
             if usedNpcIds[npc.id] == true then
-                goto __continue78
+                goto __continue77
             end
             local candidates = __TS__ArrayFilter(
                 {unpack(slots)},
@@ -405,7 +399,7 @@ local function placeTownNpcs(self, state, spec)
                 usedNpcIds[npc.id] = true
             end
         end
-        ::__continue78::
+        ::__continue77::
     end
     for ____, slot in ipairs(slots) do
         slot.tile.locations = __TS__ArrayFilter(
@@ -414,10 +408,48 @@ local function placeTownNpcs(self, state, spec)
         )
     end
 end
+local function assignExplorationFlows(self, state, seed)
+    local allFlows = listExplorationFlows(nil)
+    local poolByZone = {}
+    for ____, flow in ipairs(allFlows) do
+        if poolByZone[flow.zone] == nil then
+            poolByZone[flow.zone] = {}
+        end
+        local ____poolByZone_flow_zone_4 = poolByZone[flow.zone]
+        ____poolByZone_flow_zone_4[#____poolByZone_flow_zone_4 + 1] = flow
+    end
+    local candidates = __TS__ArraySort(
+        __TS__ArrayFilter(
+            state.tiles,
+            function(____, tile) return tile.zone ~= "town" end
+        ),
+        function(____, a, b) return a.key < b.key and -1 or (a.key > b.key and 1 or 0) end
+    )
+    for ____, tile in ipairs(candidates) do
+        do
+            local pool = poolByZone[tile.zone]
+            if pool == nil or #pool == 0 then
+                goto __continue95
+            end
+            local score = hashToUnitInterval(nil, (seed .. ":flow:") .. tile.key)
+            local index = math.max(
+                0,
+                math.min(
+                    #pool - 1,
+                    math.floor(score * #pool)
+                )
+            )
+            tile.explorationFlowId = pool[index + 1].id
+            __TS__ArraySplice(pool, index, 1)
+        end
+        ::__continue95::
+    end
+end
 function ____exports.applyWorldSpecToExploreState(self, state, spec)
     ensureZoneMinimums(nil, state, spec)
     ensureSpecialTiles(nil, state, spec)
     enforceMaxTownTiles(nil, state, spec)
     placeTownNpcs(nil, state, spec)
+    assignExplorationFlows(nil, state, spec.seed)
 end
 return ____exports

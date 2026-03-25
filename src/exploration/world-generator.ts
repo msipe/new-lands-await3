@@ -1,8 +1,8 @@
 import { createDefaultTileFactoryConfig, type TileTemplate } from "./tile-factory";
 import { getHexDistance, type ExploreState, type ExploreTile, type ZoneType } from "./explore-state";
 import type { WorldSpec } from "../planning/world-spec-builder";
-import { getNpcById, getTileById, listNpcs } from "../planning/content-registry";
-import type { ContentNpc } from "../planning/content-types";
+import { getNpcById, getTileById, listExplorationFlows, listNpcs } from "../planning/content-registry";
+import type { ContentExplorationFlow, ContentNpc } from "../planning/content-types";
 
 const START_TILE_KEY = "0,0";
 const NPCS_PER_TOWN = 3;
@@ -23,11 +23,7 @@ function applyTemplateToTile(tile: ExploreTile, template: TileTemplate): void {
   tile.name = template.name;
   tile.description = template.description;
   tile.color = [template.color[0], template.color[1], template.color[2], template.color[3]];
-  tile.encounterPlaceholders = template.encounterPlaceholders.map((entry) => ({
-    id: entry.id,
-    weight: entry.weight,
-    tags: [...entry.tags],
-  }));
+  tile.explorationFlowId = null;
   tile.enemyPool = template.enemyPool.map((entry) => ({
     enemyId: entry.enemyId,
     weight: entry.weight,
@@ -356,9 +352,38 @@ function placeTownNpcs(state: ExploreState, spec: WorldSpec): void {
   }
 }
 
+function assignExplorationFlows(state: ExploreState, seed: string): void {
+  const allFlows = listExplorationFlows();
+
+  const poolByZone: Partial<Record<ZoneType, ContentExplorationFlow[]>> = {};
+  for (const flow of allFlows) {
+    if (poolByZone[flow.zone] === undefined) {
+      poolByZone[flow.zone] = [];
+    }
+    poolByZone[flow.zone]!.push(flow);
+  }
+
+  const candidates = state.tiles
+    .filter((tile) => tile.zone !== "town")
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+
+  for (const tile of candidates) {
+    const pool = poolByZone[tile.zone];
+    if (pool === undefined || pool.length === 0) {
+      continue;
+    }
+
+    const score = hashToUnitInterval(`${seed}:flow:${tile.key}`);
+    const index = Math.max(0, Math.min(pool.length - 1, Math.floor(score * pool.length)));
+    tile.explorationFlowId = pool[index].id;
+    pool.splice(index, 1);
+  }
+}
+
 export function applyWorldSpecToExploreState(state: ExploreState, spec: WorldSpec): void {
   ensureZoneMinimums(state, spec);
   ensureSpecialTiles(state, spec);
   enforceMaxTownTiles(state, spec);
   placeTownNpcs(state, spec);
+  assignExplorationFlows(state, spec.seed);
 }

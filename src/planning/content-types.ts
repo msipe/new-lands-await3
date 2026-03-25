@@ -22,17 +22,31 @@ export type ContentTile = {
   description?: string;
   color?: [number, number, number, number];
   defaultStatus?: "unvisited" | "visited" | "active";
-  encounterPlaceholders?: Array<{
-    id: string;
-    weight: number;
-    tags: string[];
-  }>;
   enemyPool?: Array<{
     enemyId: string;
     weight: number;
   }>;
   tags: string[];
   enemyIds?: string[];
+};
+
+export type ExplorationFlowLevel = {
+  level: number;
+  label: string;
+  hook: string;
+  description: string;
+  combatHook?: {
+    enemyId: string;
+    optional: boolean;
+  };
+};
+
+export type ContentExplorationFlow = {
+  id: string;
+  name: string;
+  zone: ZoneType;
+  tags: string[];
+  levels: ExplorationFlowLevel[];
 };
 
 export type EnemyTag = string;

@@ -474,4 +474,130 @@ ____exports.RAW_ITEMS = {
         slot = "inventory"
     }
 }
+____exports.RAW_EXPLORATION_FLOWS = {
+    {
+        id = "flow:forest-ancient-ruin",
+        name = "The Ancient Ruin",
+        zone = "forest",
+        tags = {"ruin", "mystery", "ancient"},
+        levels = {{level = 1, label = "1/3", hook = "Something old and stone lurks behind the treeline.", description = "Moss-covered masonry rises from the canopy in the distance, half-swallowed by the forest."}, {level = 2, label = "2/3", hook = "You push deeper into the undergrowth.", description = "Stone steps lead down into a vaulted chamber, roots splitting the walls. Carvings cover every surface—a script you cannot read."}, {
+            level = 3,
+            label = "3/3",
+            hook = "At the heart of the ruin, something stirs.",
+            description = "A dryad sits atop a cracked altar, watching you with eyes like polished jade. She does not speak first.",
+            combatHook = {enemyId = "enemy:vine-slime", optional = true}
+        }}
+    },
+    {
+        id = "flow:forest-hermit-hollow",
+        name = "The Hermit's Hollow",
+        zone = "forest",
+        tags = {"npc", "shelter", "hidden"},
+        levels = {{level = 1, label = "1/3", hook = "A thin ribbon of smoke rises through the canopy.", description = "From the tree line you can make out a crude shelter built into a hollow oak, a small fire smoldering outside."}, {level = 2, label = "2/3", hook = "You follow the smell of pine resin and old leather.", description = "A hermit's camp—worn maps pinned to bark, bones of small animals strung in patterns. Someone lives here, but not comfortably."}, {level = 3, label = "3/3", hook = "The hollow's occupant returns.", description = "An old ranger steps from the shadows, bow undrawn. He studies your face before he speaks: 'You're not the first to find this place. The last one didn't leave.'"}}
+    },
+    {
+        id = "flow:forest-goblin-camp",
+        name = "The Goblin Camp",
+        zone = "forest",
+        tags = {"combat", "camp", "goblin"},
+        levels = {{level = 1, label = "1/3", hook = "A crude watchtower pokes above the canopy ahead.", description = "Lashed-together timbers and a smoking fire pit mark the edge of a goblin encampment in the trees."}, {level = 2, label = "2/3", hook = "You circle the perimeter.", description = "A disorganized camp sprawls through the undergrowth—stolen goods in sacks, crude traps half-set, goblin squabbles heard from every direction."}, {
+            level = 3,
+            label = "3/3",
+            hook = "You've been spotted.",
+            description = "A war-horn sounds. The camp erupts.",
+            combatHook = {enemyId = "enemy:goblin-raider", optional = false}
+        }}
+    },
+    {
+        id = "flow:mountain-collapsed-mine",
+        name = "The Collapsed Mine",
+        zone = "mountain",
+        tags = {"ruin", "underground", "hazard"},
+        levels = {{level = 1, label = "1/3", hook = "A dark opening is cut into the cliff face ahead.", description = "The mouth of an old mine yawns from the mountainside, timbers rotting at the entrance, a rusted cart tipped on its side nearby."}, {level = 2, label = "2/3", hook = "You venture into the shaft.", description = "The tunnel opens into a worked cavern. Ore veins glint in your torch-light—and so do eyes in the dark."}, {
+            level = 3,
+            label = "3/3",
+            hook = "Something has made this mine its den.",
+            description = "A nest of bones and stolen equipment fills the deepest chamber. Whatever built it is still here.",
+            combatHook = {enemyId = "enemy:goblin-hexer", optional = false}
+        }}
+    },
+    {
+        id = "flow:mountain-warlock-tower",
+        name = "The Warlock's Tower",
+        zone = "mountain",
+        tags = {"magic", "tower", "danger"},
+        levels = {{level = 1, label = "1/3", hook = "A crooked spire of dark stone crowns the peak ahead.", description = "The tower is old—older than the keep it once belonged to, if the rubble around its base is any clue."}, {level = 2, label = "2/3", hook = "You find the door ajar.", description = "The interior reeks of sulfur and burnt parchment. Experiments in mid-progress clutter every surface. Someone was here very recently."}, {
+            level = 3,
+            label = "3/3",
+            hook = "The tower's occupant descends.",
+            description = "A peak warlock sweeps down from the upper floor, clearly unhappy about the intrusion.",
+            combatHook = {enemyId = "enemy:peak-warlock", optional = false}
+        }}
+    },
+    {
+        id = "flow:mountain-bandit-pass",
+        name = "The Bandit Pass",
+        zone = "mountain",
+        tags = {"combat", "ambush", "road"},
+        levels = {{level = 1, label = "1/3", hook = "The narrow pass ahead is eerily quiet.", description = "A well-used road squeezes between two sheer rock faces. There are no travelers in either direction."}, {level = 2, label = "2/3", hook = "You notice the rope strung across the path.", description = "A crude toll barrier marks the middle of the pass. Coin pouches hang from a stake—taxes already collected from those who came before."}, {
+            level = 3,
+            label = "3/3",
+            hook = "The collectors step out.",
+            description = "Three figures drop from the rocks above, blades drawn, grinning.",
+            combatHook = {enemyId = "enemy:goblin-brewguard", optional = false}
+        }}
+    },
+    {
+        id = "flow:farmland-wayward-mill",
+        name = "The Wayward Mill",
+        zone = "farmland",
+        tags = {"ruin", "mystery", "abandoned"},
+        levels = {{level = 1, label = "1/3", hook = "A mill turns slowly on a river that's run dry.", description = "Visible from the road—a watermill still grinding, though the channel feeding it has been empty for years."}, {level = 2, label = "2/3", hook = "You approach the mill.", description = "The wheel turns without water, without wind—without any apparent reason. Inside, the grinding stones move as if freshly loaded."}, {
+            level = 3,
+            label = "3/3",
+            hook = "Something feeds on the mill's purpose.",
+            description = "A slime creature has burrowed into the mill's workings, feeding off its motion. It pulses with an oily glow.",
+            combatHook = {enemyId = "enemy:bog-slime", optional = true}
+        }}
+    },
+    {
+        id = "flow:farmland-raiders-camp",
+        name = "The Raiders' Camp",
+        zone = "farmland",
+        tags = {"combat", "camp", "bandit"},
+        levels = {{level = 1, label = "1/3", hook = "A farmstead sits dark and still in the fields ahead.", description = "Smoke rises from a chimney but no lantern burns in the window. The livestock are gone."}, {level = 2, label = "2/3", hook = "You cross the threshold.", description = "The inside has been turned into a staging camp. Stolen goods in sacks, crude maps pinned to the walls, a half-eaten meal still warm."}, {
+            level = 3,
+            label = "3/3",
+            hook = "The raiders return from the fields.",
+            description = "Boots crunch on the threshold. They see you immediately.",
+            combatHook = {enemyId = "enemy:goblin-raider", optional = false}
+        }}
+    },
+    {
+        id = "flow:ocean-drifting-wreck",
+        name = "The Drifting Wreck",
+        zone = "ocean",
+        tags = {"ruin", "nautical", "mystery"},
+        levels = {{level = 1, label = "1/3", hook = "A derelict ship drifts against the current.", description = "A merchantman, sails in tatters, lists on the open water with no visible crew on deck."}, {level = 2, label = "2/3", hook = "You board the vessel.", description = "The hold is open to the sky, the cargo untouched. Whatever happened here, it wasn't a raid."}, {
+            level = 3,
+            label = "3/3",
+            hook = "The wreck isn't empty.",
+            description = "Something has been living in the captain's quarters. It stirs as you open the door.",
+            combatHook = {enemyId = "enemy:reef-marauder", optional = true}
+        }}
+    },
+    {
+        id = "flow:ocean-sunken-shrine",
+        name = "The Sunken Shrine",
+        zone = "ocean",
+        tags = {"ruin", "ancient", "divine"},
+        levels = {{level = 1, label = "1/3", hook = "Stone columns rise from the water near a shallow reef.", description = "The tops of ancient pillars break the surface—whatever they once supported now lies beneath the waves."}, {level = 2, label = "2/3", hook = "You dive below the surface.", description = "A temple complex stretches across the sea floor, encrusted with coral. Offerings still rest on the altars, undisturbed for centuries."}, {
+            level = 3,
+            label = "3/3",
+            hook = "The shrine has a guardian.",
+            description = "A reef marauder circles the innermost chamber, trailing kelp like a cloak. It turns to face you.",
+            combatHook = {enemyId = "enemy:reef-marauder", optional = false}
+        }}
+    }
+}
 return ____exports

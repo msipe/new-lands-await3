@@ -58,7 +58,7 @@ local function toTileTemplateByZone(self)
     )
     local templateMap = {}
     for ____, tile in ipairs(templateEntries) do
-        if tile.description == nil or tile.color == nil or tile.defaultStatus == nil or tile.encounterPlaceholders == nil or tile.enemyPool == nil then
+        if tile.description == nil or tile.color == nil or tile.defaultStatus == nil or tile.enemyPool == nil then
             error(
                 __TS__New(Error, "Tile template is missing required template fields: " .. tile.id),
                 0
@@ -70,14 +70,6 @@ local function toTileTemplateByZone(self)
             description = tile.description,
             color = {tile.color[1], tile.color[2], tile.color[3], tile.color[4]},
             defaultStatus = tile.defaultStatus,
-            encounterPlaceholders = __TS__ArrayMap(
-                tile.encounterPlaceholders,
-                function(____, placeholder) return {
-                    id = placeholder.id,
-                    weight = placeholder.weight,
-                    tags = {unpack(placeholder.tags)}
-                } end
-            ),
             enemyPool = __TS__ArrayMap(
                 tile.enemyPool,
                 function(____, entry) return {enemyId = entry.enemyId, weight = entry.weight} end
@@ -127,14 +119,7 @@ local function cloneTemplateData(self, template)
         description = template.description,
         color = {template.color[1], template.color[2], template.color[3], template.color[4]},
         status = template.defaultStatus,
-        encounterPlaceholders = __TS__ArrayMap(
-            template.encounterPlaceholders,
-            function(____, entry) return {
-                id = entry.id,
-                weight = entry.weight,
-                tags = {unpack(entry.tags)}
-            } end
-        ),
+        explorationFlowId = nil,
         enemyPool = __TS__ArrayMap(
             template.enemyPool,
             function(____, entry) return {enemyId = entry.enemyId, weight = entry.weight} end

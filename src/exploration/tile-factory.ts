@@ -6,12 +6,6 @@ export type TileStatus = "unvisited" | "visited" | "active";
 
 export type TileColor = [number, number, number, number];
 
-export type EncounterPlaceholder = {
-  id: string;
-  weight: number;
-  tags: string[];
-};
-
 export type EnemySpawnEntry = {
   enemyId: string;
   weight: number;
@@ -42,7 +36,6 @@ export type TileTemplate = {
   description: string;
   color: TileColor;
   defaultStatus: TileStatus;
-  encounterPlaceholders: EncounterPlaceholder[];
   enemyPool: EnemySpawnEntry[];
   tags: string[];
 };
@@ -68,7 +61,7 @@ export type ExploreTile = {
   description: string;
   color: TileColor;
   status: TileStatus;
-  encounterPlaceholders: EncounterPlaceholder[];
+  explorationFlowId: string | null;
   enemyPool: EnemySpawnEntry[];
   locations: TownLocation[];
   tags: string[];
@@ -140,7 +133,6 @@ function toTileTemplateByZone(): Record<ZoneType, TileTemplate> {
       tile.description === undefined ||
       tile.color === undefined ||
       tile.defaultStatus === undefined ||
-      tile.encounterPlaceholders === undefined ||
       tile.enemyPool === undefined
     ) {
       throw new Error(`Tile template is missing required template fields: ${tile.id}`);
@@ -152,11 +144,6 @@ function toTileTemplateByZone(): Record<ZoneType, TileTemplate> {
       description: tile.description,
       color: [tile.color[0], tile.color[1], tile.color[2], tile.color[3]],
       defaultStatus: tile.defaultStatus,
-      encounterPlaceholders: tile.encounterPlaceholders.map((placeholder) => ({
-        id: placeholder.id,
-        weight: placeholder.weight,
-        tags: [...placeholder.tags],
-      })),
       enemyPool: tile.enemyPool.map((entry) => ({
         enemyId: entry.enemyId,
         weight: entry.weight,
@@ -204,11 +191,7 @@ function cloneTemplateData(template: TileTemplate): Omit<ExploreTile, "key" | "c
     description: template.description,
     color: [template.color[0], template.color[1], template.color[2], template.color[3]],
     status: template.defaultStatus,
-    encounterPlaceholders: template.encounterPlaceholders.map((entry) => ({
-      id: entry.id,
-      weight: entry.weight,
-      tags: [...entry.tags],
-    })),
+    explorationFlowId: null,
     enemyPool: template.enemyPool.map((entry) => ({
       enemyId: entry.enemyId,
       weight: entry.weight,

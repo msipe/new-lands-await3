@@ -5,7 +5,7 @@ import {
   type TileFactoryConfig,
 } from "./tile-factory";
 
-export type { EncounterPlaceholder, ExploreTile, TileColor, TileStatus, ZoneType } from "./tile-factory";
+export type { ExploreTile, TileColor, TileStatus, ZoneType } from "./tile-factory";
 export type { TownCharacter, TownLocation } from "./tile-factory";
 
 export type ExploreBranch = "combat" | "encounter";

@@ -1,5 +1,5 @@
-import { RAW_BIG_BADS, RAW_ENEMIES, RAW_ITEMS, RAW_NPCS, RAW_QUESTS, RAW_TILES } from "./content-registry-generated";
-import type { ContentBigBad, ContentEnemy, ContentItem, ContentNpc, ContentQuest, ContentTile } from "./content-types";
+import { RAW_BIG_BADS, RAW_ENEMIES, RAW_EXPLORATION_FLOWS, RAW_ITEMS, RAW_NPCS, RAW_QUESTS, RAW_TILES } from "./content-registry-generated";
+import type { ContentBigBad, ContentEnemy, ContentExplorationFlow, ContentItem, ContentNpc, ContentQuest, ContentTile } from "./content-types";
 
 function cloneEnemyAbilities(abilities: readonly unknown[]): ContentEnemy["abilities"] {
   return abilities.map((ability) => {
@@ -56,13 +56,6 @@ const TILES: ContentTile[] = (RAW_TILES as unknown as ContentTile[]).map((entry)
   color: entry.color
     ? [entry.color[0], entry.color[1], entry.color[2], entry.color[3]]
     : undefined,
-  encounterPlaceholders: entry.encounterPlaceholders
-    ? entry.encounterPlaceholders.map((placeholder) => ({
-        id: placeholder.id,
-        weight: placeholder.weight,
-        tags: [...placeholder.tags],
-      }))
-    : undefined,
   enemyPool: entry.enemyPool
     ? entry.enemyPool.map((enemyEntry) => ({
         enemyId: enemyEntry.enemyId,
@@ -71,6 +64,14 @@ const TILES: ContentTile[] = (RAW_TILES as unknown as ContentTile[]).map((entry)
     : undefined,
   tags: [...entry.tags],
   enemyIds: entry.enemyIds !== undefined ? [...entry.enemyIds] : undefined,
+}));
+const EXPLORATION_FLOWS: ContentExplorationFlow[] = (RAW_EXPLORATION_FLOWS as unknown as ContentExplorationFlow[]).map((entry) => ({
+  ...entry,
+  tags: [...entry.tags],
+  levels: entry.levels.map((level) => ({
+    ...level,
+    combatHook: level.combatHook !== undefined ? { ...level.combatHook } : undefined,
+  })),
 }));
 const BIG_BADS: ContentBigBad[] = RAW_BIG_BADS.map((entry) => ({
   ...entry,
@@ -146,13 +147,6 @@ export function listTiles(): ContentTile[] {
     color: entry.color
       ? [entry.color[0], entry.color[1], entry.color[2], entry.color[3]]
       : undefined,
-    encounterPlaceholders: entry.encounterPlaceholders
-      ? entry.encounterPlaceholders.map((placeholder) => ({
-          id: placeholder.id,
-          weight: placeholder.weight,
-          tags: [...placeholder.tags],
-        }))
-      : undefined,
     enemyPool: entry.enemyPool
       ? entry.enemyPool.map((enemyEntry) => ({
           enemyId: enemyEntry.enemyId,
@@ -161,6 +155,21 @@ export function listTiles(): ContentTile[] {
       : undefined,
     tags: [...entry.tags],
     enemyIds: entry.enemyIds !== undefined ? [...entry.enemyIds] : undefined,
+  }));
+}
+
+export function getExplorationFlowById(id: string): ContentExplorationFlow {
+  return assertFound(EXPLORATION_FLOWS.find((entry) => entry.id === id), "exploration flow", id);
+}
+
+export function listExplorationFlows(): ContentExplorationFlow[] {
+  return EXPLORATION_FLOWS.map((entry) => ({
+    ...entry,
+    tags: [...entry.tags],
+    levels: entry.levels.map((level) => ({
+      ...level,
+      combatHook: level.combatHook !== undefined ? { ...level.combatHook } : undefined,
+    })),
   }));
 }
 
