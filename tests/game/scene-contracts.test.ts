@@ -20,7 +20,7 @@ describe("scene contracts", () => {
       SCENE_CONTRACTS.explore.createInitialContext(),
       {
         kind: "choose-branch",
-        branch: "encounter",
+        branch: "exploration",
       },
     );
 

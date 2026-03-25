@@ -29,12 +29,12 @@ describe("scene state machine", () => {
     expect(state.visitCounts.explore).toBe(2);
   });
 
-  it("supports explore branch to encounter", () => {
+  it("supports explore branch to exploration", () => {
     let state = createInitialSceneState();
     state = advanceScene(state);
     state = advanceScene(state);
 
-    state = chooseExploreBranch(state, "encounter");
+    state = chooseExploreBranch(state, "exploration");
     expect(state.current).toBe("encounter");
     expect(state.visitCounts.encounter).toBe(1);
   });
@@ -43,7 +43,7 @@ describe("scene state machine", () => {
     let state = createInitialSceneState();
     state = advanceScene(state);
     state = advanceScene(state);
-    state = chooseExploreBranch(state, "encounter");
+    state = chooseExploreBranch(state, "exploration");
 
     state = advanceScene(state);
     expect(state.current).toBe("explore");
@@ -52,7 +52,7 @@ describe("scene state machine", () => {
 
   it("ignores explore branch selection outside explore scene", () => {
     const state = createInitialSceneState();
-    const unchanged = chooseExploreBranch(state, "encounter");
+    const unchanged = chooseExploreBranch(state, "exploration");
 
     expect(unchanged).toBe(state);
     expect(unchanged.current).toBe("main-menu");

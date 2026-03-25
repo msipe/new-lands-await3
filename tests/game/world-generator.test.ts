@@ -4,6 +4,14 @@ import { validateWorldAgainstSpec } from "../../src/planning/world-validator";
 import type { WorldSpec } from "../../src/planning/world-spec-builder";
 import { listNpcs } from "../../src/planning/content-registry";
 
+const minimalSpec = (seed: string): WorldSpec => ({
+  seed,
+  maxTownTiles: 2,
+  requiredZones: [],
+  requiredSpecialTiles: [],
+  requiredNpcs: [],
+});
+
 describe("world-generator", () => {
   it("applies zone and special tile constraints onto explore state", () => {
     const state = createExploreState(3);
@@ -97,5 +105,73 @@ describe("world-generator", () => {
 
     const validation = validateWorldAgainstSpec(state, spec);
     expect(validation.isValid).toBe(true);
+  });
+
+  it("assigns exploration flows to non-town tiles after world gen", () => {
+    const state = createExploreState(3);
+    applyWorldSpecToExploreState(state, minimalSpec("flow-assign-test"));
+
+    const nonTownTiles = state.tiles.filter((tile) => tile.zone !== "town");
+    const tilesWithFlow = nonTownTiles.filter((tile) => tile.explorationFlowId !== null);
+
+    expect(tilesWithFlow.length).toBeGreaterThan(0);
+
+    for (const tile of tilesWithFlow) {
+      expect(typeof tile.explorationFlowId).toBe("string");
+    }
+  });
+
+  it("does not assign flows to town tiles", () => {
+    const state = createExploreState(3);
+    applyWorldSpecToExploreState(state, minimalSpec("town-no-flow"));
+
+    const townTiles = state.tiles.filter((tile) => tile.zone === "town");
+    expect(townTiles.length).toBeGreaterThan(0);
+
+    for (const tile of townTiles) {
+      expect(tile.explorationFlowId).toBeNull();
+    }
+  });
+
+  it("initializes flowLevel to 0 on all tiles after world gen", () => {
+    const state = createExploreState(3);
+    applyWorldSpecToExploreState(state, minimalSpec("flowlevel-zero"));
+
+    for (const tile of state.tiles) {
+      expect(tile.flowLevel).toBe(0);
+    }
+  });
+
+  it("assigns each flow to at most one tile", () => {
+    const state = createExploreState(3);
+    applyWorldSpecToExploreState(state, minimalSpec("no-flow-reuse"));
+
+    const assigned = state.tiles
+      .map((tile) => tile.explorationFlowId)
+      .filter((id): id is string => id !== null);
+
+    expect(new Set(assigned).size).toBe(assigned.length);
+  });
+
+  it("produces the same flow assignments for the same seed", () => {
+    const state1 = createExploreState(3);
+    const state2 = createExploreState(3);
+    applyWorldSpecToExploreState(state1, minimalSpec("determinism-seed"));
+    applyWorldSpecToExploreState(state2, minimalSpec("determinism-seed"));
+
+    for (const tile of state1.tiles) {
+      expect(state2.tileByKey[tile.key].explorationFlowId).toBe(tile.explorationFlowId);
+    }
+  });
+
+  it("produces different flow assignments for different seeds", () => {
+    const state1 = createExploreState(3);
+    const state2 = createExploreState(3);
+    applyWorldSpecToExploreState(state1, minimalSpec("seed-alpha"));
+    applyWorldSpecToExploreState(state2, minimalSpec("seed-beta"));
+
+    const ids1 = state1.tiles.map((t) => t.explorationFlowId).join(",");
+    const ids2 = state2.tiles.map((t) => t.explorationFlowId).join(",");
+    expect(ids1).not.toBe(ids2);
   });
 });
