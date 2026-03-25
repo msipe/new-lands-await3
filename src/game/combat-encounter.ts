@@ -747,15 +747,7 @@ export function rollNextPlayerDie(
 }
 
 export function canEndPlayerTurn(state: CombatEncounterState): boolean {
-  if (state.phase !== "player-turn") {
-    return false;
-  }
-
-  if (state.playerEnergyCurrent <= 0) {
-    return true;
-  }
-
-  return !canPlayerAffordAnyRemainingDie(state);
+  return state.phase === "player-turn";
 }
 
 export function endPlayerTurn(

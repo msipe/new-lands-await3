@@ -1,7 +1,7 @@
 import { EffectType, type SideResolveContext } from "../../src/game/dice";
 import { FaceAdjustmentModalityType } from "../../src/game/faces";
 import { applyFaceAdjustmentEntry } from "../../src/game/face-adjustments";
-import { createPlayerCombatDiceLoadout } from "../../src/game/player-combat-dice";
+import { createPlayerCombatDiceLoadout } from "../../src/game/dice-constructs/player-combat-dice";
 import {
   buildGeneratedFaceId,
   createPlayerProgression,

@@ -984,11 +984,7 @@ local function getTurnButtonState(self, uiState, state)
         return {visible = true, enabled = true, label = "Skip Enemy"}
     end
     if state.phase == "player-turn" then
-        return {
-            visible = true,
-            enabled = canAdvancePlayerTurn(nil, uiState, state),
-            label = "Next Turn"
-        }
+        return {visible = true, enabled = true, label = "Next Turn"}
     end
     return {visible = false, enabled = false, label = ""}
 end
@@ -1648,6 +1644,7 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
                 return
             end
             if state.phase == "player-turn" then
+                ____exports.fastForwardCombatUi(nil, uiState, state)
                 uiState.requestedPlayerTurnEnd = true
                 return
             end
@@ -2302,13 +2299,9 @@ function ____exports.drawCombatUi(self, uiState, state)
     elseif state.phase == "enemy-turn" then
         love.graphics.print("Right-click any die to inspect. Enemy dice resolving... (Space to skip)", layout.poolX + layout.poolWidth - 468, layout.poolY + 14)
     elseif state.phase == "player-turn" and ____exports.canPlayerThrow(nil, uiState, state) then
-        love.graphics.print("Right-click die to inspect, left-drag into arena to throw", layout.poolX + layout.poolWidth - 420, layout.poolY + 14)
-    elseif state.phase == "player-turn" and not canAdvancePlayerTurn(nil, uiState, state) then
-        love.graphics.print(
-            ("Throw dice while you have energy (" .. tostring(projectedEnergy)) .. " remaining).",
-            layout.poolX + 180,
-            layout.poolY + 14
-        )
+        love.graphics.print("Right-click die to inspect, left-drag to throw, or press Next Turn to skip.", layout.poolX + layout.poolWidth - 600, layout.poolY + 14)
+    elseif state.phase == "player-turn" and (#uiState.pendingPlayerDieIds > 0 or #uiState.readyPlayerDieIds > 0) then
+        love.graphics.print("Resolving dice... Press Next Turn or Space to wrap up immediately.", layout.poolX + layout.poolWidth - 560, layout.poolY + 14)
     else
         love.graphics.print("Out of energy. Press Next Turn or Space.", layout.poolX + layout.poolWidth - 320, layout.poolY + 14)
     end

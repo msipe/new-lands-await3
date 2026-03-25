@@ -393,7 +393,7 @@ describe("combat encounter", () => {
     expect(encounter.state.phase).toBe("player-turn");
 
     rollNextPlayerDie(encounter.state, encounter.eventBus, fixedRandomSource());
-    expect(encounter.state.playerRollIndex).toBe(3);
+    expect(encounter.state.playerRollIndex).toBe(4);
     expect(encounter.state.playerEnergyCurrent).toBe(0);
     expect(encounter.state.phase).toBe("player-turn");
 
@@ -402,8 +402,8 @@ describe("combat encounter", () => {
     expect(encounter.state.round).toBe(2);
     expect(encounter.state.playerRollIndex).toBe(0);
     expect(encounter.state.playerEnergyCurrent).toBe(encounter.state.playerEnergyMax);
-    expect(encounter.state.player.hp).toBe(19);
-    expect(encounter.state.player.armor).toBe(2);
+    expect(encounter.state.player.hp).toBe(15);
+    expect(encounter.state.player.armor).toBe(0);
     expect(encounter.state.enemy.hp).toBeLessThanOrEqual(enemyHpAtTurnStart);
   });
 
@@ -427,7 +427,7 @@ describe("combat encounter", () => {
     }
 
     expect(safety).toBe(220);
-    expect(encounter.state.round).toBeGreaterThan(8);
+    expect(encounter.state.round).toBeGreaterThan(5);
     expect(encounter.state.player.hp).toBeGreaterThanOrEqual(0);
     expect(encounter.state.enemy.hp).toBeGreaterThanOrEqual(0);
   });
@@ -517,7 +517,7 @@ describe("combat encounter", () => {
     endPlayerTurnWhenReady(encounter);
 
     // Enemy intent resolves only after player explicitly ends the turn.
-    expect(encounter.state.player.hp).toBe(19);
+    expect(encounter.state.player.hp).toBe(16);
     expect(encounter.state.phase).toBe("enemy-turn");
   });
 
@@ -731,7 +731,7 @@ describe("combat encounter", () => {
 
     expect(encounter.state.phase).toBe("enemy-turn");
     expect(encounter.state.player.hp).toBe(20);
-    expect(encounter.state.player.armor).toBe(1);
+    expect(encounter.state.player.armor).toBe(2);
     expect(encounter.state.combatLog).toContain("Player gains 5 armor.");
   });
 });

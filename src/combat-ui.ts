@@ -1194,7 +1194,7 @@ function getTurnButtonState(uiState: CombatUiState, state: CombatEncounterState)
   if (state.phase === "player-turn") {
     return {
       visible: true,
-      enabled: canAdvancePlayerTurn(uiState, state),
+      enabled: true,
       label: "Next Turn",
     };
   }
@@ -1798,6 +1798,7 @@ export function onCombatMousePressed(
       }
 
       if (state.phase === "player-turn") {
+        fastForwardCombatUi(uiState, state);
         uiState.requestedPlayerTurnEnd = true;
         return;
       }
@@ -2282,9 +2283,16 @@ export function drawCombatUi(uiState: CombatUiState, state: CombatEncounterState
   } else if (state.phase === "enemy-turn") {
     love.graphics.print("Right-click any die to inspect. Enemy dice resolving... (Space to skip)", layout.poolX + layout.poolWidth - 468, layout.poolY + 14);
   } else if (state.phase === "player-turn" && canPlayerThrow(uiState, state)) {
-    love.graphics.print("Right-click die to inspect, left-drag into arena to throw", layout.poolX + layout.poolWidth - 420, layout.poolY + 14);
-  } else if (state.phase === "player-turn" && !canAdvancePlayerTurn(uiState, state)) {
-    love.graphics.print(`Throw dice while you have energy (${projectedEnergy} remaining).`, layout.poolX + 180, layout.poolY + 14);
+    love.graphics.print(
+      "Right-click die to inspect, left-drag to throw, or press Next Turn to skip.",
+      layout.poolX + layout.poolWidth - 600,
+      layout.poolY + 14,
+    );
+  } else if (
+    state.phase === "player-turn" &&
+    (uiState.pendingPlayerDieIds.length > 0 || uiState.readyPlayerDieIds.length > 0)
+  ) {
+    love.graphics.print("Resolving dice... Press Next Turn or Space to wrap up immediately.", layout.poolX + layout.poolWidth - 560, layout.poolY + 14);
   } else {
     love.graphics.print("Out of energy. Press Next Turn or Space.", layout.poolX + layout.poolWidth - 320, layout.poolY + 14);
   }
