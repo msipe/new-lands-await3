@@ -62,6 +62,7 @@ export type ExploreTile = {
   color: TileColor;
   status: TileStatus;
   explorationFlowId: string | null;
+  flowLevel: number;
   enemyPool: EnemySpawnEntry[];
   locations: TownLocation[];
   tags: string[];
@@ -192,6 +193,7 @@ function cloneTemplateData(template: TileTemplate): Omit<ExploreTile, "key" | "c
     color: [template.color[0], template.color[1], template.color[2], template.color[3]],
     status: template.defaultStatus,
     explorationFlowId: null,
+    flowLevel: 0,
     enemyPool: template.enemyPool.map((entry) => ({
       enemyId: entry.enemyId,
       weight: entry.weight,

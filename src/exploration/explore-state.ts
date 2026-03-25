@@ -8,7 +8,7 @@ import {
 export type { ExploreTile, TileColor, TileStatus, ZoneType } from "./tile-factory";
 export type { TownCharacter, TownLocation } from "./tile-factory";
 
-export type ExploreBranch = "combat" | "encounter";
+export type ExploreBranch = "combat" | "exploration";
 
 export type HexCoord = {
   q: number;
@@ -148,7 +148,7 @@ export function createExploreState(input?: number | CreateExploreStateOptions): 
     tiles,
     tileByKey,
     playerCoord: { q: 0, r: 0 },
-    notice: "Click a neighboring hex to travel. Then choose Combat or Encounter.",
+    notice: "Click a neighboring hex to travel. Then choose Combat or Explore.",
   };
 }
 

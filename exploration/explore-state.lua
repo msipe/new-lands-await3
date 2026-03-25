@@ -111,7 +111,7 @@ function ____exports.createExploreState(self, input)
         tiles = tiles,
         tileByKey = tileByKey,
         playerCoord = {q = 0, r = 0},
-        notice = "Click a neighboring hex to travel. Then choose Combat or Encounter."
+        notice = "Click a neighboring hex to travel. Then choose Combat or Explore."
     }
 end
 function ____exports.getCurrentTile(self, state)

@@ -11,6 +11,8 @@ local acceptQuest = ____quest_2Dlog.acceptQuest
 local turnInQuest = ____quest_2Dlog.turnInQuest
 local ____quest_2Devents = require("planning.quest-events")
 local recordNpcInteracted = ____quest_2Devents.recordNpcInteracted
+local ____content_2Dregistry = require("planning.content-registry")
+local getExplorationFlowById = ____content_2Dregistry.getExplorationFlowById
 function getSelectedLocation(self, uiState)
     if uiState.selectedLocationId == nil then
         return nil
@@ -31,6 +33,35 @@ local function createContinueButton(self, width, height)
         y = math.floor(height * 0.7),
         width = buttonWidth,
         height = buttonHeight
+    }
+end
+local function createGenericButtons(self, width, height)
+    local btnH = 48
+    local btnY = math.floor(height * 0.77)
+    local cx = math.floor(width * 0.5)
+    local backW = 160
+    local prevW = 152
+    local exploreW = 188
+    local gap = 14
+    return {
+        backToMap = {
+            x = cx - math.floor(backW / 2),
+            y = btnY,
+            width = backW,
+            height = btnH
+        },
+        previousArea = {
+            x = cx - math.floor(backW / 2) - gap - prevW,
+            y = btnY,
+            width = prevW,
+            height = btnH
+        },
+        exploreFurther = {
+            x = cx + math.ceil(backW / 2) + gap,
+            y = btnY,
+            width = exploreW,
+            height = btnH
+        }
     }
 end
 local function createLocationButtons(self, width, locations)
@@ -76,6 +107,7 @@ local function refreshLayoutIfNeeded(self, uiState)
     uiState.width = width
     uiState.height = height
     uiState.continueButton = createContinueButton(nil, width, height)
+    uiState.genericButtons = createGenericButtons(nil, width, height)
     uiState.locationButtons = createLocationButtons(nil, width, uiState.locations)
     uiState.characterButtons = createCharacterButtons(
         nil,
@@ -160,24 +192,38 @@ function ____exports.createEncounterUiState(self, context)
     local tileZone = context and context.tileZone or "forest"
     local locations = context and context.locations or ({})
     local mode = tileZone == "town" and "town" or "generic"
-    local ____mode_14 = mode
-    local ____temp_15 = context and context.tileName or "Unknown Tile"
-    local ____tileZone_16 = tileZone
-    local ____locations_17 = locations
-    local ____opt_8 = locations[1]
-    local ____temp_18 = ____opt_8 and ____opt_8.id
-    local ____opt_12 = locations[1]
-    local ____opt_10 = ____opt_12 and ____opt_12.characters[1]
+    local explorationFlowId = context and context.explorationFlowId or nil
+    local explorationFlow = explorationFlowId ~= nil and getExplorationFlowById(nil, explorationFlowId) or nil
+    local flowLevel = context and context.flowLevel or 0
+    local maxLevels = explorationFlow ~= nil and #explorationFlow.levels or 0
+    local viewLevel = maxLevels > 0 and math.min(flowLevel, maxLevels - 1) or 0
+    local ____mode_20 = mode
+    local ____temp_21 = context and context.tileName or "Unknown Tile"
+    local ____tileZone_22 = tileZone
+    local ____temp_23 = context and context.tileDescription or ""
+    local ____explorationFlow_24 = explorationFlow
+    local ____flowLevel_25 = flowLevel
+    local ____viewLevel_26 = viewLevel
+    local ____locations_27 = locations
+    local ____opt_14 = locations[1]
+    local ____temp_28 = ____opt_14 and ____opt_14.id
+    local ____opt_18 = locations[1]
+    local ____opt_16 = ____opt_18 and ____opt_18.characters[1]
     local initialState = {
-        mode = ____mode_14,
-        tileName = ____temp_15,
-        tileZone = ____tileZone_16,
-        locations = ____locations_17,
-        selectedLocationId = ____temp_18,
-        selectedCharacterId = ____opt_10 and ____opt_10.id,
+        mode = ____mode_20,
+        tileName = ____temp_21,
+        tileZone = ____tileZone_22,
+        tileDescription = ____temp_23,
+        explorationFlow = ____explorationFlow_24,
+        flowLevel = ____flowLevel_25,
+        viewLevel = ____viewLevel_26,
+        locations = ____locations_27,
+        selectedLocationId = ____temp_28,
+        selectedCharacterId = ____opt_16 and ____opt_16.id,
         width = width,
         height = height,
         continueButton = createContinueButton(nil, width, height),
+        genericButtons = createGenericButtons(nil, width, height),
         locationButtons = createLocationButtons(nil, width, locations),
         characterButtons = createCharacterButtons(nil, width, locations[1]),
         dialogButtons = createDialogButtons(nil, width),
@@ -188,6 +234,7 @@ function ____exports.createEncounterUiState(self, context)
         selectedQuestPrompt = nil,
         questResponseText = nil,
         hoveredContinue = false,
+        hoveredGenericButton = nil,
         hoveredLocationId = nil,
         hoveredCharacterId = nil,
         time = 0
@@ -202,6 +249,21 @@ end
 function ____exports.onEncounterMouseMoved(self, uiState, x, y)
     refreshLayoutIfNeeded(nil, uiState)
     uiState.hoveredContinue = isInRect(nil, x, y, uiState.continueButton)
+    if uiState.mode == "generic" then
+        local ____uiState_genericButtons_29 = uiState.genericButtons
+        local backToMap = ____uiState_genericButtons_29.backToMap
+        local exploreFurther = ____uiState_genericButtons_29.exploreFurther
+        local previousArea = ____uiState_genericButtons_29.previousArea
+        if isInRect(nil, x, y, backToMap) then
+            uiState.hoveredGenericButton = "back"
+        elseif isInRect(nil, x, y, exploreFurther) then
+            uiState.hoveredGenericButton = "explore"
+        elseif isInRect(nil, x, y, previousArea) then
+            uiState.hoveredGenericButton = "previous"
+        else
+            uiState.hoveredGenericButton = nil
+        end
+    end
     local hoveredLocationButton = getLocationButtonAt(nil, uiState, x, y)
     uiState.hoveredLocationId = hoveredLocationButton and hoveredLocationButton.locationId
     local hoveredCharacterButton = getCharacterButtonAt(nil, uiState, x, y)
@@ -218,9 +280,9 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
             uiState.selectedLocationId = locationButton.locationId
             local selectedLocation = getSelectedLocation(nil, uiState)
             uiState.characterButtons = createCharacterButtons(nil, uiState.width, selectedLocation)
-            local ____uiState_27 = uiState
-            local ____opt_23 = selectedLocation and selectedLocation.characters[1]
-            ____uiState_27.selectedCharacterId = ____opt_23 and ____opt_23.id
+            local ____uiState_38 = uiState
+            local ____opt_34 = selectedLocation and selectedLocation.characters[1]
+            ____uiState_38.selectedCharacterId = ____opt_34 and ____opt_34.id
             refreshDialogForSelection(nil, uiState)
             return false
         end
@@ -287,6 +349,26 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
             end
             return false
         end
+    end
+    if uiState.mode == "generic" then
+        local flow = uiState.explorationFlow
+        local maxLevels = flow ~= nil and #flow.levels or 0
+        local ____uiState_genericButtons_43 = uiState.genericButtons
+        local backToMap = ____uiState_genericButtons_43.backToMap
+        local exploreFurther = ____uiState_genericButtons_43.exploreFurther
+        local previousArea = ____uiState_genericButtons_43.previousArea
+        if isInRect(nil, x, y, previousArea) and uiState.viewLevel > 0 then
+            uiState.viewLevel = uiState.viewLevel - 1
+            return false
+        end
+        if isInRect(nil, x, y, exploreFurther) and uiState.viewLevel < maxLevels - 1 then
+            uiState.viewLevel = uiState.viewLevel + 1
+            return false
+        end
+        if isInRect(nil, x, y, backToMap) then
+            return true
+        end
+        return false
     end
     return isInRect(nil, x, y, uiState.continueButton)
 end
@@ -675,74 +757,249 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
             end
         end
     else
-        love.graphics.setColor(0.95, 0.92, 1, 1)
+        local flow = uiState.explorationFlow
+        local maxLevels = flow ~= nil and #flow.levels or 0
+        local currentLevel = flow ~= nil and flow.levels[uiState.viewLevel + 1] or nil
+        local isFullyExplored = flow ~= nil and uiState.flowLevel >= maxLevels
+        local contentW = math.floor(uiState.width * 0.62)
+        local contentX = math.floor((uiState.width - contentW) * 0.5)
+        love.graphics.setColor(0.58, 0.56, 0.7, 0.72)
         love.graphics.printf(
-            "Encounter (Prototype)",
+            uiState.tileName,
+            contentX,
+            38,
+            contentW,
+            "left",
             0,
-            120,
-            uiState.width,
+            0.64,
+            0.64
+        )
+        if flow ~= nil and currentLevel ~= nil then
+            love.graphics.setColor(0.96, 0.93, 1, 1)
+            love.graphics.printf(
+                flow.name,
+                contentX,
+                56,
+                contentW,
+                "left",
+                0,
+                1.12,
+                1.12
+            )
+            local badge = isFullyExplored and currentLevel.label .. "  ·  Fully Explored" or currentLevel.label
+            love.graphics.setColor(isFullyExplored and 0.68 or 0.62, isFullyExplored and 0.9 or 0.8, isFullyExplored and 0.62 or 1, 0.88)
+            love.graphics.printf(
+                badge,
+                contentX,
+                108,
+                contentW,
+                "left",
+                0,
+                0.74,
+                0.74
+            )
+            love.graphics.setColor(0.4, 0.36, 0.52, 0.5)
+            love.graphics.line(contentX, 136, contentX + contentW, 136)
+            love.graphics.setColor(0.94, 0.91, 0.98, 0.94)
+            love.graphics.printf(
+                currentLevel.hook,
+                contentX,
+                150,
+                contentW,
+                "left",
+                0,
+                0.86,
+                0.86
+            )
+            love.graphics.setColor(0.72, 0.69, 0.84, 0.78)
+            love.graphics.printf(
+                currentLevel.description,
+                contentX,
+                196,
+                contentW,
+                "left",
+                0,
+                0.74,
+                0.74
+            )
+        else
+            love.graphics.setColor(0.96, 0.93, 1, 1)
+            love.graphics.printf(
+                uiState.tileName,
+                0,
+                72,
+                uiState.width,
+                "center",
+                0,
+                1.12,
+                1.12
+            )
+            love.graphics.setColor(0.72, 0.69, 0.84, 0.78)
+            love.graphics.printf(
+                uiState.tileDescription,
+                contentX,
+                160,
+                contentW,
+                "center",
+                0,
+                0.76,
+                0.76
+            )
+        end
+        local ____uiState_genericButtons_44 = uiState.genericButtons
+        local backToMap = ____uiState_genericButtons_44.backToMap
+        local exploreFurther = ____uiState_genericButtons_44.exploreFurther
+        local previousArea = ____uiState_genericButtons_44.previousArea
+        local showPrevious = uiState.viewLevel > 0
+        local showExplore = flow ~= nil and uiState.viewLevel < maxLevels - 1
+        if showPrevious then
+            local hovered = uiState.hoveredGenericButton == "previous"
+            love.graphics.setColor(hovered and 0.3 or 0.22, hovered and 0.24 or 0.18, hovered and 0.42 or 0.32, 0.94)
+            love.graphics.rectangle(
+                "fill",
+                previousArea.x,
+                previousArea.y,
+                previousArea.width,
+                previousArea.height,
+                8,
+                8
+            )
+            love.graphics.setColor(0.62, 0.56, 0.78, 0.7)
+            love.graphics.rectangle(
+                "line",
+                previousArea.x,
+                previousArea.y,
+                previousArea.width,
+                previousArea.height,
+                8,
+                8
+            )
+            love.graphics.setColor(0.82, 0.8, 0.94, 1)
+            love.graphics.printf(
+                "← Previous Area",
+                previousArea.x,
+                previousArea.y + 15,
+                previousArea.width,
+                "center",
+                0,
+                0.72,
+                0.72
+            )
+        end
+        local hoveredBack = uiState.hoveredGenericButton == "back"
+        love.graphics.setColor(hoveredBack and 0.28 or 0.2, hoveredBack and 0.22 or 0.16, hoveredBack and 0.38 or 0.28, 0.96)
+        love.graphics.rectangle(
+            "fill",
+            backToMap.x,
+            backToMap.y,
+            backToMap.width,
+            backToMap.height,
+            8,
+            8
+        )
+        love.graphics.setColor(0.72, 0.68, 0.88, 0.82)
+        love.graphics.rectangle(
+            "line",
+            backToMap.x,
+            backToMap.y,
+            backToMap.width,
+            backToMap.height,
+            8,
+            8
+        )
+        love.graphics.setColor(0.9, 0.88, 0.98, 1)
+        love.graphics.printf(
+            "Back to Map",
+            backToMap.x,
+            backToMap.y + 15,
+            backToMap.width,
             "center",
             0,
-            1.26,
-            1.26
+            0.72,
+            0.72
         )
-        love.graphics.setColor(0.82, 0.78, 0.91, 0.95)
+        if showExplore then
+            local hovered = uiState.hoveredGenericButton == "explore"
+            love.graphics.setColor(hovered and 0.22 or 0.16, hovered and 0.34 or 0.26, hovered and 0.52 or 0.42, 0.96)
+            love.graphics.rectangle(
+                "fill",
+                exploreFurther.x,
+                exploreFurther.y,
+                exploreFurther.width,
+                exploreFurther.height,
+                8,
+                8
+            )
+            love.graphics.setColor(0.52, 0.72, 0.98, 0.82)
+            love.graphics.rectangle(
+                "line",
+                exploreFurther.x,
+                exploreFurther.y,
+                exploreFurther.width,
+                exploreFurther.height,
+                8,
+                8
+            )
+            love.graphics.setColor(0.86, 0.94, 1, 1)
+            love.graphics.printf(
+                "Explore Further →",
+                exploreFurther.x,
+                exploreFurther.y + 15,
+                exploreFurther.width,
+                "center",
+                0,
+                0.72,
+                0.72
+            )
+        end
+    end
+    if uiState.mode == "town" then
+        if uiState.hoveredContinue then
+            love.graphics.setColor(0.36, 0.27, 0.49, 0.98)
+        else
+            love.graphics.setColor(0.26, 0.2, 0.37, 0.96)
+        end
+        love.graphics.rectangle(
+            "fill",
+            uiState.continueButton.x,
+            uiState.continueButton.y,
+            uiState.continueButton.width,
+            uiState.continueButton.height,
+            8,
+            8
+        )
+        love.graphics.setColor(0.86, 0.8, 0.97, 0.95)
+        love.graphics.rectangle(
+            "line",
+            uiState.continueButton.x,
+            uiState.continueButton.y,
+            uiState.continueButton.width,
+            uiState.continueButton.height,
+            8,
+            8
+        )
+        love.graphics.setColor(1, 1, 1, 1)
         love.graphics.printf(
-            ((("Tile: " .. uiState.tileName) .. " (") .. uiState.tileZone) .. ")\nEncounter content is not implemented yet.",
-            0,
-            190,
-            uiState.width,
+            "Leave Town",
+            uiState.continueButton.x,
+            uiState.continueButton.y + 18,
+            uiState.continueButton.width,
             "center",
             0,
-            0.82,
-            0.82
+            0.78,
+            0.78
         )
     end
-    if uiState.hoveredContinue then
-        love.graphics.setColor(0.36, 0.27, 0.49, 0.98)
-    else
-        love.graphics.setColor(0.26, 0.2, 0.37, 0.96)
-    end
-    love.graphics.rectangle(
-        "fill",
-        uiState.continueButton.x,
-        uiState.continueButton.y,
-        uiState.continueButton.width,
-        uiState.continueButton.height,
-        8,
-        8
-    )
-    love.graphics.setColor(0.86, 0.8, 0.97, 0.95)
-    love.graphics.rectangle(
-        "line",
-        uiState.continueButton.x,
-        uiState.continueButton.y,
-        uiState.continueButton.width,
-        uiState.continueButton.height,
-        8,
-        8
-    )
-    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setColor(0.46, 0.44, 0.58, 0.6)
     love.graphics.printf(
-        uiState.mode == "town" and "Leave Town" or "Continue",
-        uiState.continueButton.x,
-        uiState.continueButton.y + 18,
-        uiState.continueButton.width,
-        "center",
-        0,
-        0.78,
-        0.78
-    )
-    love.graphics.setColor(0.78, 0.75, 0.9, 0.88)
-    love.graphics.printf(
-        ("Encounter visits: " .. tostring(visitCount)) .. "  |  Space = Continue",
+        uiState.mode == "town" and ("Town visits: " .. tostring(visitCount)) .. "  |  Space = Leave" or ("Explore visits: " .. tostring(visitCount)) .. "  |  Space = Back to Map",
         0,
         uiState.height - 38,
         uiState.width,
         "center",
         0,
-        0.68,
-        0.68
+        0.64,
+        0.64
     )
 end
 return ____exports

@@ -6,6 +6,8 @@ import {
 } from "./planning/dialog-service";
 import { acceptQuest, turnInQuest } from "./planning/quest-log";
 import { recordNpcInteracted } from "./planning/quest-events";
+import { getExplorationFlowById } from "./planning/content-registry";
+import type { ContentExplorationFlow } from "./planning/content-types";
 
 type Rect = {
   x: number;
@@ -38,19 +40,33 @@ type EncounterMode = "generic" | "town";
 export type EncounterUiContext = {
   tileName: string;
   tileZone: ZoneType;
+  tileDescription: string;
   locations: TownLocation[];
+  explorationFlowId: string | null;
+  flowLevel: number;
+};
+
+type GenericButtons = {
+  backToMap: Rect;
+  exploreFurther: Rect;
+  previousArea: Rect;
 };
 
 export type EncounterUiState = {
   mode: EncounterMode;
   tileName: string;
   tileZone: ZoneType;
+  tileDescription: string;
+  explorationFlow: ContentExplorationFlow | null;
+  flowLevel: number;
+  viewLevel: number;
   locations: TownLocation[];
   selectedLocationId?: string;
   selectedCharacterId?: string;
   width: number;
   height: number;
   continueButton: Rect;
+  genericButtons: GenericButtons;
   locationButtons: LocationButton[];
   characterButtons: CharacterButton[];
   dialogButtons: DialogButtons;
@@ -61,6 +77,7 @@ export type EncounterUiState = {
   selectedQuestPrompt?: QuestDialogPrompt;
   questResponseText?: string;
   hoveredContinue: boolean;
+  hoveredGenericButton: "back" | "explore" | "previous" | undefined;
   hoveredLocationId?: string;
   hoveredCharacterId?: string;
   time: number;
@@ -74,6 +91,37 @@ function createContinueButton(width: number, height: number): Rect {
     y: Math.floor(height * 0.7),
     width: buttonWidth,
     height: buttonHeight,
+  };
+}
+
+function createGenericButtons(width: number, height: number): GenericButtons {
+  const btnH = 48;
+  const btnY = Math.floor(height * 0.77);
+  const cx = Math.floor(width * 0.5);
+  const backW = 160;
+  const prevW = 152;
+  const exploreW = 188;
+  const gap = 14;
+
+  return {
+    backToMap: {
+      x: cx - Math.floor(backW / 2),
+      y: btnY,
+      width: backW,
+      height: btnH,
+    },
+    previousArea: {
+      x: cx - Math.floor(backW / 2) - gap - prevW,
+      y: btnY,
+      width: prevW,
+      height: btnH,
+    },
+    exploreFurther: {
+      x: cx + Math.ceil(backW / 2) + gap,
+      y: btnY,
+      width: exploreW,
+      height: btnH,
+    },
   };
 }
 
@@ -163,6 +211,7 @@ function refreshLayoutIfNeeded(uiState: EncounterUiState): void {
   uiState.width = width;
   uiState.height = height;
   uiState.continueButton = createContinueButton(width, height);
+  uiState.genericButtons = createGenericButtons(width, height);
   uiState.locationButtons = createLocationButtons(width, uiState.locations);
   uiState.characterButtons = createCharacterButtons(width, getSelectedLocation(uiState));
   uiState.dialogButtons = createDialogButtons(width);
@@ -259,17 +308,28 @@ export function createEncounterUiState(context?: EncounterUiContext): EncounterU
   const tileZone = context?.tileZone ?? "forest";
   const locations = context?.locations ?? [];
   const mode: EncounterMode = tileZone === "town" ? "town" : "generic";
+  const explorationFlowId = context?.explorationFlowId ?? null;
+  const explorationFlow =
+    explorationFlowId !== null ? getExplorationFlowById(explorationFlowId) : null;
+  const flowLevel = context?.flowLevel ?? 0;
+  const maxLevels = explorationFlow !== null ? explorationFlow.levels.length : 0;
+  const viewLevel = maxLevels > 0 ? Math.min(flowLevel, maxLevels - 1) : 0;
 
   const initialState: EncounterUiState = {
     mode,
     tileName: context?.tileName ?? "Unknown Tile",
     tileZone,
+    tileDescription: context?.tileDescription ?? "",
+    explorationFlow,
+    flowLevel,
+    viewLevel,
     locations,
     selectedLocationId: locations[0]?.id,
     selectedCharacterId: locations[0]?.characters[0]?.id,
     width,
     height,
     continueButton: createContinueButton(width, height),
+    genericButtons: createGenericButtons(width, height),
     locationButtons: createLocationButtons(width, locations),
     characterButtons: createCharacterButtons(width, locations[0]),
     dialogButtons: createDialogButtons(width),
@@ -280,6 +340,7 @@ export function createEncounterUiState(context?: EncounterUiContext): EncounterU
     selectedQuestPrompt: undefined,
     questResponseText: undefined,
     hoveredContinue: false,
+    hoveredGenericButton: undefined,
     hoveredLocationId: undefined,
     hoveredCharacterId: undefined,
     time: 0,
@@ -297,6 +358,19 @@ export function updateEncounterUiState(uiState: EncounterUiState, dt: number): v
 export function onEncounterMouseMoved(uiState: EncounterUiState, x: number, y: number): void {
   refreshLayoutIfNeeded(uiState);
   uiState.hoveredContinue = isInRect(x, y, uiState.continueButton);
+
+  if (uiState.mode === "generic") {
+    const { backToMap, exploreFurther, previousArea } = uiState.genericButtons;
+    if (isInRect(x, y, backToMap)) {
+      uiState.hoveredGenericButton = "back";
+    } else if (isInRect(x, y, exploreFurther)) {
+      uiState.hoveredGenericButton = "explore";
+    } else if (isInRect(x, y, previousArea)) {
+      uiState.hoveredGenericButton = "previous";
+    } else {
+      uiState.hoveredGenericButton = undefined;
+    }
+  }
 
   const hoveredLocationButton = getLocationButtonAt(uiState, x, y);
   uiState.hoveredLocationId = hoveredLocationButton?.locationId;
@@ -392,6 +466,28 @@ export function onEncounterMouseReleased(uiState: EncounterUiState, x: number, y
       }
       return false;
     }
+  }
+
+  if (uiState.mode === "generic") {
+    const flow = uiState.explorationFlow;
+    const maxLevels = flow !== null ? flow.levels.length : 0;
+    const { backToMap, exploreFurther, previousArea } = uiState.genericButtons;
+
+    if (isInRect(x, y, previousArea) && uiState.viewLevel > 0) {
+      uiState.viewLevel -= 1;
+      return false;
+    }
+
+    if (isInRect(x, y, exploreFurther) && uiState.viewLevel < maxLevels - 1) {
+      uiState.viewLevel += 1;
+      return false;
+    }
+
+    if (isInRect(x, y, backToMap)) {
+      return true;
+    }
+
+    return false;
   }
 
   return isInRect(x, y, uiState.continueButton);
@@ -666,58 +762,145 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
       }
     }
   } else {
-    love.graphics.setColor(0.95, 0.92, 1, 1);
-    love.graphics.printf("Encounter (Prototype)", 0, 120, uiState.width, "center", 0, 1.26, 1.26);
+    const flow = uiState.explorationFlow;
+    const maxLevels = flow !== null ? flow.levels.length : 0;
+    const currentLevel = flow !== null ? flow.levels[uiState.viewLevel] : undefined;
+    const isFullyExplored = flow !== null && uiState.flowLevel >= maxLevels;
+    const contentW = Math.floor(uiState.width * 0.62);
+    const contentX = Math.floor((uiState.width - contentW) * 0.5);
 
-    love.graphics.setColor(0.82, 0.78, 0.91, 0.95);
+    // Tile name — small, top-left of content area
+    love.graphics.setColor(0.58, 0.56, 0.7, 0.72);
+    love.graphics.printf(uiState.tileName, contentX, 38, contentW, "left", 0, 0.64, 0.64);
+
+    if (flow !== null && currentLevel !== undefined) {
+      // Flow name — large title
+      love.graphics.setColor(0.96, 0.93, 1, 1);
+      love.graphics.printf(flow.name, contentX, 56, contentW, "left", 0, 1.12, 1.12);
+
+      // Level badge + fully explored indicator
+      const badge = isFullyExplored
+        ? `${currentLevel.label}  ·  Fully Explored`
+        : currentLevel.label;
+      love.graphics.setColor(isFullyExplored ? 0.68 : 0.62, isFullyExplored ? 0.9 : 0.8, isFullyExplored ? 0.62 : 1, 0.88);
+      love.graphics.printf(badge, contentX, 108, contentW, "left", 0, 0.74, 0.74);
+
+      // Divider line
+      love.graphics.setColor(0.4, 0.36, 0.52, 0.5);
+      love.graphics.line(contentX, 136, contentX + contentW, 136);
+
+      // Hook — accent subtitle
+      love.graphics.setColor(0.94, 0.91, 0.98, 0.94);
+      love.graphics.printf(currentLevel.hook, contentX, 150, contentW, "left", 0, 0.86, 0.86);
+
+      // Description — body
+      love.graphics.setColor(0.72, 0.69, 0.84, 0.78);
+      love.graphics.printf(currentLevel.description, contentX, 196, contentW, "left", 0, 0.74, 0.74);
+    } else {
+      // No flow — just show tile info
+      love.graphics.setColor(0.96, 0.93, 1, 1);
+      love.graphics.printf(uiState.tileName, 0, 72, uiState.width, "center", 0, 1.12, 1.12);
+
+      love.graphics.setColor(0.72, 0.69, 0.84, 0.78);
+      love.graphics.printf(
+        uiState.tileDescription,
+        contentX,
+        160,
+        contentW,
+        "center",
+        0,
+        0.76,
+        0.76,
+      );
+    }
+
+    // Generic buttons
+    const { backToMap, exploreFurther, previousArea } = uiState.genericButtons;
+
+    const showPrevious = uiState.viewLevel > 0;
+    const showExplore = flow !== null && uiState.viewLevel < maxLevels - 1;
+
+    // Previous Area button
+    if (showPrevious) {
+      const hovered = uiState.hoveredGenericButton === "previous";
+      love.graphics.setColor(hovered ? 0.3 : 0.22, hovered ? 0.24 : 0.18, hovered ? 0.42 : 0.32, 0.94);
+      love.graphics.rectangle("fill", previousArea.x, previousArea.y, previousArea.width, previousArea.height, 8, 8);
+      love.graphics.setColor(0.62, 0.56, 0.78, 0.7);
+      love.graphics.rectangle("line", previousArea.x, previousArea.y, previousArea.width, previousArea.height, 8, 8);
+      love.graphics.setColor(0.82, 0.8, 0.94, 1);
+      love.graphics.printf("← Previous Area", previousArea.x, previousArea.y + 15, previousArea.width, "center", 0, 0.72, 0.72);
+    }
+
+    // Back to Map button
+    const hoveredBack = uiState.hoveredGenericButton === "back";
+    love.graphics.setColor(hoveredBack ? 0.28 : 0.2, hoveredBack ? 0.22 : 0.16, hoveredBack ? 0.38 : 0.28, 0.96);
+    love.graphics.rectangle("fill", backToMap.x, backToMap.y, backToMap.width, backToMap.height, 8, 8);
+    love.graphics.setColor(0.72, 0.68, 0.88, 0.82);
+    love.graphics.rectangle("line", backToMap.x, backToMap.y, backToMap.width, backToMap.height, 8, 8);
+    love.graphics.setColor(0.9, 0.88, 0.98, 1);
+    love.graphics.printf("Back to Map", backToMap.x, backToMap.y + 15, backToMap.width, "center", 0, 0.72, 0.72);
+
+    // Explore Further button
+    if (showExplore) {
+      const hovered = uiState.hoveredGenericButton === "explore";
+      love.graphics.setColor(hovered ? 0.22 : 0.16, hovered ? 0.34 : 0.26, hovered ? 0.52 : 0.42, 0.96);
+      love.graphics.rectangle("fill", exploreFurther.x, exploreFurther.y, exploreFurther.width, exploreFurther.height, 8, 8);
+      love.graphics.setColor(0.52, 0.72, 0.98, 0.82);
+      love.graphics.rectangle("line", exploreFurther.x, exploreFurther.y, exploreFurther.width, exploreFurther.height, 8, 8);
+      love.graphics.setColor(0.86, 0.94, 1, 1);
+      love.graphics.printf("Explore Further →", exploreFurther.x, exploreFurther.y + 15, exploreFurther.width, "center", 0, 0.72, 0.72);
+    }
+  }
+
+  if (uiState.mode === "town") {
+    if (uiState.hoveredContinue) {
+      love.graphics.setColor(0.36, 0.27, 0.49, 0.98);
+    } else {
+      love.graphics.setColor(0.26, 0.2, 0.37, 0.96);
+    }
+    love.graphics.rectangle(
+      "fill",
+      uiState.continueButton.x,
+      uiState.continueButton.y,
+      uiState.continueButton.width,
+      uiState.continueButton.height,
+      8,
+      8,
+    );
+    love.graphics.setColor(0.86, 0.8, 0.97, 0.95);
+    love.graphics.rectangle(
+      "line",
+      uiState.continueButton.x,
+      uiState.continueButton.y,
+      uiState.continueButton.width,
+      uiState.continueButton.height,
+      8,
+      8,
+    );
+    love.graphics.setColor(1, 1, 1, 1);
     love.graphics.printf(
-      `Tile: ${uiState.tileName} (${uiState.tileZone})\nEncounter content is not implemented yet.`,
-      0,
-      190,
-      uiState.width,
+      "Leave Town",
+      uiState.continueButton.x,
+      uiState.continueButton.y + 18,
+      uiState.continueButton.width,
       "center",
       0,
-      0.82,
-      0.82,
+      0.78,
+      0.78,
     );
   }
 
-  if (uiState.hoveredContinue) {
-    love.graphics.setColor(0.36, 0.27, 0.49, 0.98);
-  } else {
-    love.graphics.setColor(0.26, 0.2, 0.37, 0.96);
-  }
-  love.graphics.rectangle(
-    "fill",
-    uiState.continueButton.x,
-    uiState.continueButton.y,
-    uiState.continueButton.width,
-    uiState.continueButton.height,
-    8,
-    8,
-  );
-  love.graphics.setColor(0.86, 0.8, 0.97, 0.95);
-  love.graphics.rectangle(
-    "line",
-    uiState.continueButton.x,
-    uiState.continueButton.y,
-    uiState.continueButton.width,
-    uiState.continueButton.height,
-    8,
-    8,
-  );
-  love.graphics.setColor(1, 1, 1, 1);
+  love.graphics.setColor(0.46, 0.44, 0.58, 0.6);
   love.graphics.printf(
-    uiState.mode === "town" ? "Leave Town" : "Continue",
-    uiState.continueButton.x,
-    uiState.continueButton.y + 18,
-    uiState.continueButton.width,
+    uiState.mode === "town"
+      ? `Town visits: ${visitCount}  |  Space = Leave`
+      : `Explore visits: ${visitCount}  |  Space = Back to Map`,
+    0,
+    uiState.height - 38,
+    uiState.width,
     "center",
     0,
-    0.78,
-    0.78,
+    0.64,
+    0.64,
   );
-
-  love.graphics.setColor(0.78, 0.75, 0.9, 0.88);
-  love.graphics.printf(`Encounter visits: ${visitCount}  |  Space = Continue`, 0, uiState.height - 38, uiState.width, "center", 0, 0.68, 0.68);
 }

@@ -120,6 +120,7 @@ local function cloneTemplateData(self, template)
         color = {template.color[1], template.color[2], template.color[3], template.color[4]},
         status = template.defaultStatus,
         explorationFlowId = nil,
+        flowLevel = 0,
         enemyPool = __TS__ArrayMap(
             template.enemyPool,
             function(____, entry) return {enemyId = entry.enemyId, weight = entry.weight} end

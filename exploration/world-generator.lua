@@ -45,6 +45,7 @@ local function applyTemplateToTile(self, tile, template)
     tile.description = template.description
     tile.color = {template.color[1], template.color[2], template.color[3], template.color[4]}
     tile.explorationFlowId = nil
+    tile.flowLevel = 0
     tile.enemyPool = __TS__ArrayMap(
         template.enemyPool,
         function(____, entry) return {enemyId = entry.enemyId, weight = entry.weight} end

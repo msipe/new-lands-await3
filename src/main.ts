@@ -211,7 +211,10 @@ love.update = (dt: number) => {
                     ? {
                           tileName: currentTile.name,
                           tileZone: currentTile.zone,
+                          tileDescription: currentTile.description,
                           locations: currentTile.locations,
+                          explorationFlowId: currentTile.explorationFlowId,
+                          flowLevel: currentTile.flowLevel,
                       }
                     : undefined,
             );
@@ -349,6 +352,17 @@ love.keypressed = (key) => {
     }
 
     if (sceneState.current === "encounter" && key === "space") {
+        if (activeEncounterUi !== undefined && activeExploreUi !== undefined) {
+            const currentTile = getCurrentTile(activeExploreUi.model);
+            if (currentTile.explorationFlowId !== null) {
+                const flow = activeEncounterUi.explorationFlow;
+                const maxLevels = flow !== null ? flow.levels.length : 0;
+                const newLevel = Math.min(activeEncounterUi.viewLevel + 1, maxLevels);
+                if (newLevel > currentTile.flowLevel) {
+                    currentTile.flowLevel = newLevel;
+                }
+            }
+        }
         sceneState = advanceScene(sceneState);
         return;
     }
@@ -387,7 +401,7 @@ love.keypressed = (key) => {
     }
 
     if (key === "e") {
-        sceneState = chooseExploreBranch(sceneState, "encounter");
+        sceneState = chooseExploreBranch(sceneState, "exploration");
     }
 };
 
@@ -515,6 +529,15 @@ love.mousereleased = (x, y, button) => {
 
             const didContinue = onEncounterMouseReleased(activeEncounterUi, x, y, button);
             if (didContinue) {
+                const currentTile = activeExploreUi ? getCurrentTile(activeExploreUi.model) : undefined;
+                if (currentTile !== undefined && currentTile.explorationFlowId !== null) {
+                    const flow = activeEncounterUi.explorationFlow;
+                    const maxLevels = flow !== null ? flow.levels.length : 0;
+                    const newLevel = Math.min(activeEncounterUi.viewLevel + 1, maxLevels);
+                    if (newLevel > currentTile.flowLevel) {
+                        currentTile.flowLevel = newLevel;
+                    }
+                }
                 sceneState = advanceScene(sceneState);
             }
             return;

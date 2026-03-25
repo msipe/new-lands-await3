@@ -18,7 +18,7 @@ import {
 import { createWorldSpecFromPlan, type WorldSpec } from "../planning/world-spec-builder";
 import { validateWorldAgainstSpec, type WorldValidationResult } from "../planning/world-validator";
 import { recordTileVisited } from "../planning/quest-events";
-import { getQuestById } from "../planning/content-registry";
+import { getExplorationFlowById, getQuestById } from "../planning/content-registry";
 import type { ContentQuest } from "../planning/content-types";
 import { listQuestEntries, type QuestLogEntry } from "../planning/quest-log";
 import { applyWorldSpecToExploreState } from "./world-generator";
@@ -233,7 +233,7 @@ function createButtons(width: number, height: number): ActionButton[] {
     },
     {
       kind: "branch",
-      branch: "encounter",
+      branch: "exploration",
       rect: { x, y: top + buttonHeight + 14, width: buttonWidth, height: buttonHeight },
     },
   ];
@@ -371,7 +371,7 @@ function getActionLabel(branch: ExploreBranch, currentTile: ExploreTile): string
     return "Enter Town";
   }
 
-  return "Travel to Encounter";
+  return "Explore";
 }
 
 function refreshLayoutIfNeeded(uiState: ExploreUiState): void {
@@ -3357,6 +3357,27 @@ export function drawExploreUi(uiState: ExploreUiState, visitCount: number): void
 
     love.graphics.setColor(1, 1, 1, 0.84);
     love.graphics.printf(tile.name, center.x - 40, center.y - 4, 80, "center", 0, 0.39, 0.39);
+
+    if (tile.status !== "unvisited" && tile.zone !== "town" && tile.explorationFlowId !== null) {
+      const flow = getExplorationFlowById(tile.explorationFlowId);
+      const maxLevel = flow.levels.length;
+      const isComplete = tile.flowLevel >= maxLevel;
+      if (isComplete) {
+        love.graphics.setColor(0.72, 0.92, 0.66, 0.9);
+      } else {
+        love.graphics.setColor(0.82, 0.88, 1, 0.72);
+      }
+      love.graphics.printf(
+        `${tile.flowLevel}/${maxLevel}`,
+        center.x - 30,
+        center.y + 8,
+        60,
+        "center",
+        0,
+        0.36,
+        0.36,
+      );
+    }
   }
 
   love.graphics.setColor(0.9, 0.95, 1, 0.96);

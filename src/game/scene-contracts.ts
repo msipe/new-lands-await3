@@ -24,7 +24,7 @@ export type ExploreInput =
     }
   | {
       kind: "choose-branch";
-      branch: "combat" | "encounter";
+      branch: "combat" | "exploration";
     };
 
 export type CombatInput = {
@@ -59,7 +59,7 @@ export type MainMenuContext = {
 
 export type ExploreContext = {
   nodeIndex: number;
-  availableBranches: Array<"combat" | "encounter">;
+  availableBranches: Array<"combat" | "exploration">;
 };
 
 export type CharacterSetupContext = {
@@ -148,11 +148,11 @@ export const SCENE_CONTRACTS: SceneContracts = {
     defaultNext: "combat",
     createInitialContext: () => ({
       nodeIndex: 0,
-      availableBranches: ["combat", "encounter"],
+      availableBranches: ["combat", "exploration"],
     }),
     reduce: (_, input) => {
       if (input.kind === "choose-branch") {
-        return { nextScene: input.branch };
+        return { nextScene: input.branch === "exploration" ? "encounter" : "combat" };
       }
 
       return { nextScene: "combat" };

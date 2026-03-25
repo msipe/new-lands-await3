@@ -125,7 +125,7 @@ export function advanceScene(state: SceneState): SceneState {
 
 export function chooseExploreBranch(
   state: SceneState,
-  next: "combat" | "encounter",
+  next: "combat" | "exploration",
 ): SceneState {
   if (state.current !== "explore") {
     return state;

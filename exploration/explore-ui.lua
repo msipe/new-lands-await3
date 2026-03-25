@@ -28,6 +28,7 @@ local validateWorldAgainstSpec = ____world_2Dvalidator.validateWorldAgainstSpec
 local ____quest_2Devents = require("planning.quest-events")
 local recordTileVisited = ____quest_2Devents.recordTileVisited
 local ____content_2Dregistry = require("planning.content-registry")
+local getExplorationFlowById = ____content_2Dregistry.getExplorationFlowById
 local getQuestById = ____content_2Dregistry.getQuestById
 local ____quest_2Dlog = require("planning.quest-log")
 local listQuestEntries = ____quest_2Dlog.listQuestEntries
@@ -227,7 +228,7 @@ local function createButtons(self, width, height)
     local rightEdge = width - 20
     local x = rightEdge - panelWidth + 14
     local top = math.floor(height * 0.52)
-    return {{kind = "branch", branch = "combat", rect = {x = x, y = top, width = buttonWidth, height = buttonHeight}}, {kind = "branch", branch = "encounter", rect = {x = x, y = top + buttonHeight + 14, width = buttonWidth, height = buttonHeight}}}
+    return {{kind = "branch", branch = "combat", rect = {x = x, y = top, width = buttonWidth, height = buttonHeight}}, {kind = "branch", branch = "exploration", rect = {x = x, y = top + buttonHeight + 14, width = buttonWidth, height = buttonHeight}}}
 end
 local function createCharacterSheetButtonRect(self)
     return {x = 20, y = 52, width = 180, height = 34}
@@ -292,7 +293,7 @@ local function getActionLabel(self, branch, currentTile)
     if currentTile.zone == "town" then
         return "Enter Town"
     end
-    return "Travel to Encounter"
+    return "Explore"
 end
 local function refreshLayoutIfNeeded(self, uiState)
     local width = love.graphics.getWidth()
@@ -3715,6 +3716,26 @@ function ____exports.drawExploreUi(self, uiState, visitCount)
             0.39,
             0.39
         )
+        if tile.status ~= "unvisited" and tile.zone ~= "town" and tile.explorationFlowId ~= nil then
+            local flow = getExplorationFlowById(nil, tile.explorationFlowId)
+            local maxLevel = #flow.levels
+            local isComplete = tile.flowLevel >= maxLevel
+            if isComplete then
+                love.graphics.setColor(0.72, 0.92, 0.66, 0.9)
+            else
+                love.graphics.setColor(0.82, 0.88, 1, 0.72)
+            end
+            love.graphics.printf(
+                (tostring(tile.flowLevel) .. "/") .. tostring(maxLevel),
+                center.x - 30,
+                center.y + 8,
+                60,
+                "center",
+                0,
+                0.36,
+                0.36
+            )
+        end
     end
     love.graphics.setColor(0.9, 0.95, 1, 0.96)
     love.graphics.printf(

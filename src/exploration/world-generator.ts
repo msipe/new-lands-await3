@@ -24,6 +24,7 @@ function applyTemplateToTile(tile: ExploreTile, template: TileTemplate): void {
   tile.description = template.description;
   tile.color = [template.color[0], template.color[1], template.color[2], template.color[3]];
   tile.explorationFlowId = null;
+  tile.flowLevel = 0;
   tile.enemyPool = template.enemyPool.map((entry) => ({
     enemyId: entry.enemyId,
     weight: entry.weight,
