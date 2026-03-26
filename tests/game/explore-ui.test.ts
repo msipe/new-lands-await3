@@ -5,7 +5,7 @@ import {
 } from "../../src/exploration/explore-ui";
 import { acceptQuest, getQuestState, resetQuestLogForNewRun } from "../../src/planning/quest-log";
 
-describe("explore-ui facet screen", () => {
+describe("explore-ui", () => {
   beforeAll(() => {
     const loveMock = {
       graphics: {
@@ -21,65 +21,21 @@ describe("explore-ui facet screen", () => {
     resetQuestLogForNewRun();
   });
 
-  it("toggles facet screen when clicking XP bar", () => {
+  it("emits open-facets action when clicking XP bar", () => {
     const uiState = createExploreUiState();
 
     const clickX = uiState.xpBarRect.x + uiState.xpBarRect.width / 2;
     const clickY = uiState.xpBarRect.y + uiState.xpBarRect.height / 2;
 
-    expect(uiState.isFacetScreenOpen).toBe(false);
-
-    onExploreMouseReleased(uiState, clickX, clickY, 1);
-    expect(uiState.isFacetScreenOpen).toBe(true);
-
-    // With modal behavior enabled, clicks behind the panel should not toggle it off.
-    onExploreMouseReleased(uiState, clickX, clickY, 1);
-    expect(uiState.isFacetScreenOpen).toBe(true);
+    const action = onExploreMouseReleased(uiState, clickX, clickY, 1);
+    expect(action).toEqual({ kind: "open-facets" });
   });
 
-  it("closes other overlays when opening facet screen by click", () => {
-    const uiState = createExploreUiState();
-    uiState.isCharacterSheetOpen = true;
-    uiState.isInventoryOpen = true;
-
-    const clickX = uiState.xpBarRect.x + 8;
-    const clickY = uiState.xpBarRect.y + 8;
-
-    onExploreMouseReleased(uiState, clickX, clickY, 1);
-
-    expect(uiState.isFacetScreenOpen).toBe(true);
-    expect(uiState.isCharacterSheetOpen).toBe(false);
-    expect(uiState.isInventoryOpen).toBe(false);
-  });
-
-  it("supports keyboard toggle and escape close", () => {
+  it("emits open-facets action when pressing T", () => {
     const uiState = createExploreUiState();
 
-    expect(onExploreKeyPressed(uiState, "t")).toBe(true);
-    expect(uiState.isFacetScreenOpen).toBe(true);
-
-    expect(onExploreKeyPressed(uiState, "escape")).toBe(true);
-    expect(uiState.isFacetScreenOpen).toBe(false);
-  });
-
-  it("captures clicks while facet screen is open", () => {
-    const uiState = createExploreUiState();
-
-    const xpX = uiState.xpBarRect.x + 8;
-    const xpY = uiState.xpBarRect.y + 8;
-    onExploreMouseReleased(uiState, xpX, xpY, 1);
-    expect(uiState.isFacetScreenOpen).toBe(true);
-
-    const branch = uiState.buttons[0];
-    const action = onExploreMouseReleased(
-      uiState,
-      branch.rect.x + 4,
-      branch.rect.y + 4,
-      1,
-    );
-
-    expect(action).toBeUndefined();
-    expect(uiState.isFacetScreenOpen).toBe(true);
+    const result = onExploreKeyPressed(uiState, "t");
+    expect(result).toEqual({ kind: "open-facets" });
   });
 
   it("toggles craft shop with keyboard and closes other overlays", () => {
@@ -177,40 +133,6 @@ describe("explore-ui facet screen", () => {
     ).toBe(true);
   });
 
-  it("invests in soldier facet and close cancels without spending", () => {
-    const uiState = createExploreUiState();
-    uiState.playerProgression.unspentFacetPoints = 1;
-
-    const xpX = uiState.xpBarRect.x + 8;
-    const xpY = uiState.xpBarRect.y + 8;
-    onExploreMouseReleased(uiState, xpX, xpY, 1);
-    expect(uiState.isFacetScreenOpen).toBe(true);
-
-    // Click in left (Soldier) column in 1120x620 test layout.
-    onExploreMouseReleased(uiState, 280, 150, 1);
-    expect(uiState.selectedFacetId).toBe("facet:soldier");
-
-    // Invest button in 1120x620 test layout.
-    onExploreMouseReleased(uiState, 560, 500, 1);
-    expect(uiState.playerProgression.facets[0].pointsInvested).toBe(1);
-    expect(uiState.playerProgression.facets[0].abilities[0].unlocked).toBe(true);
-    expect(uiState.playerProgression.unspentFacetPoints).toBe(0);
-    expect(uiState.selectedFacetId).toBeUndefined();
-    expect(uiState.isFacetScreenOpen).toBe(false);
-
-    // Reopen, select soldier, then close — nothing changes.
-    onExploreMouseReleased(uiState, xpX, xpY, 1);
-    expect(uiState.isFacetScreenOpen).toBe(true);
-
-    onExploreMouseReleased(uiState, 280, 150, 1);
-    expect(uiState.selectedFacetId).toBe("facet:soldier");
-
-    onExploreMouseReleased(uiState, 720, 500, 1);
-    expect(uiState.selectedFacetId).toBeUndefined();
-    expect(uiState.isFacetScreenOpen).toBe(false);
-    expect(uiState.playerProgression.facets[0].pointsInvested).toBe(1);
-    expect(uiState.playerProgression.unspentFacetPoints).toBe(0);
-  });
 
   it("emits tile-visit quest progress when travel succeeds", () => {
     const uiState = createExploreUiState();

@@ -1,9 +1,9 @@
 local ____lualib = require("lualib_bundle")
 local __TS__StringPadStart = ____lualib.__TS__StringPadStart
 local __TS__New = ____lualib.__TS__New
-local __TS__ArrayFind = ____lualib.__TS__ArrayFind
 local __TS__ArrayFilter = ____lualib.__TS__ArrayFilter
 local __TS__ArraySome = ____lualib.__TS__ArraySome
+local __TS__ArrayFind = ____lualib.__TS__ArrayFind
 local __TS__ArrayMap = ____lualib.__TS__ArrayMap
 local __TS__ArrayIncludes = ____lualib.__TS__ArrayIncludes
 local __TS__NumberToFixed = ____lualib.__TS__NumberToFixed
@@ -36,6 +36,8 @@ local ____world_2Dgenerator = require("exploration.world-generator")
 local applyWorldSpecToExploreState = ____world_2Dgenerator.applyWorldSpecToExploreState
 local ____player_2Dprogression = require("game.player-progression")
 local buildGeneratedFaceId = ____player_2Dprogression.buildGeneratedFaceId
+local grantPlayerXp = ____player_2Dprogression.grantPlayerXp
+local getXpRequiredForLevel = ____player_2Dprogression.getXpRequiredForLevel
 local recordAppendFaceCopy = ____player_2Dprogression.recordAppendFaceCopy
 local recordFaceAdjustment = ____player_2Dprogression.recordFaceAdjustment
 local recordRemoveFace = ____player_2Dprogression.recordRemoveFace
@@ -117,7 +119,7 @@ function syncShopVisualDice(self, uiState, dice, layout, _forceRespawn)
                 function(____, entry) return entry.id == target.id end
             )
             if not die then
-                goto __continue152
+                goto __continue144
             end
             local targetX = target.rect.x + target.rect.width * 0.5
             local targetY = target.rect.y + target.rect.height * 0.5
@@ -129,7 +131,7 @@ function syncShopVisualDice(self, uiState, dice, layout, _forceRespawn)
                 size = target.rect.width
             }
         end
-        ::__continue152::
+        ::__continue144::
     end
     uiState.shopVisualDice = nextVisuals
 end
@@ -235,44 +237,6 @@ local function createCharacterSheetButtonRect(self)
 end
 local function createXpBarRect(self)
     return {x = 30, y = 134, width = 240, height = 20}
-end
-local function getTalentTreeLayout(self, uiState)
-    local width = math.min(
-        620,
-        math.floor(uiState.width * 0.82)
-    )
-    local height = math.min(
-        520,
-        math.floor(uiState.height * 0.86)
-    )
-    local x = math.floor((uiState.width - width) * 0.5)
-    local y = math.floor((uiState.height - height) * 0.5)
-    local talentRowRects = {}
-    local rowY = y + 88
-    for ____, talent in ipairs(uiState.playerProgression.talents) do
-        if rowY > y + height - 124 then
-            break
-        end
-        talentRowRects[#talentRowRects + 1] = {talentId = talent.id, rect = {x = x + 20, y = rowY, width = width - 40, height = 86}}
-        rowY = rowY + 96
-    end
-    local buttonY = y + height - 80
-    local buttonWidth = 150
-    local buttonHeight = 36
-    return {panelRect = {x = x, y = y, width = width, height = height}, talentRowRects = talentRowRects, confirmButtonRect = {x = x + width - buttonWidth * 2 - 32, y = buttonY, width = buttonWidth, height = buttonHeight}, cancelButtonRect = {x = x + width - buttonWidth - 20, y = buttonY, width = buttonWidth, height = buttonHeight}}
-end
-local function canConfirmSelectedTalent(self, uiState)
-    if not uiState.selectedTalentId or uiState.playerProgression.unspentTalentPoints <= 0 then
-        return false
-    end
-    local selected = __TS__ArrayFind(
-        uiState.playerProgression.talents,
-        function(____, talent) return talent.id == uiState.selectedTalentId end
-    )
-    if not selected then
-        return false
-    end
-    return selected.rank < selected.maxRank
 end
 local function createInventoryButtonRect(self)
     return {x = 212, y = 52, width = 180, height = 34}
@@ -737,8 +701,6 @@ local function openCraftShop(self, uiState)
     uiState.isCraftShopOpen = true
     uiState.isCharacterSheetOpen = false
     uiState.isInventoryOpen = false
-    uiState.isTalentTreeOpen = false
-    uiState.selectedTalentId = nil
     uiState.shopFocusedColumn = "craftsfolk"
     uiState.shopFocusedAction = "primary"
     uiState.shopAwaitingRemoveConfirm = false
@@ -1102,8 +1064,6 @@ function ____exports.createExploreUiState(self, input)
         isPlannerDebugOpen = false,
         playerProgression = options.playerProgression or createPlayerProgression(nil),
         xpBarRect = createXpBarRect(nil),
-        isTalentTreeOpen = false,
-        selectedTalentId = nil,
         isCharacterSheetOpen = false,
         characterSheetButtonRect = createCharacterSheetButtonRect(nil),
         isInventoryOpen = false,
@@ -1311,8 +1271,6 @@ function ____exports.onExploreKeyPressed(self, uiState, key)
         uiState.isCharacterSheetOpen = not uiState.isCharacterSheetOpen
         if uiState.isCharacterSheetOpen then
             uiState.isInventoryOpen = false
-            uiState.isTalentTreeOpen = false
-            uiState.selectedTalentId = nil
         end
         return true
     end
@@ -1320,8 +1278,6 @@ function ____exports.onExploreKeyPressed(self, uiState, key)
         uiState.isInventoryOpen = not uiState.isInventoryOpen
         if uiState.isInventoryOpen then
             uiState.isCharacterSheetOpen = false
-            uiState.isTalentTreeOpen = false
-            uiState.selectedTalentId = nil
         end
         return true
     end
@@ -1338,8 +1294,6 @@ function ____exports.onExploreKeyPressed(self, uiState, key)
         if uiState.isQuestMenuOpen then
             uiState.isCharacterSheetOpen = false
             uiState.isInventoryOpen = false
-            uiState.isTalentTreeOpen = false
-            uiState.selectedTalentId = nil
             uiState.isCraftShopOpen = false
             ensureQuestSelection(nil, uiState)
         end
@@ -1352,11 +1306,9 @@ function ____exports.onExploreKeyPressed(self, uiState, key)
         uiState.goToTileHint = nil
         return true
     end
-    if key == "escape" and (uiState.isCharacterSheetOpen or uiState.isInventoryOpen or uiState.isTalentTreeOpen) then
+    if key == "escape" and (uiState.isCharacterSheetOpen or uiState.isInventoryOpen) then
         uiState.isCharacterSheetOpen = false
         uiState.isInventoryOpen = false
-        uiState.isTalentTreeOpen = false
-        uiState.selectedTalentId = nil
         return true
     end
     if key == "escape" and uiState.isCraftShopOpen then
@@ -1364,13 +1316,14 @@ function ____exports.onExploreKeyPressed(self, uiState, key)
         return true
     end
     if key == "t" then
-        uiState.isTalentTreeOpen = not uiState.isTalentTreeOpen
-        if uiState.isTalentTreeOpen then
-            uiState.isCharacterSheetOpen = false
-            uiState.isInventoryOpen = false
-        else
-            uiState.selectedTalentId = nil
-        end
+        return {kind = "open-facets"}
+    end
+    if key == "f1" then
+        local xpNeeded = math.max(
+            1,
+            getXpRequiredForLevel(nil, uiState.playerProgression.level) - uiState.playerProgression.xp
+        )
+        grantPlayerXp(nil, uiState.playerProgression, xpNeeded)
         return true
     end
     if key == "p" then
@@ -1415,9 +1368,6 @@ function ____exports.onExploreMouseMoved(self, uiState, x, y)
         )
         return
     end
-    if uiState.isTalentTreeOpen then
-        return
-    end
     local hovered = getTileAt(nil, uiState, x, y)
     uiState.hoveredTileKey = hovered and hovered.key
 end
@@ -1441,28 +1391,28 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, tab in ipairs(layout.categoryTabs) do
             do
                 if not isPointInRect(nil, x, y, tab.rect) then
-                    goto __continue251
+                    goto __continue241
                 end
                 uiState.selectedQuestCategory = tab.category
                 ensureQuestSelection(nil, uiState)
                 return nil
             end
-            ::__continue251::
+            ::__continue241::
         end
         for ____, row in ipairs(layout.questRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue254
+                    goto __continue244
                 end
                 uiState.selectedQuestId = row.questId
                 return nil
             end
-            ::__continue254::
+            ::__continue244::
         end
         for ____, goToButton in ipairs(layout.objectiveGoToButtons) do
             do
                 if not isPointInRect(nil, x, y, goToButton.rect) then
-                    goto __continue257
+                    goto __continue247
                 end
                 local selectedQuest = getSelectedQuestEntry(nil, uiState)
                 if selectedQuest == nil then
@@ -1483,7 +1433,7 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
                 uiState.isQuestMenuOpen = false
                 return nil
             end
-            ::__continue257::
+            ::__continue247::
         end
         return nil
     end
@@ -1502,7 +1452,7 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, row in ipairs(layout.craftsfolkRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue266
+                    goto __continue256
                 end
                 uiState.selectedCraftsfolkId = row.id
                 uiState.shopAwaitingRemoveConfirm = false
@@ -1514,7 +1464,7 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
                 ____uiState_126.shopStatusText = "Selected craftsfolk: " .. (____opt_124 and ____opt_124.name or row.id)
                 return nil
             end
-            ::__continue266::
+            ::__continue256::
         end
         local clickedVisualDie = getShopVisualDieAt(nil, uiState, x, y)
         if clickedVisualDie then
@@ -1559,14 +1509,14 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, row in ipairs(layout.propertyRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue274
+                    goto __continue264
                 end
                 uiState.selectedUpgradePropertyId = row.id
                 uiState.shopAwaitingRemoveConfirm = false
                 uiState.shopStatusText = "Selected face property."
                 return nil
             end
-            ::__continue274::
+            ::__continue264::
         end
         if isPointInRect(nil, x, y, layout.primaryActionButtonRect) then
             uiState.shopFocusedAction = "primary"
@@ -1581,38 +1531,6 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         return nil
     end
     refreshLayoutIfNeeded(nil, uiState)
-    if uiState.isTalentTreeOpen then
-        local layout = getTalentTreeLayout(nil, uiState)
-        if isPointInRect(nil, x, y, layout.cancelButtonRect) then
-            uiState.selectedTalentId = nil
-            uiState.isTalentTreeOpen = false
-            return nil
-        end
-        if isPointInRect(nil, x, y, layout.confirmButtonRect) and canConfirmSelectedTalent(nil, uiState) then
-            local selected = __TS__ArrayFind(
-                uiState.playerProgression.talents,
-                function(____, talent) return talent.id == uiState.selectedTalentId end
-            )
-            if selected and selected.rank < selected.maxRank then
-                selected.rank = selected.rank + 1
-                uiState.playerProgression.unspentTalentPoints = math.max(0, uiState.playerProgression.unspentTalentPoints - 1)
-            end
-            uiState.selectedTalentId = nil
-            uiState.isTalentTreeOpen = false
-            return nil
-        end
-        for ____, row in ipairs(layout.talentRowRects) do
-            do
-                if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue284
-                end
-                uiState.selectedTalentId = row.talentId
-                return nil
-            end
-            ::__continue284::
-        end
-        return nil
-    end
     if isPointInRect(nil, x, y, uiState.characterSheetButtonRect) then
         uiState.isCharacterSheetOpen = not uiState.isCharacterSheetOpen
         if uiState.isCharacterSheetOpen then
@@ -1640,22 +1558,13 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         if uiState.isQuestMenuOpen then
             uiState.isCharacterSheetOpen = false
             uiState.isInventoryOpen = false
-            uiState.isTalentTreeOpen = false
-            uiState.selectedTalentId = nil
             uiState.isCraftShopOpen = false
             ensureQuestSelection(nil, uiState)
         end
         return nil
     end
     if isPointInRect(nil, x, y, uiState.xpBarRect) then
-        uiState.isTalentTreeOpen = not uiState.isTalentTreeOpen
-        if uiState.isTalentTreeOpen then
-            uiState.isCharacterSheetOpen = false
-            uiState.isInventoryOpen = false
-        else
-            uiState.selectedTalentId = nil
-        end
-        return nil
+        return {kind = "open-facets"}
     end
     local actionButton = getButtonAt(nil, uiState, x, y)
     if actionButton then
@@ -1745,7 +1654,7 @@ local function drawPlayerProgressHud(self, uiState)
     local barHeight = 20
     uiState.xpBarRect = {x = barX, y = barY, width = barWidth, height = barHeight}
     local fillRatio = progression.xpToNextLevel > 0 and progression.xp / progression.xpToNextLevel or 0
-    local canAdvanceTalents = progression.unspentTalentPoints > 0 or progression.xpToNextLevel > 0 and progression.xp >= progression.xpToNextLevel
+    local canAdvanceTalents = progression.unspentFacetPoints > 0 or progression.xpToNextLevel > 0 and progression.xp >= progression.xpToNextLevel
     if canAdvanceTalents then
         local pulse = (math.sin(uiState.time * 5.8) + 1) * 0.5
         local glowAlpha = 0.28 + pulse * 0.34
@@ -1817,7 +1726,7 @@ local function drawPlayerProgressHud(self, uiState)
     if canAdvanceTalents then
         love.graphics.setColor(0.97, 0.9, 0.52, 0.95)
         love.graphics.printf(
-            "Talent available: click XP bar (or press T)",
+            "Facet point available: click XP bar (or press T)",
             panelX + 10,
             panelY + panelHeight - 14,
             panelWidth - 20,
@@ -2232,7 +2141,7 @@ local function drawQuestMenuOverlay(self, uiState)
                 function(____, candidate) return candidate.questId == row.questId end
             )
             if not entry then
-                goto __continue318
+                goto __continue298
             end
             local selected = row.questId == uiState.selectedQuestId
             love.graphics.setColor(selected and 0.24 or 0.16, selected and 0.35 or 0.21, selected and 0.46 or 0.3, 0.96)
@@ -2278,7 +2187,7 @@ local function drawQuestMenuOverlay(self, uiState)
                 0.48
             )
         end
-        ::__continue318::
+        ::__continue298::
     end
     if selectedEntry == nil or selectedQuest == nil then
         love.graphics.setColor(0.82, 0.88, 0.96, 0.88)
@@ -2409,215 +2318,6 @@ local function drawQuestMenuOverlay(self, uiState)
             break
         end
     end
-end
-local function drawTalentTreeOverlay(self, uiState)
-    if not uiState.isTalentTreeOpen then
-        return
-    end
-    local progression = uiState.playerProgression
-    local layout = getTalentTreeLayout(nil, uiState)
-    local x = layout.panelRect.x
-    local y = layout.panelRect.y
-    local width = layout.panelRect.width
-    local height = layout.panelRect.height
-    love.graphics.setColor(0, 0, 0, 0.54)
-    love.graphics.rectangle(
-        "fill",
-        0,
-        0,
-        uiState.width,
-        uiState.height
-    )
-    love.graphics.setColor(0.09, 0.1, 0.14, 0.98)
-    love.graphics.rectangle(
-        "fill",
-        x,
-        y,
-        width,
-        height,
-        10,
-        10
-    )
-    love.graphics.setColor(0.88, 0.8, 0.36, 0.92)
-    love.graphics.rectangle(
-        "line",
-        x,
-        y,
-        width,
-        height,
-        10,
-        10
-    )
-    love.graphics.setColor(0.98, 0.97, 0.92, 1)
-    love.graphics.printf(
-        "Talent Tree (Stub)",
-        x + 20,
-        y + 18,
-        width - 40,
-        "left",
-        0,
-        0.94,
-        0.94
-    )
-    love.graphics.setColor(0.9, 0.88, 0.75, 0.96)
-    love.graphics.printf(
-        "Unspent talent points: " .. tostring(progression.unspentTalentPoints),
-        x + 20,
-        y + 52,
-        width - 40,
-        "left",
-        0,
-        0.66,
-        0.66
-    )
-    for ____, row in ipairs(layout.talentRowRects) do
-        do
-            local talent = __TS__ArrayFind(
-                progression.talents,
-                function(____, entry) return entry.id == row.talentId end
-            )
-            if not talent then
-                goto __continue332
-            end
-            local isSelected = uiState.selectedTalentId == talent.id
-            if isSelected then
-                love.graphics.setColor(0.31, 0.32, 0.16, 0.95)
-            else
-                love.graphics.setColor(0.18, 0.2, 0.28, 0.95)
-            end
-            love.graphics.rectangle(
-                "fill",
-                row.rect.x,
-                row.rect.y,
-                row.rect.width,
-                row.rect.height,
-                8,
-                8
-            )
-            if isSelected then
-                love.graphics.setColor(0.95, 0.84, 0.36, 0.95)
-            else
-                love.graphics.setColor(0.74, 0.79, 0.9, 0.86)
-            end
-            love.graphics.rectangle(
-                "line",
-                row.rect.x,
-                row.rect.y,
-                row.rect.width,
-                row.rect.height,
-                8,
-                8
-            )
-            love.graphics.setColor(0.96, 0.97, 1, 0.98)
-            love.graphics.printf(
-                talent.name,
-                row.rect.x + 14,
-                row.rect.y + 12,
-                row.rect.width - 28,
-                "left",
-                0,
-                0.72,
-                0.72
-            )
-            love.graphics.setColor(0.76, 0.84, 0.97, 0.92)
-            love.graphics.printf(
-                talent.description,
-                row.rect.x + 14,
-                row.rect.y + 38,
-                row.rect.width - 28,
-                "left",
-                0,
-                0.56,
-                0.56
-            )
-            love.graphics.setColor(0.89, 0.92, 0.98, 0.92)
-            love.graphics.printf(
-                (("Rank " .. tostring(talent.rank)) .. "/") .. tostring(talent.maxRank),
-                row.rect.x + row.rect.width - 140,
-                row.rect.y + 12,
-                120,
-                "right",
-                0,
-                0.56,
-                0.56
-            )
-        end
-        ::__continue332::
-    end
-    local canConfirm = canConfirmSelectedTalent(nil, uiState)
-    love.graphics.setColor(canConfirm and 0.26 or 0.2, canConfirm and 0.5 or 0.22, canConfirm and 0.31 or 0.25, canConfirm and 0.95 or 0.72)
-    love.graphics.rectangle(
-        "fill",
-        layout.confirmButtonRect.x,
-        layout.confirmButtonRect.y,
-        layout.confirmButtonRect.width,
-        layout.confirmButtonRect.height,
-        6,
-        6
-    )
-    love.graphics.setColor(canConfirm and 0.78 or 0.6, canConfirm and 0.95 or 0.7, canConfirm and 0.84 or 0.72, 0.95)
-    love.graphics.rectangle(
-        "line",
-        layout.confirmButtonRect.x,
-        layout.confirmButtonRect.y,
-        layout.confirmButtonRect.width,
-        layout.confirmButtonRect.height,
-        6,
-        6
-    )
-    love.graphics.setColor(1, 1, 1, canConfirm and 0.98 or 0.7)
-    love.graphics.printf(
-        "Confirm",
-        layout.confirmButtonRect.x,
-        layout.confirmButtonRect.y + 10,
-        layout.confirmButtonRect.width,
-        "center",
-        0,
-        0.62,
-        0.62
-    )
-    love.graphics.setColor(0.28, 0.22, 0.22, 0.9)
-    love.graphics.rectangle(
-        "fill",
-        layout.cancelButtonRect.x,
-        layout.cancelButtonRect.y,
-        layout.cancelButtonRect.width,
-        layout.cancelButtonRect.height,
-        6,
-        6
-    )
-    love.graphics.setColor(0.9, 0.76, 0.76, 0.95)
-    love.graphics.rectangle(
-        "line",
-        layout.cancelButtonRect.x,
-        layout.cancelButtonRect.y,
-        layout.cancelButtonRect.width,
-        layout.cancelButtonRect.height,
-        6,
-        6
-    )
-    love.graphics.setColor(1, 1, 1, 0.96)
-    love.graphics.printf(
-        "Cancel",
-        layout.cancelButtonRect.x,
-        layout.cancelButtonRect.y + 10,
-        layout.cancelButtonRect.width,
-        "center",
-        0,
-        0.62,
-        0.62
-    )
-    love.graphics.setColor(0.84, 0.87, 0.95, 0.9)
-    love.graphics.printf(
-        "Select a talent row, then Confirm or Cancel. While open, this panel captures clicks.",
-        x + 20,
-        y + height - 38,
-        width - 40,
-        "left",
-        0,
-        0.56,
-        0.56
-    )
 end
 local function drawCharacterSheetOverlay(self, uiState)
     if not uiState.isCharacterSheetOpen then
@@ -3753,7 +3453,6 @@ function ____exports.drawExploreUi(self, uiState, visitCount)
     if uiState.isPlannerDebugOpen then
         drawPlannerDebugOverlay(nil, uiState)
     end
-    drawTalentTreeOverlay(nil, uiState)
     drawCharacterSheetOverlay(nil, uiState)
     drawInventoryOverlay(nil, uiState)
     drawCraftShopOverlay(nil, uiState)

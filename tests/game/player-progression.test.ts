@@ -205,7 +205,7 @@ describe("player progression", () => {
       expect(progression.unspentFacetPoints).toBe(1);
     });
 
-    it("unlocked facet dies appear in the combat loadout", () => {
+    it("unlocked facet dies appear in the combat loadout with unique instance ids", () => {
       const progression = createPlayerProgression();
       progression.unspentFacetPoints = 2;
 
@@ -213,21 +213,27 @@ describe("player progression", () => {
       investInFacet(progression, "facet:berserker");
 
       const dice = createPlayerCombatDiceLoadout(progression);
-      const dieIds = dice.map((d) => d.id);
-      expect(dieIds).toContain("facet-die-soldier-1");
-      expect(dieIds).toContain("facet-die-berserker-1");
+      const typeIds = dice.map((d) => d.typeId);
+      expect(typeIds).toContain("facet-die-soldier-1");
+      expect(typeIds).toContain("facet-die-berserker-1");
+
+      // Instance IDs are unique, not the type IDs
+      const soldierDie = dice.find((d) => d.typeId === "facet-die-soldier-1")!;
+      const berserkerDie = dice.find((d) => d.typeId === "facet-die-berserker-1")!;
+      expect(soldierDie.id).toBe("facet-instance-0");
+      expect(berserkerDie.id).toBe("facet-instance-1");
     });
 
     it("facet die absent from loadout until invested", () => {
       const progression = createPlayerProgression();
       const diceBefore = createPlayerCombatDiceLoadout(progression);
-      expect(diceBefore.map((d) => d.id)).not.toContain("facet-die-soldier-1");
+      expect(diceBefore.map((d) => d.typeId)).not.toContain("facet-die-soldier-1");
 
       progression.unspentFacetPoints = 1;
       investInFacet(progression, "facet:soldier");
 
       const diceAfter = createPlayerCombatDiceLoadout(progression);
-      expect(diceAfter.map((d) => d.id)).toContain("facet-die-soldier-1");
+      expect(diceAfter.map((d) => d.typeId)).toContain("facet-die-soldier-1");
     });
   });
 

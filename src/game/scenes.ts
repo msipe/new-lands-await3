@@ -23,6 +23,7 @@ function createInitialVisitCounts(): VisitCounts {
     "main-menu": 1,
     "character-setup": 0,
     explore: 0,
+    facets: 0,
     combat: 0,
     encounter: 0,
     "post-combat": 0,
@@ -35,6 +36,7 @@ function createInitialContexts(): SceneContexts {
     "main-menu": SCENE_CONTRACTS["main-menu"].createInitialContext(),
     "character-setup": SCENE_CONTRACTS["character-setup"].createInitialContext(),
     explore: SCENE_CONTRACTS.explore.createInitialContext(),
+    facets: SCENE_CONTRACTS.facets.createInitialContext(),
     combat: SCENE_CONTRACTS.combat.createInitialContext(),
     encounter: SCENE_CONTRACTS.encounter.createInitialContext(),
     "post-combat": SCENE_CONTRACTS["post-combat"].createInitialContext(),
@@ -120,6 +122,28 @@ export function advanceScene(state: SceneState): SceneState {
     SCENE_CONTRACTS["end-game"].reduce(state.contexts["end-game"], {
       kind: "restart",
     }).nextScene,
+  );
+}
+
+export function openFacetsScene(state: SceneState): SceneState {
+  if (state.current !== "explore") {
+    return state;
+  }
+
+  return transitionTo(
+    state,
+    SCENE_CONTRACTS.explore.reduce(state.contexts.explore, { kind: "open-facets" }).nextScene,
+  );
+}
+
+export function closeFacetsScene(state: SceneState): SceneState {
+  if (state.current !== "facets") {
+    return state;
+  }
+
+  return transitionTo(
+    state,
+    SCENE_CONTRACTS.facets.reduce(state.contexts.facets, { kind: "close" }).nextScene,
   );
 }
 

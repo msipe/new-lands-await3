@@ -24,8 +24,8 @@ import { listQuestEntries, type QuestLogEntry } from "../planning/quest-log";
 import { applyWorldSpecToExploreState } from "./world-generator";
 import {
   buildGeneratedFaceId,
-  canInvestInFacet,
-  investInFacet,
+  grantPlayerXp,
+  getXpRequiredForLevel,
   recordAppendFaceCopy,
   recordFaceAdjustment,
   recordRemoveFace,
@@ -126,6 +126,7 @@ export type CreateExploreUiStateOptions = {
 
 export type ExploreUiAction =
   | { kind: "choose-branch"; branch: ExploreBranch }
+  | { kind: "open-facets" }
   | undefined;
 
 export type ExploreUiState = {
@@ -145,8 +146,6 @@ export type ExploreUiState = {
   isPlannerDebugOpen: boolean;
   playerProgression: PlayerProgressionState;
   xpBarRect: Rect;
-  isFacetScreenOpen: boolean;
-  selectedFacetId?: string;
   isCharacterSheetOpen: boolean;
   characterSheetButtonRect: Rect;
   isInventoryOpen: boolean;
@@ -182,13 +181,6 @@ export type ExploreUiState = {
   shopVisualDice: ShopVisualDie[];
 };
 
-type FacetScreenLayout = {
-  panelRect: Rect;
-  soldierColumnRect: Rect;
-  berserkerColumnRect: Rect;
-  investButtonRect: Rect;
-  closeButtonRect: Rect;
-};
 
 function createPlannerPackage(seedIndex: number): {
   plannerSpec: GamePlanSpec;
@@ -260,48 +252,7 @@ function createXpBarRect(): Rect {
   };
 }
 
-function getFacetScreenLayout(uiState: ExploreUiState): FacetScreenLayout {
-  const width = Math.min(620, Math.floor(uiState.width * 0.82));
-  const height = Math.min(520, Math.floor(uiState.height * 0.86));
-  const x = Math.floor((uiState.width - width) * 0.5);
-  const y = Math.floor((uiState.height - height) * 0.5);
 
-  const colPadding = 16;
-  const gap = 12;
-  const colWidth = Math.floor((width - colPadding * 2 - gap) / 2);
-  const colTop = y + 54;
-  const colHeight = height - 54 - 80;
-
-  const buttonY = y + height - 80;
-  const buttonWidth = 150;
-  const buttonHeight = 36;
-
-  return {
-    panelRect: { x, y, width, height },
-    soldierColumnRect: { x: x + colPadding, y: colTop, width: colWidth, height: colHeight },
-    berserkerColumnRect: { x: x + colPadding + colWidth + gap, y: colTop, width: colWidth, height: colHeight },
-    investButtonRect: {
-      x: x + width - buttonWidth * 2 - 32,
-      y: buttonY,
-      width: buttonWidth,
-      height: buttonHeight,
-    },
-    closeButtonRect: {
-      x: x + width - buttonWidth - 20,
-      y: buttonY,
-      width: buttonWidth,
-      height: buttonHeight,
-    },
-  };
-}
-
-function canInvestInSelectedFacet(uiState: ExploreUiState): boolean {
-  if (!uiState.selectedFacetId) {
-    return false;
-  }
-
-  return canInvestInFacet(uiState.playerProgression, uiState.selectedFacetId);
-}
 
 function createInventoryButtonRect(): Rect {
   return {
@@ -942,8 +893,6 @@ function openCraftShop(uiState: ExploreUiState): void {
   uiState.isCraftShopOpen = true;
   uiState.isCharacterSheetOpen = false;
   uiState.isInventoryOpen = false;
-  uiState.isFacetScreenOpen = false;
-  uiState.selectedFacetId = undefined;
   uiState.shopFocusedColumn = "craftsfolk";
   uiState.shopFocusedAction = "primary";
   uiState.shopAwaitingRemoveConfirm = false;
@@ -1374,8 +1323,6 @@ export function createExploreUiState(input?: number | CreateExploreUiStateOption
     isPlannerDebugOpen: false,
     playerProgression: options.playerProgression ?? createPlayerProgression(),
     xpBarRect: createXpBarRect(),
-    isFacetScreenOpen: false,
-    selectedFacetId: undefined,
     isCharacterSheetOpen: false,
     characterSheetButtonRect: createCharacterSheetButtonRect(),
     isInventoryOpen: false,
@@ -1421,7 +1368,7 @@ function regeneratePlannerSpec(uiState: ExploreUiState): void {
   uiState.worldValidation = plannerPackage.worldValidation;
 }
 
-export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boolean {
+export function onExploreKeyPressed(uiState: ExploreUiState, key: string): ExploreUiAction | boolean {
   if (uiState.isQuestMenuOpen) {
     if (key === "escape" || key === "q") {
       uiState.isQuestMenuOpen = false;
@@ -1564,8 +1511,6 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     uiState.isCharacterSheetOpen = !uiState.isCharacterSheetOpen;
     if (uiState.isCharacterSheetOpen) {
       uiState.isInventoryOpen = false;
-      uiState.isFacetScreenOpen = false;
-      uiState.selectedFacetId = undefined;
     }
     return true;
   }
@@ -1574,8 +1519,6 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     uiState.isInventoryOpen = !uiState.isInventoryOpen;
     if (uiState.isInventoryOpen) {
       uiState.isCharacterSheetOpen = false;
-      uiState.isFacetScreenOpen = false;
-      uiState.selectedFacetId = undefined;
     }
     return true;
   }
@@ -1594,8 +1537,6 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     if (uiState.isQuestMenuOpen) {
       uiState.isCharacterSheetOpen = false;
       uiState.isInventoryOpen = false;
-      uiState.isFacetScreenOpen = false;
-      uiState.selectedFacetId = undefined;
       uiState.isCraftShopOpen = false;
       ensureQuestSelection(uiState);
     }
@@ -1610,14 +1551,11 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     return true;
   }
 
-  if (key === "escape" && (uiState.isCharacterSheetOpen || uiState.isInventoryOpen || uiState.isFacetScreenOpen)) {
+  if (key === "escape" && (uiState.isCharacterSheetOpen || uiState.isInventoryOpen)) {
     uiState.isCharacterSheetOpen = false;
     uiState.isInventoryOpen = false;
-    uiState.isFacetScreenOpen = false;
-    uiState.selectedFacetId = undefined;
     return true;
   }
-
 
   if (key === "escape" && uiState.isCraftShopOpen) {
     closeCraftShop(uiState);
@@ -1625,13 +1563,12 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
   }
 
   if (key === "t") {
-    uiState.isFacetScreenOpen = !uiState.isFacetScreenOpen;
-    if (uiState.isFacetScreenOpen) {
-      uiState.isCharacterSheetOpen = false;
-      uiState.isInventoryOpen = false;
-    } else {
-      uiState.selectedFacetId = undefined;
-    }
+    return { kind: "open-facets" };
+  }
+
+  if (key === "f1") {
+    const xpNeeded = Math.max(1, getXpRequiredForLevel(uiState.playerProgression.level) - uiState.playerProgression.xp);
+    grantPlayerXp(uiState.playerProgression, xpNeeded);
     return true;
   }
 
@@ -1674,10 +1611,6 @@ export function onExploreMouseMoved(uiState: ExploreUiState, x: number, y: numbe
     const layout = getCraftShopLayout(uiState, dice);
     syncShopVisualDice(uiState, dice, layout);
     setShopHoverFromPoint(uiState, layout, dice, x, y);
-    return;
-  }
-
-  if (uiState.isFacetScreenOpen) {
     return;
   }
 
@@ -1830,36 +1763,6 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
 
   refreshLayoutIfNeeded(uiState);
 
-  if (uiState.isFacetScreenOpen) {
-    const layout = getFacetScreenLayout(uiState);
-
-    if (isPointInRect(x, y, layout.closeButtonRect)) {
-      uiState.selectedFacetId = undefined;
-      uiState.isFacetScreenOpen = false;
-      return undefined;
-    }
-
-    if (isPointInRect(x, y, layout.investButtonRect) && canInvestInSelectedFacet(uiState)) {
-      investInFacet(uiState.playerProgression, uiState.selectedFacetId!);
-      uiState.selectedFacetId = undefined;
-      uiState.isFacetScreenOpen = false;
-      return undefined;
-    }
-
-    if (isPointInRect(x, y, layout.soldierColumnRect)) {
-      uiState.selectedFacetId = "facet:soldier";
-      return undefined;
-    }
-
-    if (isPointInRect(x, y, layout.berserkerColumnRect)) {
-      uiState.selectedFacetId = "facet:berserker";
-      return undefined;
-    }
-
-    // Facet screen acts as a modal; swallow all clicks behind it.
-    return undefined;
-  }
-
   if (isPointInRect(x, y, uiState.characterSheetButtonRect)) {
     uiState.isCharacterSheetOpen = !uiState.isCharacterSheetOpen;
     if (uiState.isCharacterSheetOpen) {
@@ -1890,8 +1793,6 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
     if (uiState.isQuestMenuOpen) {
       uiState.isCharacterSheetOpen = false;
       uiState.isInventoryOpen = false;
-      uiState.isFacetScreenOpen = false;
-      uiState.selectedFacetId = undefined;
       uiState.isCraftShopOpen = false;
       ensureQuestSelection(uiState);
     }
@@ -1899,14 +1800,7 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
   }
 
   if (isPointInRect(x, y, uiState.xpBarRect)) {
-    uiState.isFacetScreenOpen = !uiState.isFacetScreenOpen;
-    if (uiState.isFacetScreenOpen) {
-      uiState.isCharacterSheetOpen = false;
-      uiState.isInventoryOpen = false;
-    } else {
-      uiState.selectedFacetId = undefined;
-    }
-    return undefined;
+    return { kind: "open-facets" };
   }
 
   const actionButton = getButtonAt(uiState, x, y);
@@ -2411,179 +2305,6 @@ function drawQuestMenuOverlay(uiState: ExploreUiState): void {
       break;
     }
   }
-}
-
-function drawFacetColumn(
-  uiState: ExploreUiState,
-  facet: { id: string; name: string; description: string; pointsInvested: number; maxPoints: number; abilities: Array<{ name: string; description: string; unlocked: boolean }> },
-  colRect: Rect,
-): void {
-  const isSelected = uiState.selectedFacetId === facet.id;
-  const colX = colRect.x;
-  const colY = colRect.y;
-  const colW = colRect.width;
-
-  // Column background
-  if (isSelected) {
-    love.graphics.setColor(0.18, 0.22, 0.14, 0.92);
-  } else {
-    love.graphics.setColor(0.13, 0.15, 0.22, 0.88);
-  }
-  love.graphics.rectangle("fill", colX, colY - 30, colW, colRect.height + 30, 8, 8);
-  if (isSelected) {
-    love.graphics.setColor(0.88, 0.78, 0.32, 0.9);
-  } else {
-    love.graphics.setColor(0.55, 0.62, 0.82, 0.7);
-  }
-  love.graphics.rectangle("line", colX, colY - 30, colW, colRect.height + 30, 8, 8);
-
-  // Facet name
-  love.graphics.setColor(0.98, 0.96, 0.88, 1);
-  love.graphics.printf(facet.name, colX + 10, colY - 24, colW - 20, "left", 0, 0.78, 0.78);
-
-  // Points progress
-  love.graphics.setColor(0.72, 0.82, 0.64, 0.9);
-  love.graphics.printf(
-    `${facet.pointsInvested}/${facet.maxPoints} pts`,
-    colX + 10,
-    colY - 24,
-    colW - 14,
-    "right",
-    0,
-    0.6,
-    0.6,
-  );
-
-  // Ability rows
-  const rowH = 34;
-  const rowGap = 4;
-  for (let i = 0; i < facet.abilities.length; i += 1) {
-    const ability = facet.abilities[i];
-    const rowY = colY + i * (rowH + rowGap);
-    if (rowY + rowH > colY + colRect.height) {
-      break;
-    }
-
-    const isNextUnlock = i === facet.pointsInvested;
-
-    if (ability.unlocked) {
-      love.graphics.setColor(0.14, 0.26, 0.18, 0.95);
-    } else if (isNextUnlock && isSelected) {
-      love.graphics.setColor(0.22, 0.24, 0.14, 0.9);
-    } else {
-      love.graphics.setColor(0.1, 0.12, 0.18, 0.85);
-    }
-    love.graphics.rectangle("fill", colX + 4, rowY, colW - 8, rowH, 5, 5);
-
-    if (ability.unlocked) {
-      love.graphics.setColor(0.52, 0.88, 0.62, 0.9);
-    } else if (isNextUnlock && isSelected) {
-      love.graphics.setColor(0.9, 0.8, 0.3, 0.85);
-    } else {
-      love.graphics.setColor(0.38, 0.44, 0.6, 0.6);
-    }
-    love.graphics.rectangle("line", colX + 4, rowY, colW - 8, rowH, 5, 5);
-
-    // Rank indicator
-    const rankLabel = ability.unlocked ? `✓` : `${i + 1}`;
-    if (ability.unlocked) {
-      love.graphics.setColor(0.52, 0.92, 0.64, 0.96);
-    } else {
-      love.graphics.setColor(0.56, 0.62, 0.8, 0.7);
-    }
-    love.graphics.printf(rankLabel, colX + 6, rowY + 10, 20, "left", 0, 0.56, 0.56);
-
-    // Ability name
-    if (ability.unlocked) {
-      love.graphics.setColor(0.88, 0.97, 0.9, 0.98);
-    } else if (isNextUnlock) {
-      love.graphics.setColor(0.96, 0.94, 0.78, 0.96);
-    } else {
-      love.graphics.setColor(0.62, 0.68, 0.8, 0.72);
-    }
-    love.graphics.printf(ability.name, colX + 26, rowY + 4, colW - 32, "left", 0, 0.6, 0.6);
-
-    // Ability description
-    if (ability.unlocked || isNextUnlock) {
-      love.graphics.setColor(0.68, 0.78, 0.9, 0.8);
-    } else {
-      love.graphics.setColor(0.44, 0.5, 0.64, 0.55);
-    }
-    love.graphics.printf(ability.description, colX + 26, rowY + 18, colW - 32, "left", 0, 0.5, 0.5);
-  }
-}
-
-function drawFacetScreenOverlay(uiState: ExploreUiState): void {
-  if (!uiState.isFacetScreenOpen) {
-    return;
-  }
-
-  const progression = uiState.playerProgression;
-  const layout = getFacetScreenLayout(uiState);
-  const x = layout.panelRect.x;
-  const y = layout.panelRect.y;
-  const width = layout.panelRect.width;
-  const height = layout.panelRect.height;
-
-  love.graphics.setColor(0, 0, 0, 0.54);
-  love.graphics.rectangle("fill", 0, 0, uiState.width, uiState.height);
-
-  love.graphics.setColor(0.09, 0.1, 0.14, 0.98);
-  love.graphics.rectangle("fill", x, y, width, height, 10, 10);
-  love.graphics.setColor(0.88, 0.8, 0.36, 0.92);
-  love.graphics.rectangle("line", x, y, width, height, 10, 10);
-
-  love.graphics.setColor(0.98, 0.97, 0.92, 1);
-  love.graphics.printf("Facets", x + 20, y + 14, width - 40, "left", 0, 0.94, 0.94);
-
-  love.graphics.setColor(0.9, 0.88, 0.75, 0.96);
-  love.graphics.printf(
-    `Unspent facet points: ${progression.unspentFacetPoints}`,
-    x + 20,
-    y + 14,
-    width - 40,
-    "right",
-    0,
-    0.66,
-    0.66,
-  );
-
-  const soldier = progression.facets.find((f) => f.id === "facet:soldier");
-  const berserker = progression.facets.find((f) => f.id === "facet:berserker");
-
-  if (soldier) {
-    drawFacetColumn(uiState, soldier, layout.soldierColumnRect);
-  }
-  if (berserker) {
-    drawFacetColumn(uiState, berserker, layout.berserkerColumnRect);
-  }
-
-  const canInvest = canInvestInSelectedFacet(uiState);
-  love.graphics.setColor(canInvest ? 0.26 : 0.2, canInvest ? 0.5 : 0.22, canInvest ? 0.31 : 0.25, canInvest ? 0.95 : 0.72);
-  love.graphics.rectangle("fill", layout.investButtonRect.x, layout.investButtonRect.y, layout.investButtonRect.width, layout.investButtonRect.height, 6, 6);
-  love.graphics.setColor(canInvest ? 0.78 : 0.6, canInvest ? 0.95 : 0.7, canInvest ? 0.84 : 0.72, 0.95);
-  love.graphics.rectangle("line", layout.investButtonRect.x, layout.investButtonRect.y, layout.investButtonRect.width, layout.investButtonRect.height, 6, 6);
-  love.graphics.setColor(1, 1, 1, canInvest ? 0.98 : 0.7);
-  love.graphics.printf("Invest", layout.investButtonRect.x, layout.investButtonRect.y + 10, layout.investButtonRect.width, "center", 0, 0.62, 0.62);
-
-  love.graphics.setColor(0.28, 0.22, 0.22, 0.9);
-  love.graphics.rectangle("fill", layout.closeButtonRect.x, layout.closeButtonRect.y, layout.closeButtonRect.width, layout.closeButtonRect.height, 6, 6);
-  love.graphics.setColor(0.9, 0.76, 0.76, 0.95);
-  love.graphics.rectangle("line", layout.closeButtonRect.x, layout.closeButtonRect.y, layout.closeButtonRect.width, layout.closeButtonRect.height, 6, 6);
-  love.graphics.setColor(1, 1, 1, 0.96);
-  love.graphics.printf("Close", layout.closeButtonRect.x, layout.closeButtonRect.y + 10, layout.closeButtonRect.width, "center", 0, 0.62, 0.62);
-
-  love.graphics.setColor(0.84, 0.87, 0.95, 0.9);
-  love.graphics.printf(
-    "Select a facet, then Invest to unlock the next ability.",
-    x + 20,
-    y + height - 38,
-    width - 40,
-    "left",
-    0,
-    0.56,
-    0.56,
-  );
 }
 
 function drawCharacterSheetOverlay(uiState: ExploreUiState): void {
@@ -3377,7 +3098,6 @@ export function drawExploreUi(uiState: ExploreUiState, visitCount: number): void
     drawPlannerDebugOverlay(uiState);
   }
 
-  drawFacetScreenOverlay(uiState);
   drawCharacterSheetOverlay(uiState);
   drawInventoryOverlay(uiState);
   drawCraftShopOverlay(uiState);

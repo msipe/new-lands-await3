@@ -44,6 +44,13 @@ import {
     type ExploreUiState,
     updateExploreUiState,
 } from "./exploration/explore-ui";
+import {
+    createFacetUiState,
+    drawFacetUi,
+    onFacetKeyPressed,
+    onFacetMouseReleased,
+    type FacetUiState,
+} from "./facet-ui";
 import { pickEnemyIdForTile } from "./exploration/enemy-selection";
 import { getCurrentTile } from "./exploration/explore-state";
 import {
@@ -59,7 +66,9 @@ import { createPlayerCombatDiceLoadout } from "./game/dice-constructs/player-com
 import {
     advanceScene,
     chooseExploreBranch,
+    closeFacetsScene,
     createInitialSceneState,
+    openFacetsScene,
 } from "./game/scenes";
 import {
     calculateCombatGoldReward,
@@ -87,6 +96,7 @@ let activeCombat: { state: CombatEncounterState; eventBus: CombatEventBus } | un
 let activeCombatUi: CombatUiState | undefined;
 let activeExploreUi: ExploreUiState | undefined;
 let activeEncounterUi: EncounterUiState | undefined;
+let activeFacetUi: FacetUiState | undefined;
 let activeCharacterSetupUi: CharacterSetupUiState | undefined;
 let mainMenuUi: MainMenuUiState | undefined;
 let runSeedNonce = 0;
@@ -191,6 +201,14 @@ love.update = (dt: number) => {
             if (!activeCharacterSetupUi) {
                 activeCharacterSetupUi = createCharacterSetupUiState();
             }
+        }
+
+        if (sceneState.current === "facets") {
+            activeFacetUi = createFacetUiState(playerProgression);
+        }
+
+        if (previousScene === "facets" && sceneState.current !== "facets") {
+            activeFacetUi = undefined;
         }
 
         if (sceneState.current === "explore") {
@@ -380,12 +398,23 @@ love.keypressed = (key) => {
         }
     }
 
+    if (sceneState.current === "facets") {
+        if (activeFacetUi && onFacetKeyPressed(activeFacetUi, key)) {
+            sceneState = closeFacetsScene(sceneState);
+        }
+        return;
+    }
+
     if (sceneState.current === "explore") {
         if (!activeExploreUi) {
             activeExploreUi = createExploreUiState({ playerProgression });
         }
 
-        if (onExploreKeyPressed(activeExploreUi, key)) {
+        const keyResult = onExploreKeyPressed(activeExploreUi, key);
+        if (keyResult) {
+            if (typeof keyResult === "object" && keyResult.kind === "open-facets") {
+                sceneState = openFacetsScene(sceneState);
+            }
             return;
         }
     }
@@ -510,6 +539,16 @@ love.mousereleased = (x, y, button) => {
     }
 
     if (sceneState.current !== "combat" || !activeCombat || !activeCombatUi) {
+        if (sceneState.current === "facets") {
+            if (activeFacetUi) {
+                const facetAction = onFacetMouseReleased(activeFacetUi, x, y, button);
+                if (facetAction === "close") {
+                    sceneState = closeFacetsScene(sceneState);
+                }
+            }
+            return;
+        }
+
         if (sceneState.current === "explore") {
             if (!activeExploreUi) {
                 activeExploreUi = createExploreUiState({ playerProgression });
@@ -518,6 +557,9 @@ love.mousereleased = (x, y, button) => {
             const exploreAction = onExploreMouseReleased(activeExploreUi, x, y, button);
             if (exploreAction?.kind === "choose-branch") {
                 sceneState = chooseExploreBranch(sceneState, exploreAction.branch);
+            }
+            if (exploreAction?.kind === "open-facets") {
+                sceneState = openFacetsScene(sceneState);
             }
             return;
         }
@@ -570,6 +612,13 @@ love.draw = () => {
         }
 
         drawExploreUi(activeExploreUi, sceneState.visitCounts.explore);
+        return;
+    }
+
+    if (sceneState.current === "facets") {
+        if (activeFacetUi) {
+            drawFacetUi(activeFacetUi);
+        }
         return;
     }
 

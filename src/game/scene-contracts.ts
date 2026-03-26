@@ -2,6 +2,7 @@ export const SCENE_IDS = [
   "main-menu",
   "character-setup",
   "explore",
+  "facets",
   "combat",
   "encounter",
   "post-combat",
@@ -19,13 +20,13 @@ export type CharacterSetupInput = {
 };
 
 export type ExploreInput =
-  | {
-      kind: "advance";
-    }
-  | {
-      kind: "choose-branch";
-      branch: "combat" | "exploration";
-    };
+  | { kind: "advance" }
+  | { kind: "choose-branch"; branch: "combat" | "exploration" }
+  | { kind: "open-facets" };
+
+export type FacetsInput = {
+  kind: "close";
+};
 
 export type CombatInput = {
   kind: "complete-combat";
@@ -43,10 +44,13 @@ export type EndGameInput = {
   kind: "restart";
 };
 
+export type FacetsContext = Record<string, never>;
+
 export type SceneInputById = {
   "main-menu": MainMenuInput;
   "character-setup": CharacterSetupInput;
   explore: ExploreInput;
+  facets: FacetsInput;
   combat: CombatInput;
   encounter: EncounterInput;
   "post-combat": PostCombatInput;
@@ -89,6 +93,7 @@ export type SceneContextById = {
   "main-menu": MainMenuContext;
   "character-setup": CharacterSetupContext;
   explore: ExploreContext;
+  facets: FacetsContext;
   combat: CombatContext;
   encounter: EncounterContext;
   "post-combat": PostCombatContext;
@@ -98,7 +103,8 @@ export type SceneContextById = {
 export type SceneOutputById = {
   "main-menu": { nextScene: "character-setup" };
   "character-setup": { nextScene: "explore" };
-  explore: { nextScene: "combat" | "encounter" };
+  explore: { nextScene: "combat" | "encounter" | "facets" };
+  facets: { nextScene: "explore" };
   combat: { nextScene: "explore" };
   encounter: { nextScene: "explore" };
   "post-combat": { nextScene: "end-game" };
@@ -154,9 +160,19 @@ export const SCENE_CONTRACTS: SceneContracts = {
       if (input.kind === "choose-branch") {
         return { nextScene: input.branch === "exploration" ? "encounter" : "combat" };
       }
-
+      if (input.kind === "open-facets") {
+        return { nextScene: "facets" };
+      }
       return { nextScene: "combat" };
     },
+  },
+  facets: {
+    id: "facets",
+    title: "Facets",
+    prompt: "Invest points to unlock abilities.",
+    defaultNext: "explore",
+    createInitialContext: () => ({}),
+    reduce: () => ({ nextScene: "explore" }),
   },
   combat: {
     id: "combat",

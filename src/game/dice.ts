@@ -54,6 +54,7 @@ export type DieRollResult = {
 
 export type DieInput = {
   id: string;
+  typeId?: string;
   name: string;
   sides: DieSide[];
   energyCost?: number;
@@ -69,6 +70,7 @@ function isValidSideIndex(index: number, sideCount: number): boolean {
 
 export class Die {
   readonly id: string;
+  readonly typeId: string | undefined;
   name: string;
   readonly sides: DieSide[];
   readonly energyCost: number;
@@ -77,6 +79,7 @@ export class Die {
 
   constructor(input: DieInput) {
     this.id = input.id;
+    this.typeId = input.typeId;
     this.name = input.name;
     this.sides = [...input.sides];
     this.energyCost = Math.max(0, Math.floor(input.energyCost ?? 1));
