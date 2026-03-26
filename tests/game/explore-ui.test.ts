@@ -5,7 +5,7 @@ import {
 } from "../../src/exploration/explore-ui";
 import { acceptQuest, getQuestState, resetQuestLogForNewRun } from "../../src/planning/quest-log";
 
-describe("explore-ui talent tree", () => {
+describe("explore-ui facet screen", () => {
   beforeAll(() => {
     const loveMock = {
       graphics: {
@@ -21,23 +21,23 @@ describe("explore-ui talent tree", () => {
     resetQuestLogForNewRun();
   });
 
-  it("toggles talent tree when clicking XP bar", () => {
+  it("toggles facet screen when clicking XP bar", () => {
     const uiState = createExploreUiState();
 
     const clickX = uiState.xpBarRect.x + uiState.xpBarRect.width / 2;
     const clickY = uiState.xpBarRect.y + uiState.xpBarRect.height / 2;
 
-    expect(uiState.isTalentTreeOpen).toBe(false);
+    expect(uiState.isFacetScreenOpen).toBe(false);
 
     onExploreMouseReleased(uiState, clickX, clickY, 1);
-    expect(uiState.isTalentTreeOpen).toBe(true);
+    expect(uiState.isFacetScreenOpen).toBe(true);
 
     // With modal behavior enabled, clicks behind the panel should not toggle it off.
     onExploreMouseReleased(uiState, clickX, clickY, 1);
-    expect(uiState.isTalentTreeOpen).toBe(true);
+    expect(uiState.isFacetScreenOpen).toBe(true);
   });
 
-  it("closes other overlays when opening talent tree by click", () => {
+  it("closes other overlays when opening facet screen by click", () => {
     const uiState = createExploreUiState();
     uiState.isCharacterSheetOpen = true;
     uiState.isInventoryOpen = true;
@@ -47,7 +47,7 @@ describe("explore-ui talent tree", () => {
 
     onExploreMouseReleased(uiState, clickX, clickY, 1);
 
-    expect(uiState.isTalentTreeOpen).toBe(true);
+    expect(uiState.isFacetScreenOpen).toBe(true);
     expect(uiState.isCharacterSheetOpen).toBe(false);
     expect(uiState.isInventoryOpen).toBe(false);
   });
@@ -56,19 +56,19 @@ describe("explore-ui talent tree", () => {
     const uiState = createExploreUiState();
 
     expect(onExploreKeyPressed(uiState, "t")).toBe(true);
-    expect(uiState.isTalentTreeOpen).toBe(true);
+    expect(uiState.isFacetScreenOpen).toBe(true);
 
     expect(onExploreKeyPressed(uiState, "escape")).toBe(true);
-    expect(uiState.isTalentTreeOpen).toBe(false);
+    expect(uiState.isFacetScreenOpen).toBe(false);
   });
 
-  it("captures clicks while talent tree is open", () => {
+  it("captures clicks while facet screen is open", () => {
     const uiState = createExploreUiState();
 
     const xpX = uiState.xpBarRect.x + 8;
     const xpY = uiState.xpBarRect.y + 8;
     onExploreMouseReleased(uiState, xpX, xpY, 1);
-    expect(uiState.isTalentTreeOpen).toBe(true);
+    expect(uiState.isFacetScreenOpen).toBe(true);
 
     const branch = uiState.buttons[0];
     const action = onExploreMouseReleased(
@@ -79,7 +79,7 @@ describe("explore-ui talent tree", () => {
     );
 
     expect(action).toBeUndefined();
-    expect(uiState.isTalentTreeOpen).toBe(true);
+    expect(uiState.isFacetScreenOpen).toBe(true);
   });
 
   it("toggles craft shop with keyboard and closes other overlays", () => {
@@ -177,38 +177,39 @@ describe("explore-ui talent tree", () => {
     ).toBe(true);
   });
 
-  it("applies confirm and cancel for selected talents", () => {
+  it("invests in soldier facet and close cancels without spending", () => {
     const uiState = createExploreUiState();
-    uiState.playerProgression.unspentTalentPoints = 1;
+    uiState.playerProgression.unspentFacetPoints = 1;
 
     const xpX = uiState.xpBarRect.x + 8;
     const xpY = uiState.xpBarRect.y + 8;
     onExploreMouseReleased(uiState, xpX, xpY, 1);
-    expect(uiState.isTalentTreeOpen).toBe(true);
+    expect(uiState.isFacetScreenOpen).toBe(true);
 
-    // First row in 1120x620 test layout.
+    // Click in left (Soldier) column in 1120x620 test layout.
     onExploreMouseReleased(uiState, 280, 150, 1);
-    expect(uiState.selectedTalentId).toBe("talent:unyielding-core");
+    expect(uiState.selectedFacetId).toBe("facet:soldier");
 
-    // Confirm button in 1120x620 test layout.
+    // Invest button in 1120x620 test layout.
     onExploreMouseReleased(uiState, 560, 500, 1);
-    expect(uiState.playerProgression.talents[0].rank).toBe(1);
-    expect(uiState.playerProgression.unspentTalentPoints).toBe(0);
-    expect(uiState.selectedTalentId).toBeUndefined();
-    expect(uiState.isTalentTreeOpen).toBe(false);
+    expect(uiState.playerProgression.facets[0].pointsInvested).toBe(1);
+    expect(uiState.playerProgression.facets[0].abilities[0].unlocked).toBe(true);
+    expect(uiState.playerProgression.unspentFacetPoints).toBe(0);
+    expect(uiState.selectedFacetId).toBeUndefined();
+    expect(uiState.isFacetScreenOpen).toBe(false);
 
-    // Select again and cancel; modal closes without spending.
+    // Reopen, select soldier, then close — nothing changes.
     onExploreMouseReleased(uiState, xpX, xpY, 1);
-    expect(uiState.isTalentTreeOpen).toBe(true);
+    expect(uiState.isFacetScreenOpen).toBe(true);
 
     onExploreMouseReleased(uiState, 280, 150, 1);
-    expect(uiState.selectedTalentId).toBe("talent:unyielding-core");
+    expect(uiState.selectedFacetId).toBe("facet:soldier");
 
     onExploreMouseReleased(uiState, 720, 500, 1);
-    expect(uiState.selectedTalentId).toBeUndefined();
-    expect(uiState.isTalentTreeOpen).toBe(false);
-    expect(uiState.playerProgression.talents[0].rank).toBe(1);
-    expect(uiState.playerProgression.unspentTalentPoints).toBe(0);
+    expect(uiState.selectedFacetId).toBeUndefined();
+    expect(uiState.isFacetScreenOpen).toBe(false);
+    expect(uiState.playerProgression.facets[0].pointsInvested).toBe(1);
+    expect(uiState.playerProgression.unspentFacetPoints).toBe(0);
   });
 
   it("emits tile-visit quest progress when travel succeeds", () => {

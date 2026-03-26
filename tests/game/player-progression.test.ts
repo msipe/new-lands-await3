@@ -1,15 +1,18 @@
 import {
   calculateCombatGoldReward,
   calculateCombatXpReward,
+  canInvestInFacet,
   createPlayerProgression,
   grantPlayerGold,
   getXpRequiredForLevel,
   grantPlayerXp,
+  investInFacet,
   recordCombatVictory,
   recordFaceAdjustment,
   setPlayerIdentity,
   spendPlayerGold,
 } from "../../src/game/player-progression";
+import { createPlayerCombatDiceLoadout } from "../../src/game/dice-constructs/player-combat-dice";
 import { FaceAdjustmentModalityType } from "../../src/game/faces";
 import { EQUIPMENT_SLOT_ORDER } from "../../src/game/player-items";
 
@@ -27,8 +30,8 @@ describe("player progression", () => {
     expect(progression.gold).toBe(1000);
     expect(progression.xpToNextLevel).toBe(getXpRequiredForLevel(1));
     expect(progression.battlesWon).toBe(0);
-    expect(progression.unspentTalentPoints).toBe(0);
-    expect(progression.talents.length).toBeGreaterThan(0);
+    expect(progression.unspentFacetPoints).toBe(0);
+    expect(progression.facets.length).toBeGreaterThan(0);
   });
 
   it("awards xp without leveling until threshold", () => {
@@ -52,7 +55,7 @@ describe("player progression", () => {
     expect(progression.xp).toBe(25);
     expect(progression.xpToNextLevel).toBe(getXpRequiredForLevel(3));
     expect(progression.maxHp).toBe(24);
-    expect(progression.unspentTalentPoints).toBe(2);
+    expect(progression.unspentFacetPoints).toBe(2);
   });
 
   it("records combat victories and temporarily guarantees one level per win", () => {
@@ -67,7 +70,7 @@ describe("player progression", () => {
     expect(progression.xp).toBe(0);
     expect(progression.battlesWon).toBe(1);
     expect(progression.totalXp).toBe(expectedReward);
-    expect(progression.unspentTalentPoints).toBe(1);
+    expect(progression.unspentFacetPoints).toBe(1);
   });
 
   it("still exposes the base level-scaled reward helper", () => {
@@ -117,6 +120,115 @@ describe("player progression", () => {
 
       expect(progression.items.equipped[slotId]).toBeUndefined();
     }
+  });
+
+  describe("facet investment", () => {
+    it("starts with no unlocked facet die IDs", () => {
+      const progression = createPlayerProgression();
+      expect(progression.unlockedFacetDieIds).toHaveLength(0);
+    });
+
+    it("canInvestInFacet returns false when no points available", () => {
+      const progression = createPlayerProgression();
+      progression.unspentFacetPoints = 0;
+      expect(canInvestInFacet(progression, "facet:soldier")).toBe(false);
+    });
+
+    it("canInvestInFacet returns false for unknown facet id", () => {
+      const progression = createPlayerProgression();
+      progression.unspentFacetPoints = 1;
+      expect(canInvestInFacet(progression, "facet:nonexistent")).toBe(false);
+    });
+
+    it("canInvestInFacet returns true when points available and facet not full", () => {
+      const progression = createPlayerProgression();
+      progression.unspentFacetPoints = 1;
+      expect(canInvestInFacet(progression, "facet:soldier")).toBe(true);
+      expect(canInvestInFacet(progression, "facet:berserker")).toBe(true);
+    });
+
+    it("investInFacet returns false and changes nothing when no points available", () => {
+      const progression = createPlayerProgression();
+      progression.unspentFacetPoints = 0;
+      const result = investInFacet(progression, "facet:soldier");
+      expect(result).toBe(false);
+      expect(progression.unlockedFacetDieIds).toHaveLength(0);
+    });
+
+    it("investInFacet unlocks the first ability and adds its die id to the pool", () => {
+      const progression = createPlayerProgression();
+      progression.unspentFacetPoints = 1;
+
+      const result = investInFacet(progression, "facet:soldier");
+
+      expect(result).toBe(true);
+      expect(progression.unspentFacetPoints).toBe(0);
+      const soldier = progression.facets.find((f) => f.id === "facet:soldier")!;
+      expect(soldier.pointsInvested).toBe(1);
+      expect(soldier.abilities[0].unlocked).toBe(true);
+      expect(soldier.abilities[1].unlocked).toBe(false);
+      expect(progression.unlockedFacetDieIds).toEqual(["facet-die-soldier-1"]);
+    });
+
+    it("sequential investments unlock abilities in order and accumulate die ids", () => {
+      const progression = createPlayerProgression();
+      progression.unspentFacetPoints = 3;
+
+      investInFacet(progression, "facet:soldier");
+      investInFacet(progression, "facet:soldier");
+      investInFacet(progression, "facet:berserker");
+
+      const soldier = progression.facets.find((f) => f.id === "facet:soldier")!;
+      const berserker = progression.facets.find((f) => f.id === "facet:berserker")!;
+
+      expect(soldier.pointsInvested).toBe(2);
+      expect(berserker.pointsInvested).toBe(1);
+      expect(progression.unspentFacetPoints).toBe(0);
+      expect(progression.unlockedFacetDieIds).toEqual([
+        "facet-die-soldier-1",
+        "facet-die-soldier-2",
+        "facet-die-berserker-1",
+      ]);
+    });
+
+    it("investInFacet returns false once a facet is full", () => {
+      const progression = createPlayerProgression();
+      const soldier = progression.facets.find((f) => f.id === "facet:soldier")!;
+      soldier.pointsInvested = soldier.maxPoints;
+      for (const ability of soldier.abilities) {
+        ability.unlocked = true;
+      }
+
+      progression.unspentFacetPoints = 1;
+      const result = investInFacet(progression, "facet:soldier");
+      expect(result).toBe(false);
+      expect(progression.unspentFacetPoints).toBe(1);
+    });
+
+    it("unlocked facet dies appear in the combat loadout", () => {
+      const progression = createPlayerProgression();
+      progression.unspentFacetPoints = 2;
+
+      investInFacet(progression, "facet:soldier");
+      investInFacet(progression, "facet:berserker");
+
+      const dice = createPlayerCombatDiceLoadout(progression);
+      const dieIds = dice.map((d) => d.id);
+      expect(dieIds).toContain("facet-die-soldier-1");
+      expect(dieIds).toContain("facet-die-berserker-1");
+    });
+
+    it("facet die absent from loadout until invested", () => {
+      const progression = createPlayerProgression();
+      const diceBefore = createPlayerCombatDiceLoadout(progression);
+      expect(diceBefore.map((d) => d.id)).not.toContain("facet-die-soldier-1");
+
+      progression.unspentFacetPoints = 1;
+      investInFacet(progression, "facet:soldier");
+
+      const diceAfter = createPlayerCombatDiceLoadout(progression);
+      expect(diceAfter.map((d) => d.id)).toContain("facet-die-soldier-1");
+    });
   });
 
   it("records persistent face adjustments", () => {

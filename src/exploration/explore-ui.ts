@@ -24,6 +24,8 @@ import { listQuestEntries, type QuestLogEntry } from "../planning/quest-log";
 import { applyWorldSpecToExploreState } from "./world-generator";
 import {
   buildGeneratedFaceId,
+  canInvestInFacet,
+  investInFacet,
   recordAppendFaceCopy,
   recordFaceAdjustment,
   recordRemoveFace,
@@ -143,8 +145,8 @@ export type ExploreUiState = {
   isPlannerDebugOpen: boolean;
   playerProgression: PlayerProgressionState;
   xpBarRect: Rect;
-  isTalentTreeOpen: boolean;
-  selectedTalentId?: string;
+  isFacetScreenOpen: boolean;
+  selectedFacetId?: string;
   isCharacterSheetOpen: boolean;
   characterSheetButtonRect: Rect;
   isInventoryOpen: boolean;
@@ -180,11 +182,12 @@ export type ExploreUiState = {
   shopVisualDice: ShopVisualDie[];
 };
 
-type TalentTreeLayout = {
+type FacetScreenLayout = {
   panelRect: Rect;
-  talentRowRects: Array<{ talentId: string; rect: Rect }>;
-  confirmButtonRect: Rect;
-  cancelButtonRect: Rect;
+  soldierColumnRect: Rect;
+  berserkerColumnRect: Rect;
+  investButtonRect: Rect;
+  closeButtonRect: Rect;
 };
 
 function createPlannerPackage(seedIndex: number): {
@@ -257,31 +260,17 @@ function createXpBarRect(): Rect {
   };
 }
 
-function getTalentTreeLayout(uiState: ExploreUiState): TalentTreeLayout {
+function getFacetScreenLayout(uiState: ExploreUiState): FacetScreenLayout {
   const width = Math.min(620, Math.floor(uiState.width * 0.82));
   const height = Math.min(520, Math.floor(uiState.height * 0.86));
   const x = Math.floor((uiState.width - width) * 0.5);
   const y = Math.floor((uiState.height - height) * 0.5);
 
-  const talentRowRects: Array<{ talentId: string; rect: Rect }> = [];
-  let rowY = y + 88;
-  for (const talent of uiState.playerProgression.talents) {
-    if (rowY > y + height - 124) {
-      break;
-    }
-
-    talentRowRects.push({
-      talentId: talent.id,
-      rect: {
-        x: x + 20,
-        y: rowY,
-        width: width - 40,
-        height: 86,
-      },
-    });
-
-    rowY += 96;
-  }
+  const colPadding = 16;
+  const gap = 12;
+  const colWidth = Math.floor((width - colPadding * 2 - gap) / 2);
+  const colTop = y + 54;
+  const colHeight = height - 54 - 80;
 
   const buttonY = y + height - 80;
   const buttonWidth = 150;
@@ -289,14 +278,15 @@ function getTalentTreeLayout(uiState: ExploreUiState): TalentTreeLayout {
 
   return {
     panelRect: { x, y, width, height },
-    talentRowRects,
-    confirmButtonRect: {
+    soldierColumnRect: { x: x + colPadding, y: colTop, width: colWidth, height: colHeight },
+    berserkerColumnRect: { x: x + colPadding + colWidth + gap, y: colTop, width: colWidth, height: colHeight },
+    investButtonRect: {
       x: x + width - buttonWidth * 2 - 32,
       y: buttonY,
       width: buttonWidth,
       height: buttonHeight,
     },
-    cancelButtonRect: {
+    closeButtonRect: {
       x: x + width - buttonWidth - 20,
       y: buttonY,
       width: buttonWidth,
@@ -305,19 +295,12 @@ function getTalentTreeLayout(uiState: ExploreUiState): TalentTreeLayout {
   };
 }
 
-function canConfirmSelectedTalent(uiState: ExploreUiState): boolean {
-  if (!uiState.selectedTalentId || uiState.playerProgression.unspentTalentPoints <= 0) {
+function canInvestInSelectedFacet(uiState: ExploreUiState): boolean {
+  if (!uiState.selectedFacetId) {
     return false;
   }
 
-  const selected = uiState.playerProgression.talents.find(
-    (talent) => talent.id === uiState.selectedTalentId,
-  );
-  if (!selected) {
-    return false;
-  }
-
-  return selected.rank < selected.maxRank;
+  return canInvestInFacet(uiState.playerProgression, uiState.selectedFacetId);
 }
 
 function createInventoryButtonRect(): Rect {
@@ -959,8 +942,8 @@ function openCraftShop(uiState: ExploreUiState): void {
   uiState.isCraftShopOpen = true;
   uiState.isCharacterSheetOpen = false;
   uiState.isInventoryOpen = false;
-  uiState.isTalentTreeOpen = false;
-  uiState.selectedTalentId = undefined;
+  uiState.isFacetScreenOpen = false;
+  uiState.selectedFacetId = undefined;
   uiState.shopFocusedColumn = "craftsfolk";
   uiState.shopFocusedAction = "primary";
   uiState.shopAwaitingRemoveConfirm = false;
@@ -1391,8 +1374,8 @@ export function createExploreUiState(input?: number | CreateExploreUiStateOption
     isPlannerDebugOpen: false,
     playerProgression: options.playerProgression ?? createPlayerProgression(),
     xpBarRect: createXpBarRect(),
-    isTalentTreeOpen: false,
-    selectedTalentId: undefined,
+    isFacetScreenOpen: false,
+    selectedFacetId: undefined,
     isCharacterSheetOpen: false,
     characterSheetButtonRect: createCharacterSheetButtonRect(),
     isInventoryOpen: false,
@@ -1581,8 +1564,8 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     uiState.isCharacterSheetOpen = !uiState.isCharacterSheetOpen;
     if (uiState.isCharacterSheetOpen) {
       uiState.isInventoryOpen = false;
-      uiState.isTalentTreeOpen = false;
-      uiState.selectedTalentId = undefined;
+      uiState.isFacetScreenOpen = false;
+      uiState.selectedFacetId = undefined;
     }
     return true;
   }
@@ -1591,8 +1574,8 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     uiState.isInventoryOpen = !uiState.isInventoryOpen;
     if (uiState.isInventoryOpen) {
       uiState.isCharacterSheetOpen = false;
-      uiState.isTalentTreeOpen = false;
-      uiState.selectedTalentId = undefined;
+      uiState.isFacetScreenOpen = false;
+      uiState.selectedFacetId = undefined;
     }
     return true;
   }
@@ -1611,8 +1594,8 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     if (uiState.isQuestMenuOpen) {
       uiState.isCharacterSheetOpen = false;
       uiState.isInventoryOpen = false;
-      uiState.isTalentTreeOpen = false;
-      uiState.selectedTalentId = undefined;
+      uiState.isFacetScreenOpen = false;
+      uiState.selectedFacetId = undefined;
       uiState.isCraftShopOpen = false;
       ensureQuestSelection(uiState);
     }
@@ -1627,13 +1610,14 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
     return true;
   }
 
-  if (key === "escape" && (uiState.isCharacterSheetOpen || uiState.isInventoryOpen || uiState.isTalentTreeOpen)) {
+  if (key === "escape" && (uiState.isCharacterSheetOpen || uiState.isInventoryOpen || uiState.isFacetScreenOpen)) {
     uiState.isCharacterSheetOpen = false;
     uiState.isInventoryOpen = false;
-    uiState.isTalentTreeOpen = false;
-    uiState.selectedTalentId = undefined;
+    uiState.isFacetScreenOpen = false;
+    uiState.selectedFacetId = undefined;
     return true;
   }
+
 
   if (key === "escape" && uiState.isCraftShopOpen) {
     closeCraftShop(uiState);
@@ -1641,12 +1625,12 @@ export function onExploreKeyPressed(uiState: ExploreUiState, key: string): boole
   }
 
   if (key === "t") {
-    uiState.isTalentTreeOpen = !uiState.isTalentTreeOpen;
-    if (uiState.isTalentTreeOpen) {
+    uiState.isFacetScreenOpen = !uiState.isFacetScreenOpen;
+    if (uiState.isFacetScreenOpen) {
       uiState.isCharacterSheetOpen = false;
       uiState.isInventoryOpen = false;
     } else {
-      uiState.selectedTalentId = undefined;
+      uiState.selectedFacetId = undefined;
     }
     return true;
   }
@@ -1693,7 +1677,7 @@ export function onExploreMouseMoved(uiState: ExploreUiState, x: number, y: numbe
     return;
   }
 
-  if (uiState.isTalentTreeOpen) {
+  if (uiState.isFacetScreenOpen) {
     return;
   }
 
@@ -1846,41 +1830,33 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
 
   refreshLayoutIfNeeded(uiState);
 
-  if (uiState.isTalentTreeOpen) {
-    const layout = getTalentTreeLayout(uiState);
+  if (uiState.isFacetScreenOpen) {
+    const layout = getFacetScreenLayout(uiState);
 
-    if (isPointInRect(x, y, layout.cancelButtonRect)) {
-      uiState.selectedTalentId = undefined;
-      uiState.isTalentTreeOpen = false;
+    if (isPointInRect(x, y, layout.closeButtonRect)) {
+      uiState.selectedFacetId = undefined;
+      uiState.isFacetScreenOpen = false;
       return undefined;
     }
 
-    if (isPointInRect(x, y, layout.confirmButtonRect) && canConfirmSelectedTalent(uiState)) {
-      const selected = uiState.playerProgression.talents.find(
-        (talent) => talent.id === uiState.selectedTalentId,
-      );
-      if (selected && selected.rank < selected.maxRank) {
-        selected.rank += 1;
-        uiState.playerProgression.unspentTalentPoints = Math.max(
-          0,
-          uiState.playerProgression.unspentTalentPoints - 1,
-        );
-      }
-      uiState.selectedTalentId = undefined;
-      uiState.isTalentTreeOpen = false;
+    if (isPointInRect(x, y, layout.investButtonRect) && canInvestInSelectedFacet(uiState)) {
+      investInFacet(uiState.playerProgression, uiState.selectedFacetId!);
+      uiState.selectedFacetId = undefined;
+      uiState.isFacetScreenOpen = false;
       return undefined;
     }
 
-    for (const row of layout.talentRowRects) {
-      if (!isPointInRect(x, y, row.rect)) {
-        continue;
-      }
-
-      uiState.selectedTalentId = row.talentId;
+    if (isPointInRect(x, y, layout.soldierColumnRect)) {
+      uiState.selectedFacetId = "facet:soldier";
       return undefined;
     }
 
-    // Talent tree acts as a modal; swallow all clicks behind it.
+    if (isPointInRect(x, y, layout.berserkerColumnRect)) {
+      uiState.selectedFacetId = "facet:berserker";
+      return undefined;
+    }
+
+    // Facet screen acts as a modal; swallow all clicks behind it.
     return undefined;
   }
 
@@ -1914,8 +1890,8 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
     if (uiState.isQuestMenuOpen) {
       uiState.isCharacterSheetOpen = false;
       uiState.isInventoryOpen = false;
-      uiState.isTalentTreeOpen = false;
-      uiState.selectedTalentId = undefined;
+      uiState.isFacetScreenOpen = false;
+      uiState.selectedFacetId = undefined;
       uiState.isCraftShopOpen = false;
       ensureQuestSelection(uiState);
     }
@@ -1923,12 +1899,12 @@ export function onExploreMouseReleased(uiState: ExploreUiState, x: number, y: nu
   }
 
   if (isPointInRect(x, y, uiState.xpBarRect)) {
-    uiState.isTalentTreeOpen = !uiState.isTalentTreeOpen;
-    if (uiState.isTalentTreeOpen) {
+    uiState.isFacetScreenOpen = !uiState.isFacetScreenOpen;
+    if (uiState.isFacetScreenOpen) {
       uiState.isCharacterSheetOpen = false;
       uiState.isInventoryOpen = false;
     } else {
-      uiState.selectedTalentId = undefined;
+      uiState.selectedFacetId = undefined;
     }
     return undefined;
   }
@@ -2022,7 +1998,7 @@ function drawPlayerProgressHud(uiState: ExploreUiState): void {
   };
   const fillRatio = progression.xpToNextLevel > 0 ? progression.xp / progression.xpToNextLevel : 0;
   const canAdvanceTalents =
-    progression.unspentTalentPoints > 0 ||
+    progression.unspentFacetPoints > 0 ||
     (progression.xpToNextLevel > 0 && progression.xp >= progression.xpToNextLevel);
 
   if (canAdvanceTalents) {
@@ -2056,7 +2032,7 @@ function drawPlayerProgressHud(uiState: ExploreUiState): void {
   if (canAdvanceTalents) {
     love.graphics.setColor(0.97, 0.9, 0.52, 0.95);
     love.graphics.printf(
-      "Talent available: click XP bar (or press T)",
+      "Facet point available: click XP bar (or press T)",
       panelX + 10,
       panelY + panelHeight - 14,
       panelWidth - 20,
@@ -2437,13 +2413,113 @@ function drawQuestMenuOverlay(uiState: ExploreUiState): void {
   }
 }
 
-function drawTalentTreeOverlay(uiState: ExploreUiState): void {
-  if (!uiState.isTalentTreeOpen) {
+function drawFacetColumn(
+  uiState: ExploreUiState,
+  facet: { id: string; name: string; description: string; pointsInvested: number; maxPoints: number; abilities: Array<{ name: string; description: string; unlocked: boolean }> },
+  colRect: Rect,
+): void {
+  const isSelected = uiState.selectedFacetId === facet.id;
+  const colX = colRect.x;
+  const colY = colRect.y;
+  const colW = colRect.width;
+
+  // Column background
+  if (isSelected) {
+    love.graphics.setColor(0.18, 0.22, 0.14, 0.92);
+  } else {
+    love.graphics.setColor(0.13, 0.15, 0.22, 0.88);
+  }
+  love.graphics.rectangle("fill", colX, colY - 30, colW, colRect.height + 30, 8, 8);
+  if (isSelected) {
+    love.graphics.setColor(0.88, 0.78, 0.32, 0.9);
+  } else {
+    love.graphics.setColor(0.55, 0.62, 0.82, 0.7);
+  }
+  love.graphics.rectangle("line", colX, colY - 30, colW, colRect.height + 30, 8, 8);
+
+  // Facet name
+  love.graphics.setColor(0.98, 0.96, 0.88, 1);
+  love.graphics.printf(facet.name, colX + 10, colY - 24, colW - 20, "left", 0, 0.78, 0.78);
+
+  // Points progress
+  love.graphics.setColor(0.72, 0.82, 0.64, 0.9);
+  love.graphics.printf(
+    `${facet.pointsInvested}/${facet.maxPoints} pts`,
+    colX + 10,
+    colY - 24,
+    colW - 14,
+    "right",
+    0,
+    0.6,
+    0.6,
+  );
+
+  // Ability rows
+  const rowH = 34;
+  const rowGap = 4;
+  for (let i = 0; i < facet.abilities.length; i += 1) {
+    const ability = facet.abilities[i];
+    const rowY = colY + i * (rowH + rowGap);
+    if (rowY + rowH > colY + colRect.height) {
+      break;
+    }
+
+    const isNextUnlock = i === facet.pointsInvested;
+
+    if (ability.unlocked) {
+      love.graphics.setColor(0.14, 0.26, 0.18, 0.95);
+    } else if (isNextUnlock && isSelected) {
+      love.graphics.setColor(0.22, 0.24, 0.14, 0.9);
+    } else {
+      love.graphics.setColor(0.1, 0.12, 0.18, 0.85);
+    }
+    love.graphics.rectangle("fill", colX + 4, rowY, colW - 8, rowH, 5, 5);
+
+    if (ability.unlocked) {
+      love.graphics.setColor(0.52, 0.88, 0.62, 0.9);
+    } else if (isNextUnlock && isSelected) {
+      love.graphics.setColor(0.9, 0.8, 0.3, 0.85);
+    } else {
+      love.graphics.setColor(0.38, 0.44, 0.6, 0.6);
+    }
+    love.graphics.rectangle("line", colX + 4, rowY, colW - 8, rowH, 5, 5);
+
+    // Rank indicator
+    const rankLabel = ability.unlocked ? `✓` : `${i + 1}`;
+    if (ability.unlocked) {
+      love.graphics.setColor(0.52, 0.92, 0.64, 0.96);
+    } else {
+      love.graphics.setColor(0.56, 0.62, 0.8, 0.7);
+    }
+    love.graphics.printf(rankLabel, colX + 6, rowY + 10, 20, "left", 0, 0.56, 0.56);
+
+    // Ability name
+    if (ability.unlocked) {
+      love.graphics.setColor(0.88, 0.97, 0.9, 0.98);
+    } else if (isNextUnlock) {
+      love.graphics.setColor(0.96, 0.94, 0.78, 0.96);
+    } else {
+      love.graphics.setColor(0.62, 0.68, 0.8, 0.72);
+    }
+    love.graphics.printf(ability.name, colX + 26, rowY + 4, colW - 32, "left", 0, 0.6, 0.6);
+
+    // Ability description
+    if (ability.unlocked || isNextUnlock) {
+      love.graphics.setColor(0.68, 0.78, 0.9, 0.8);
+    } else {
+      love.graphics.setColor(0.44, 0.5, 0.64, 0.55);
+    }
+    love.graphics.printf(ability.description, colX + 26, rowY + 18, colW - 32, "left", 0, 0.5, 0.5);
+  }
+}
+
+function drawFacetScreenOverlay(uiState: ExploreUiState): void {
+  if (!uiState.isFacetScreenOpen) {
     return;
   }
 
   const progression = uiState.playerProgression;
-  const layout = getTalentTreeLayout(uiState);
+  const layout = getFacetScreenLayout(uiState);
   const x = layout.panelRect.x;
   const y = layout.panelRect.y;
   const width = layout.panelRect.width;
@@ -2458,138 +2534,48 @@ function drawTalentTreeOverlay(uiState: ExploreUiState): void {
   love.graphics.rectangle("line", x, y, width, height, 10, 10);
 
   love.graphics.setColor(0.98, 0.97, 0.92, 1);
-  love.graphics.printf("Talent Tree (Stub)", x + 20, y + 18, width - 40, "left", 0, 0.94, 0.94);
+  love.graphics.printf("Facets", x + 20, y + 14, width - 40, "left", 0, 0.94, 0.94);
 
   love.graphics.setColor(0.9, 0.88, 0.75, 0.96);
   love.graphics.printf(
-    `Unspent talent points: ${progression.unspentTalentPoints}`,
+    `Unspent facet points: ${progression.unspentFacetPoints}`,
     x + 20,
-    y + 52,
+    y + 14,
     width - 40,
-    "left",
+    "right",
     0,
     0.66,
     0.66,
   );
 
-  for (const row of layout.talentRowRects) {
-    const talent = progression.talents.find((entry) => entry.id === row.talentId);
-    if (!talent) {
-      continue;
-    }
+  const soldier = progression.facets.find((f) => f.id === "facet:soldier");
+  const berserker = progression.facets.find((f) => f.id === "facet:berserker");
 
-    const isSelected = uiState.selectedTalentId === talent.id;
-
-    if (isSelected) {
-      love.graphics.setColor(0.31, 0.32, 0.16, 0.95);
-    } else {
-      love.graphics.setColor(0.18, 0.2, 0.28, 0.95);
-    }
-    love.graphics.rectangle("fill", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 8, 8);
-
-    if (isSelected) {
-      love.graphics.setColor(0.95, 0.84, 0.36, 0.95);
-    } else {
-      love.graphics.setColor(0.74, 0.79, 0.9, 0.86);
-    }
-    love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 8, 8);
-
-    love.graphics.setColor(0.96, 0.97, 1, 0.98);
-    love.graphics.printf(talent.name, row.rect.x + 14, row.rect.y + 12, row.rect.width - 28, "left", 0, 0.72, 0.72);
-
-    love.graphics.setColor(0.76, 0.84, 0.97, 0.92);
-    love.graphics.printf(
-      `${talent.description}`,
-      row.rect.x + 14,
-      row.rect.y + 38,
-      row.rect.width - 28,
-      "left",
-      0,
-      0.56,
-      0.56,
-    );
-
-    love.graphics.setColor(0.89, 0.92, 0.98, 0.92);
-    love.graphics.printf(
-      `Rank ${talent.rank}/${talent.maxRank}`,
-      row.rect.x + row.rect.width - 140,
-      row.rect.y + 12,
-      120,
-      "right",
-      0,
-      0.56,
-      0.56,
-    );
+  if (soldier) {
+    drawFacetColumn(uiState, soldier, layout.soldierColumnRect);
+  }
+  if (berserker) {
+    drawFacetColumn(uiState, berserker, layout.berserkerColumnRect);
   }
 
-  const canConfirm = canConfirmSelectedTalent(uiState);
-  love.graphics.setColor(canConfirm ? 0.26 : 0.2, canConfirm ? 0.5 : 0.22, canConfirm ? 0.31 : 0.25, canConfirm ? 0.95 : 0.72);
-  love.graphics.rectangle(
-    "fill",
-    layout.confirmButtonRect.x,
-    layout.confirmButtonRect.y,
-    layout.confirmButtonRect.width,
-    layout.confirmButtonRect.height,
-    6,
-    6,
-  );
-  love.graphics.setColor(canConfirm ? 0.78 : 0.6, canConfirm ? 0.95 : 0.7, canConfirm ? 0.84 : 0.72, 0.95);
-  love.graphics.rectangle(
-    "line",
-    layout.confirmButtonRect.x,
-    layout.confirmButtonRect.y,
-    layout.confirmButtonRect.width,
-    layout.confirmButtonRect.height,
-    6,
-    6,
-  );
-  love.graphics.setColor(1, 1, 1, canConfirm ? 0.98 : 0.7);
-  love.graphics.printf(
-    "Confirm",
-    layout.confirmButtonRect.x,
-    layout.confirmButtonRect.y + 10,
-    layout.confirmButtonRect.width,
-    "center",
-    0,
-    0.62,
-    0.62,
-  );
+  const canInvest = canInvestInSelectedFacet(uiState);
+  love.graphics.setColor(canInvest ? 0.26 : 0.2, canInvest ? 0.5 : 0.22, canInvest ? 0.31 : 0.25, canInvest ? 0.95 : 0.72);
+  love.graphics.rectangle("fill", layout.investButtonRect.x, layout.investButtonRect.y, layout.investButtonRect.width, layout.investButtonRect.height, 6, 6);
+  love.graphics.setColor(canInvest ? 0.78 : 0.6, canInvest ? 0.95 : 0.7, canInvest ? 0.84 : 0.72, 0.95);
+  love.graphics.rectangle("line", layout.investButtonRect.x, layout.investButtonRect.y, layout.investButtonRect.width, layout.investButtonRect.height, 6, 6);
+  love.graphics.setColor(1, 1, 1, canInvest ? 0.98 : 0.7);
+  love.graphics.printf("Invest", layout.investButtonRect.x, layout.investButtonRect.y + 10, layout.investButtonRect.width, "center", 0, 0.62, 0.62);
 
   love.graphics.setColor(0.28, 0.22, 0.22, 0.9);
-  love.graphics.rectangle(
-    "fill",
-    layout.cancelButtonRect.x,
-    layout.cancelButtonRect.y,
-    layout.cancelButtonRect.width,
-    layout.cancelButtonRect.height,
-    6,
-    6,
-  );
+  love.graphics.rectangle("fill", layout.closeButtonRect.x, layout.closeButtonRect.y, layout.closeButtonRect.width, layout.closeButtonRect.height, 6, 6);
   love.graphics.setColor(0.9, 0.76, 0.76, 0.95);
-  love.graphics.rectangle(
-    "line",
-    layout.cancelButtonRect.x,
-    layout.cancelButtonRect.y,
-    layout.cancelButtonRect.width,
-    layout.cancelButtonRect.height,
-    6,
-    6,
-  );
+  love.graphics.rectangle("line", layout.closeButtonRect.x, layout.closeButtonRect.y, layout.closeButtonRect.width, layout.closeButtonRect.height, 6, 6);
   love.graphics.setColor(1, 1, 1, 0.96);
-  love.graphics.printf(
-    "Cancel",
-    layout.cancelButtonRect.x,
-    layout.cancelButtonRect.y + 10,
-    layout.cancelButtonRect.width,
-    "center",
-    0,
-    0.62,
-    0.62,
-  );
+  love.graphics.printf("Close", layout.closeButtonRect.x, layout.closeButtonRect.y + 10, layout.closeButtonRect.width, "center", 0, 0.62, 0.62);
 
   love.graphics.setColor(0.84, 0.87, 0.95, 0.9);
   love.graphics.printf(
-    "Select a talent row, then Confirm or Cancel. While open, this panel captures clicks.",
+    "Select a facet, then Invest to unlock the next ability.",
     x + 20,
     y + height - 38,
     width - 40,
@@ -3391,7 +3377,7 @@ export function drawExploreUi(uiState: ExploreUiState, visitCount: number): void
     drawPlannerDebugOverlay(uiState);
   }
 
-  drawTalentTreeOverlay(uiState);
+  drawFacetScreenOverlay(uiState);
   drawCharacterSheetOverlay(uiState);
   drawInventoryOverlay(uiState);
   drawCraftShopOverlay(uiState);
