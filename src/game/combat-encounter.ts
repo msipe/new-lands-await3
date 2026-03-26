@@ -301,8 +301,16 @@ function applyCombatEvent(state: CombatEncounterState, event: CombatEvent): void
   }
 
   if (event.effect === EffectType.Armor) {
-    recipient.armor = Math.max(0, recipient.armor + Math.max(0, Math.floor(event.value)));
-    state.combatLog.push(`${recipientLabel} gains ${Math.max(0, Math.floor(event.value))} armor.`);
+    if (event.meta?.stripAllArmor === true) {
+      const stripped = recipient.armor;
+      recipient.armor = 0;
+      if (stripped > 0) {
+        state.combatLog.push(`${recipientLabel} loses ${stripped} armor.`);
+      }
+    } else {
+      recipient.armor = Math.max(0, recipient.armor + Math.max(0, Math.floor(event.value)));
+      state.combatLog.push(`${recipientLabel} gains ${Math.max(0, Math.floor(event.value))} armor.`);
+    }
     return;
   }
 

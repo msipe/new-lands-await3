@@ -165,8 +165,8 @@ describe("player progression", () => {
       expect(progression.unspentFacetPoints).toBe(0);
       const soldier = progression.facets.find((f) => f.id === "facet:soldier")!;
       expect(soldier.pointsInvested).toBe(1);
-      expect(soldier.abilities[0].unlocked).toBe(true);
-      expect(soldier.abilities[1].unlocked).toBe(false);
+      expect(soldier.tiers[0].abilities[0].unlocked).toBe(true);
+      expect(soldier.tiers[1].abilities[0].unlocked).toBe(false);
       expect(progression.unlockedFacetDieIds).toEqual(["facet-die-soldier-1"]);
     });
 
@@ -194,9 +194,11 @@ describe("player progression", () => {
     it("investInFacet returns false once a facet is full", () => {
       const progression = createPlayerProgression();
       const soldier = progression.facets.find((f) => f.id === "facet:soldier")!;
-      soldier.pointsInvested = soldier.maxPoints;
-      for (const ability of soldier.abilities) {
-        ability.unlocked = true;
+      soldier.pointsInvested = soldier.tiers.length;
+      for (const tier of soldier.tiers) {
+        for (const ability of tier.abilities) {
+          ability.unlocked = true;
+        }
       }
 
       progression.unspentFacetPoints = 1;

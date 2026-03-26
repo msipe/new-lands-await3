@@ -65,7 +65,7 @@ describe("facet-ui", () => {
     const result = onFacetMouseReleased(uiState, 392 + 80, 548 + 20, 1);
     expect(result).toBeUndefined(); // stays on screen
     expect(progression.facets[0].pointsInvested).toBe(1);
-    expect(progression.facets[0].abilities[0].unlocked).toBe(true);
+    expect(progression.facets[0].tiers[0].abilities[0].unlocked).toBe(true);
     expect(progression.unspentFacetPoints).toBe(0);
     expect(uiState.selectedFacetId).toBeUndefined(); // deselected after invest
   });

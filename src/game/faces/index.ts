@@ -28,3 +28,4 @@ export { FocusUp } from "./abilities/FocusUp";
 export { RestorationCharm } from "./items/RestorationCharm";
 
 export { ScalingStrike } from "./misc/ScalingStrike";
+export { HeedlessAssault } from "./abilities/HeedlessAssault";

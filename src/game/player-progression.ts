@@ -41,13 +41,19 @@ export type FacetAbility = {
   unlocked: boolean;
 };
 
+export type FacetTier = {
+  level: number;
+  name: string;
+  description: string;
+  abilities: FacetAbility[];
+};
+
 export type FacetTree = {
   id: string;
   name: string;
   description: string;
   pointsInvested: number;
-  maxPoints: number;
-  abilities: FacetAbility[];
+  tiers: FacetTier[];
 };
 
 export type LevelUpResult = {
@@ -108,18 +114,17 @@ export function createPlayerProgression(): PlayerProgressionState {
         name: "Soldier",
         description: "A disciplined warrior who endures punishment and commands the battlefield.",
         pointsInvested: 0,
-        maxPoints: 10,
-        abilities: [
-          { id: "facet:soldier:1",  dieId: "facet-die-soldier-1",  name: "Shield Bash",    description: "Deal 2 damage to opponent.",              unlocked: false },
-          { id: "facet:soldier:2",  dieId: "facet-die-soldier-2",  name: "Iron Guard",     description: "Gain 3 armor.",                           unlocked: false },
-          { id: "facet:soldier:3",  dieId: "facet-die-soldier-3",  name: "Warcry I",       description: "Attacks deal +1 damage this turn.",        unlocked: false },
-          { id: "facet:soldier:4",  dieId: "facet-die-soldier-4",  name: "Shield Wall",    description: "Gain 5 armor.",                           unlocked: false },
-          { id: "facet:soldier:5",  dieId: "facet-die-soldier-5",  name: "Battle Strike",  description: "Deal 3 damage to opponent.",              unlocked: false },
-          { id: "facet:soldier:6",  dieId: "facet-die-soldier-6",  name: "Warcry II",      description: "Attacks deal +2 damage this turn.",        unlocked: false },
-          { id: "facet:soldier:7",  dieId: "facet-die-soldier-7",  name: "Minor Mend",     description: "Heal 2 HP.",                              unlocked: false },
-          { id: "facet:soldier:8",  dieId: "facet-die-soldier-8",  name: "Bulwark",        description: "Gain 6 armor.",                           unlocked: false },
-          { id: "facet:soldier:9",  dieId: "facet-die-soldier-9",  name: "Crushing Blow",  description: "Deal 5 damage to opponent.",              unlocked: false },
-          { id: "facet:soldier:10", dieId: "facet-die-soldier-10", name: "Warcry III",     description: "Attacks deal +3 damage this turn.",        unlocked: false },
+        tiers: [
+          { level: 1,  name: "", description: "", abilities: [{ id: "facet:soldier:1",  dieId: "facet-die-soldier-1",  name: "Shield Bash",    description: "Deal 2 damage to opponent.",             unlocked: false }] },
+          { level: 2,  name: "", description: "", abilities: [{ id: "facet:soldier:2",  dieId: "facet-die-soldier-2",  name: "Iron Guard",     description: "Gain 3 armor.",                          unlocked: false }] },
+          { level: 3,  name: "", description: "", abilities: [{ id: "facet:soldier:3",  dieId: "facet-die-soldier-3",  name: "Warcry I",       description: "Attacks deal +1 damage this turn.",       unlocked: false }] },
+          { level: 4,  name: "", description: "", abilities: [{ id: "facet:soldier:4",  dieId: "facet-die-soldier-4",  name: "Shield Wall",    description: "Gain 5 armor.",                          unlocked: false }] },
+          { level: 5,  name: "", description: "", abilities: [{ id: "facet:soldier:5",  dieId: "facet-die-soldier-5",  name: "Battle Strike",  description: "Deal 3 damage to opponent.",             unlocked: false }] },
+          { level: 6,  name: "", description: "", abilities: [{ id: "facet:soldier:6",  dieId: "facet-die-soldier-6",  name: "Warcry II",      description: "Attacks deal +2 damage this turn.",       unlocked: false }] },
+          { level: 7,  name: "", description: "", abilities: [{ id: "facet:soldier:7",  dieId: "facet-die-soldier-7",  name: "Minor Mend",     description: "Heal 2 HP.",                             unlocked: false }] },
+          { level: 8,  name: "", description: "", abilities: [{ id: "facet:soldier:8",  dieId: "facet-die-soldier-8",  name: "Bulwark",        description: "Gain 6 armor.",                          unlocked: false }] },
+          { level: 9,  name: "", description: "", abilities: [{ id: "facet:soldier:9",  dieId: "facet-die-soldier-9",  name: "Crushing Blow",  description: "Deal 5 damage to opponent.",             unlocked: false }] },
+          { level: 10, name: "", description: "", abilities: [{ id: "facet:soldier:10", dieId: "facet-die-soldier-10", name: "Warcry III",     description: "Attacks deal +3 damage this turn.",       unlocked: false }] },
         ],
       },
       {
@@ -127,18 +132,18 @@ export function createPlayerProgression(): PlayerProgressionState {
         name: "Berserker",
         description: "A reckless aggressor who overwhelms enemies with raw force and unpredictability.",
         pointsInvested: 0,
-        maxPoints: 10,
-        abilities: [
-          { id: "facet:berserker:1",  dieId: "facet-die-berserker-1",  name: "Wild Strike I",      description: "Trigger an extra weapon attack.",              unlocked: false },
-          { id: "facet:berserker:2",  dieId: "facet-die-berserker-2",  name: "Reckless Slash",     description: "Deal 3 damage — risky but powerful.",          unlocked: false },
-          { id: "facet:berserker:3",  dieId: "facet-die-berserker-3",  name: "Wild Strike II",     description: "Trigger extra weapon attack with +2 bonus.",   unlocked: false },
-          { id: "facet:berserker:4",  dieId: "facet-die-berserker-4",  name: "Arcane Burst",       description: "Deal 3 magic damage to opponent.",             unlocked: false },
-          { id: "facet:berserker:5",  dieId: "facet-die-berserker-5",  name: "Frenzy",             description: "Deal 4 damage to opponent.",                   unlocked: false },
-          { id: "facet:berserker:6",  dieId: "facet-die-berserker-6",  name: "Focus Up",           description: "Manipulate the outcome of your next roll.",     unlocked: false },
-          { id: "facet:berserker:7",  dieId: "facet-die-berserker-7",  name: "Wild Storm",         description: "Trigger extra weapon attack with +3 bonus.",   unlocked: false },
-          { id: "facet:berserker:8",  dieId: "facet-die-berserker-8",  name: "Scaling Strike",     description: "Deal damage that grows every 5 rolls.",         unlocked: false },
-          { id: "facet:berserker:9",  dieId: "facet-die-berserker-9",  name: "Rampage",            description: "Deal 5 damage to opponent.",                   unlocked: false },
-          { id: "facet:berserker:10", dieId: "facet-die-berserker-10", name: "Berserker Warcry",   description: "Attacks deal +4 damage this turn.",             unlocked: false },
+        tiers: [
+          { level: 1,  name: "", description: "", abilities: [{ id: "facet:berserker:1",  dieId: "facet-die-berserker-1",  name: "Wild Strike I",    description: "Trigger an extra weapon attack.",                        unlocked: false }] },
+          { level: 2,  name: "", description: "", abilities: [{ id: "facet:berserker:2",  dieId: "facet-die-berserker-2",  name: "Reckless Slash",   description: "Deal 3 damage — risky but powerful.",                    unlocked: false }] },
+          { level: 3,  name: "", description: "", abilities: [{ id: "facet:berserker:3",  dieId: "facet-die-berserker-3",  name: "Wild Strike II",   description: "Trigger extra weapon attack with +2 bonus.",             unlocked: false }] },
+          { level: 4,  name: "", description: "", abilities: [{ id: "facet:berserker:4",  dieId: "facet-die-berserker-4",  name: "Arcane Burst",     description: "Deal 3 magic damage to opponent.",                       unlocked: false }] },
+          { level: 5,  name: "", description: "", abilities: [{ id: "facet:berserker:5",  dieId: "facet-die-berserker-5",  name: "Frenzy",           description: "Deal 4 damage to opponent.",                             unlocked: false }] },
+          { level: 6,  name: "", description: "", abilities: [{ id: "facet:berserker:6",  dieId: "facet-die-berserker-6",  name: "Focus Up",         description: "Manipulate the outcome of your next roll.",               unlocked: false }] },
+          { level: 7,  name: "", description: "", abilities: [{ id: "facet:berserker:7",  dieId: "facet-die-berserker-7",  name: "Wild Storm",       description: "Trigger extra weapon attack with +3 bonus.",             unlocked: false }] },
+          { level: 8,  name: "", description: "", abilities: [{ id: "facet:berserker:8",  dieId: "facet-die-berserker-8",  name: "Scaling Strike",   description: "Deal damage that grows every 5 rolls.",                  unlocked: false }] },
+          { level: 9,  name: "", description: "", abilities: [{ id: "facet:berserker:9",  dieId: "facet-die-berserker-9",  name: "Rampage",          description: "Deal 5 damage to opponent.",                             unlocked: false }] },
+          { level: 10, name: "", description: "", abilities: [{ id: "facet:berserker:10", dieId: "facet-die-berserker-10", name: "Berserker Warcry", description: "Attacks deal +4 damage this turn.",                      unlocked: false }] },
+          { level: 11, name: "", description: "", abilities: [{ id: "facet:berserker:11", dieId: "facet-die-berserker-11", name: "Heedless Assault", description: "Lose all armor, attack with both weapons for bonus dmg.", unlocked: false }] },
         ],
       },
     ],
@@ -296,7 +301,7 @@ export function canInvestInFacet(state: PlayerProgressionState, facetId: string)
     return false;
   }
 
-  return facet.pointsInvested < facet.maxPoints;
+  return facet.pointsInvested < facet.tiers.length;
 }
 
 export function investInFacet(state: PlayerProgressionState, facetId: string): boolean {
@@ -305,14 +310,16 @@ export function investInFacet(state: PlayerProgressionState, facetId: string): b
   }
 
   const facet = state.facets.find((f) => f.id === facetId)!;
-  const nextAbility = facet.abilities[facet.pointsInvested];
-  if (!nextAbility) {
+  const nextTier = facet.tiers[facet.pointsInvested];
+  if (!nextTier) {
     return false;
   }
 
-  nextAbility.unlocked = true;
+  for (const ability of nextTier.abilities) {
+    ability.unlocked = true;
+    state.unlockedFacetDieIds.push(ability.dieId);
+  }
   facet.pointsInvested += 1;
   state.unspentFacetPoints = Math.max(0, state.unspentFacetPoints - 1);
-  state.unlockedFacetDieIds.push(nextAbility.dieId);
   return true;
 }

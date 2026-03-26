@@ -80,7 +80,7 @@ local function drawFacetColumn(self, uiState, facet, colRect)
     )
     love.graphics.setColor(0.72, 0.82, 0.64, 0.9)
     love.graphics.printf(
-        ((tostring(facet.pointsInvested) .. "/") .. tostring(facet.maxPoints)) .. " pts",
+        ((tostring(facet.pointsInvested) .. "/") .. tostring(#facet.tiers)) .. " pts",
         colX + 12,
         colY - 27,
         colW - 16,
@@ -91,109 +91,113 @@ local function drawFacetColumn(self, uiState, facet, colRect)
     )
     local rowH = 36
     local rowGap = 5
+    local rowIndex = 0
     do
-        local i = 0
-        while i < #facet.abilities do
-            local ability = facet.abilities[i + 1]
-            local rowY = colY + i * (rowH + rowGap)
-            if rowY + rowH > colY + colH then
-                break
-            end
-            local isNextUnlock = i == facet.pointsInvested
-            local isHighlighted = isNextUnlock and isSelected
-            if ability.unlocked then
-                love.graphics.setColor(0.14, 0.26, 0.18, 0.95)
-            elseif isHighlighted then
-                love.graphics.setColor(0.18, 0.2, 0.12, 0.92)
-            else
-                love.graphics.setColor(0.1, 0.12, 0.18, 0.85)
-            end
-            love.graphics.rectangle(
-                "fill",
-                colX + 4,
-                rowY,
-                colW - 8,
-                rowH,
-                5,
-                5
-            )
-            if ability.unlocked then
-                love.graphics.setColor(0.52, 0.88, 0.62, 0.7)
-            elseif isHighlighted then
-                love.graphics.setColor(0.9, 0.8, 0.3, 0.8)
-            else
-                love.graphics.setColor(0.38, 0.44, 0.6, 0.35)
-            end
-            love.graphics.rectangle(
-                "line",
-                colX + 4,
-                rowY,
-                colW - 8,
-                rowH,
-                5,
-                5
-            )
-            if isHighlighted then
-                love.graphics.setColor(0.95, 0.82, 0.28, 1)
+        local tierIndex = 0
+        while tierIndex < #facet.tiers do
+            local tier = facet.tiers[tierIndex + 1]
+            local isNextUnlock = tierIndex == facet.pointsInvested
+            for ____, ability in ipairs(tier.abilities) do
+                local rowY = colY + rowIndex * (rowH + rowGap)
+                if rowY + rowH > colY + colH then
+                    break
+                end
+                local isHighlighted = isNextUnlock and isSelected
+                if ability.unlocked then
+                    love.graphics.setColor(0.14, 0.26, 0.18, 0.95)
+                elseif isHighlighted then
+                    love.graphics.setColor(0.18, 0.2, 0.12, 0.92)
+                else
+                    love.graphics.setColor(0.1, 0.12, 0.18, 0.85)
+                end
                 love.graphics.rectangle(
                     "fill",
                     colX + 4,
-                    rowY + 2,
-                    3,
-                    rowH - 4,
-                    2,
-                    2
+                    rowY,
+                    colW - 8,
+                    rowH,
+                    5,
+                    5
                 )
+                if ability.unlocked then
+                    love.graphics.setColor(0.52, 0.88, 0.62, 0.7)
+                elseif isHighlighted then
+                    love.graphics.setColor(0.9, 0.8, 0.3, 0.8)
+                else
+                    love.graphics.setColor(0.38, 0.44, 0.6, 0.35)
+                end
+                love.graphics.rectangle(
+                    "line",
+                    colX + 4,
+                    rowY,
+                    colW - 8,
+                    rowH,
+                    5,
+                    5
+                )
+                if isHighlighted then
+                    love.graphics.setColor(0.95, 0.82, 0.28, 1)
+                    love.graphics.rectangle(
+                        "fill",
+                        colX + 4,
+                        rowY + 2,
+                        3,
+                        rowH - 4,
+                        2,
+                        2
+                    )
+                end
+                local rankLabel = ability.unlocked and "✓" or tostring(tierIndex + 1)
+                if ability.unlocked then
+                    love.graphics.setColor(0.52, 0.92, 0.64, 0.96)
+                else
+                    love.graphics.setColor(0.56, 0.62, 0.8, 0.7)
+                end
+                love.graphics.printf(
+                    rankLabel,
+                    colX + 8,
+                    rowY + 12,
+                    20,
+                    "left",
+                    0,
+                    0.58,
+                    0.58
+                )
+                if ability.unlocked then
+                    love.graphics.setColor(0.88, 0.97, 0.9, 0.98)
+                elseif isNextUnlock then
+                    love.graphics.setColor(0.96, 0.94, 0.78, 0.96)
+                else
+                    love.graphics.setColor(0.62, 0.68, 0.8, 0.72)
+                end
+                love.graphics.printf(
+                    ability.name,
+                    colX + 28,
+                    rowY + 5,
+                    colW - 36,
+                    "left",
+                    0,
+                    0.68,
+                    0.68
+                )
+                if ability.unlocked or isNextUnlock then
+                    love.graphics.setColor(0.68, 0.78, 0.9, 0.8)
+                else
+                    love.graphics.setColor(0.44, 0.5, 0.64, 0.5)
+                end
+                love.graphics.printf(
+                    ability.description,
+                    colX + 28,
+                    rowY + 21,
+                    colW - 36,
+                    "left",
+                    0,
+                    0.58,
+                    0.58
+                )
+                rowIndex = rowIndex + 1
             end
-            local rankLabel = ability.unlocked and "✓" or tostring(i + 1)
-            if ability.unlocked then
-                love.graphics.setColor(0.52, 0.92, 0.64, 0.96)
-            else
-                love.graphics.setColor(0.56, 0.62, 0.8, 0.7)
-            end
-            love.graphics.printf(
-                rankLabel,
-                colX + 8,
-                rowY + 12,
-                20,
-                "left",
-                0,
-                0.58,
-                0.58
-            )
-            if ability.unlocked then
-                love.graphics.setColor(0.88, 0.97, 0.9, 0.98)
-            elseif isNextUnlock then
-                love.graphics.setColor(0.96, 0.94, 0.78, 0.96)
-            else
-                love.graphics.setColor(0.62, 0.68, 0.8, 0.72)
-            end
-            love.graphics.printf(
-                ability.name,
-                colX + 28,
-                rowY + 5,
-                colW - 36,
-                "left",
-                0,
-                0.68,
-                0.68
-            )
-            if ability.unlocked or isNextUnlock then
-                love.graphics.setColor(0.68, 0.78, 0.9, 0.8)
-            else
-                love.graphics.setColor(0.44, 0.5, 0.64, 0.5)
-            end
-            love.graphics.printf(
-                ability.description,
-                colX + 28,
-                rowY + 21,
-                colW - 36,
-                "left",
-                0,
-                0.58,
-                0.58
-            )
-            i = i + 1
+            tierIndex = tierIndex + 1
         end
     end
 end

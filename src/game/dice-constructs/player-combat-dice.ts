@@ -7,7 +7,7 @@ import {
 } from "../face-adjustments";
 import type { PlayerProgressionState } from "../player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "../player-items";
-import { DealDamage, FocusUp, HealSelf, Ironhide, Miss, ScalingStrike, WildStrike, Warcry } from "../faces";
+import { DealDamage, FocusUp, HealSelf, HeedlessAssault, Ironhide, Miss, ScalingStrike, WildStrike, Warcry } from "../faces";
 
 function createWarcryDie(): Die {
   return new Die({
@@ -153,6 +153,10 @@ const FACET_ABILITY_DIE_FACTORIES: Partial<Record<string, (instanceId: string) =
   "facet-die-berserker-10": (id) => new Die({
     id, typeId: "facet-die-berserker-10", name: "Berserker Warcry Die", energyCost: 2,
     sides: [new Warcry("fdb10-s1", 5), new Warcry("fdb10-s2", 5), new Warcry("fdb10-s3", 4), new Warcry("fdb10-s4", 4), new Warcry("fdb10-s5", 3), new Warcry("fdb10-s6", 2)],
+  }),
+  "facet-die-berserker-11": (id) => new Die({
+    id, typeId: "facet-die-berserker-11", name: "Heedless Assault Die", energyCost: 1,
+    sides: [new Miss("fdb11-s1"), new Miss("fdb11-s2"), new Miss("fdb11-s3"), new HeedlessAssault("fdb11-s4", 1), new HeedlessAssault("fdb11-s5", 2), new HeedlessAssault("fdb11-s6", 3)],
   }),
 };
 

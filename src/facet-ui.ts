@@ -88,7 +88,7 @@ function drawFacetColumn(
   // Points progress
   love.graphics.setColor(0.72, 0.82, 0.64, 0.9);
   love.graphics.printf(
-    `${facet.pointsInvested}/${facet.maxPoints} pts`,
+    `${facet.pointsInvested}/${facet.tiers.length} pts`,
     colX + 12,
     colY - 27,
     colW - 16,
@@ -101,12 +101,14 @@ function drawFacetColumn(
   // Ability rows
   const rowH = 36;
   const rowGap = 5;
-  for (let i = 0; i < facet.abilities.length; i += 1) {
-    const ability = facet.abilities[i];
-    const rowY = colY + i * (rowH + rowGap);
+  let rowIndex = 0;
+  for (let tierIndex = 0; tierIndex < facet.tiers.length; tierIndex += 1) {
+    const tier = facet.tiers[tierIndex];
+    const isNextUnlock = tierIndex === facet.pointsInvested;
+    for (const ability of tier.abilities) {
+    const rowY = colY + rowIndex * (rowH + rowGap);
     if (rowY + rowH > colY + colH) break;
 
-    const isNextUnlock = i === facet.pointsInvested;
     const isHighlighted = isNextUnlock && isSelected;
 
     // Row background
@@ -136,7 +138,7 @@ function drawFacetColumn(
     }
 
     // Rank indicator
-    const rankLabel = ability.unlocked ? `✓` : `${i + 1}`;
+    const rankLabel = ability.unlocked ? `✓` : `${tierIndex + 1}`;
     if (ability.unlocked) {
       love.graphics.setColor(0.52, 0.92, 0.64, 0.96);
     } else {
@@ -161,6 +163,9 @@ function drawFacetColumn(
       love.graphics.setColor(0.44, 0.5, 0.64, 0.5);
     }
     love.graphics.printf(ability.description, colX + 28, rowY + 21, colW - 36, "left", 0, 0.58, 0.58);
+
+    rowIndex += 1;
+    }
   }
 }
 
