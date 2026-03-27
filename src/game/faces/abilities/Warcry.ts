@@ -25,8 +25,8 @@ export class Warcry extends Face {
 
   private attackModifier: number;
 
-  constructor(id: string, attackModifier: number) {
-    super(id, "Warcry", "abilities");
+  constructor(attackModifier: number) {
+    super("Warcry", "abilities");
     this.attackModifier = Math.floor(attackModifier);
   }
 
@@ -39,7 +39,9 @@ export class Warcry extends Face {
   }
 
   cloneWithId(newId: string): Warcry {
-    return new Warcry(newId, this.attackModifier);
+    const c = new Warcry(this.attackModifier);
+    c.id = newId;
+    return c;
   }
 
   applyUpgrade(upgrade: FaceUpgrade): boolean {

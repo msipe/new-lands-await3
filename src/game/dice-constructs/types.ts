@@ -5,7 +5,7 @@ export type DieConstructMetadata = {
   notes?: string;
 };
 
-export type DieSideBuilder = (sideId: string) => DieSide;
+export type DieSideBuilder = () => DieSide;
 
 export type DieConstruct = {
   id: string;

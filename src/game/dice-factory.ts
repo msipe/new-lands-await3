@@ -19,6 +19,6 @@ export function createDieFromConstruct(input: CreateDieFromConstructInput): Die 
     singleUse: input.singleUse,
     fleeting: input.fleeting,
     tint: construct.tint,
-    sides: construct.sideBuilders.map((buildSide, sideIndex) => buildSide(`${dieId}-side-${sideIndex + 1}`)),
+    sides: construct.sideBuilders.map((buildSide) => buildSide()),
   });
 }

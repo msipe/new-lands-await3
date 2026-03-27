@@ -3,7 +3,7 @@ import { MinorMend } from "../../../../src/game/faces";
 
 describe("MinorMend", () => {
   it("heals self for 1", () => {
-    const face = new MinorMend("minor-mend-face");
+    const face = new MinorMend();
 
     const event = face.resolve({
       source: "player",

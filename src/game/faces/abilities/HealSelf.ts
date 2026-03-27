@@ -19,8 +19,8 @@ export class HealSelf extends Face {
 
   private heal: number;
 
-  constructor(id: string, label: string, heal: number) {
-    super(id, label, "abilities");
+  constructor(label: string, heal: number) {
+    super(label, "abilities");
     this.heal = heal;
   }
 
@@ -51,7 +51,9 @@ export class HealSelf extends Face {
   }
 
   cloneWithId(newId: string): HealSelf {
-    return new HealSelf(newId, this.getBaseLabel(), this.heal);
+    const c = new HealSelf(this.getBaseLabel(), this.heal);
+    c.id = newId;
+    return c;
   }
 
   private getHealPointValue(): number {

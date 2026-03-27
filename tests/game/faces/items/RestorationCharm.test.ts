@@ -3,7 +3,7 @@ import { RestorationCharm } from "../../../../src/game/faces";
 
 describe("RestorationCharm", () => {
   it("heals self for 2", () => {
-    const face = new RestorationCharm("restoration-charm-face");
+    const face = new RestorationCharm();
 
     const event = face.resolve({
       source: "player",

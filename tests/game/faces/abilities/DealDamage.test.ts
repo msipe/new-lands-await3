@@ -3,7 +3,7 @@ import { FaceAdjustmentModalityType } from "../../../../src/game/faces/FaceAdjus
 
 describe("DealDamage", () => {
   it("reports point value metadata for damage property", () => {
-    const face = new DealDamage("deal-damage-face", "Strike", 3);
+    const face = new DealDamage("Strike", 3);
 
     const damageProperty = face.getAdjustmentProperties().find((entry) => entry.id === "damage");
     expect(damageProperty?.value).toBe(3);
@@ -20,7 +20,7 @@ describe("DealDamage", () => {
   });
 
   it("updates point value after improve/reduce adjustments", () => {
-    const face = new DealDamage("deal-damage-face", "Strike", 2);
+    const face = new DealDamage("Strike", 2);
 
     const improved = face.applyAdjustment({
       propertyId: "damage",
@@ -46,7 +46,7 @@ describe("DealDamage", () => {
   });
 
   it("exposes power based on damage value", () => {
-    const face = new DealDamage("deal-damage-power", "Strike", 2);
+    const face = new DealDamage("Strike", 2);
 
     expect(face.power).toBe(2);
 

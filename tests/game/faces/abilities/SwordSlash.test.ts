@@ -3,7 +3,7 @@ import { SwordSlash } from "../../../../src/game/faces";
 
 describe("SwordSlash", () => {
   it("deals 1 damage to opponent", () => {
-    const face = new SwordSlash("sword-slash-face");
+    const face = new SwordSlash();
 
     const event = face.resolve({
       source: "player",

@@ -19,8 +19,8 @@ export class ArmorGain extends Face {
 
   private armorGain: number;
 
-  constructor(id: string, label: string, armorGain: number) {
-    super(id, label, "abilities");
+  constructor(label: string, armorGain: number) {
+    super(label, "abilities");
     this.armorGain = Math.max(0, Math.floor(armorGain));
   }
 
@@ -46,7 +46,9 @@ export class ArmorGain extends Face {
   }
 
   cloneWithId(newId: string): ArmorGain {
-    return new ArmorGain(newId, this.getBaseLabel(), this.armorGain);
+    const c = new ArmorGain(this.getBaseLabel(), this.armorGain);
+    c.id = newId;
+    return c;
   }
 
   private getArmorPointValue(): number {

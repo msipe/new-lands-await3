@@ -19,8 +19,8 @@ export class DealDamage extends Face {
 
   private damage: number;
 
-  constructor(id: string, label: string, damage: number) {
-    super(id, label, "abilities");
+  constructor(label: string, damage: number) {
+    super(label, "abilities");
     this.damage = damage;
   }
 
@@ -55,7 +55,9 @@ export class DealDamage extends Face {
   }
 
   cloneWithId(newId: string): DealDamage {
-    return new DealDamage(newId, this.getBaseLabel(), this.damage);
+    const c = new DealDamage(this.getBaseLabel(), this.damage);
+    c.id = newId;
+    return c;
   }
 
   protected getDamageValue(): number {

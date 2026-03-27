@@ -90,6 +90,9 @@ export class Die {
     this.typeId = input.typeId;
     this.name = input.name;
     this.sides = [...input.sides];
+    this.sides.forEach((side, index) => {
+      side.id = `${this.id}-side-${index + 1}`;
+    });
     this.energyCost = Math.max(0, Math.floor(input.energyCost ?? 1));
     this.singleUse = input.singleUse ?? false;
     this.fleeting = input.fleeting ?? false;

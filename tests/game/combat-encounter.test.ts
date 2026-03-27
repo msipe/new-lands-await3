@@ -116,12 +116,12 @@ describe("combat encounter", () => {
       id: "test-power-die",
       name: "Power Test Die",
       sides: [
-        new DealDamage("side-a", "A", 3),
-        new DealDamage("side-b", "B", 3),
-        new DealDamage("side-c", "C", 1),
-        new DealDamage("side-d", "D", 1),
-        new DealDamage("side-e", "E", 1),
-        new DealDamage("side-f", "F", 1),
+        new DealDamage("A", 3),
+        new DealDamage("B", 3),
+        new DealDamage("C", 1),
+        new DealDamage("D", 1),
+        new DealDamage("E", 1),
+        new DealDamage("F", 1),
       ],
       energyCost: 1,
     });
@@ -143,18 +143,18 @@ describe("combat encounter", () => {
   });
 
   it("keeps critical tags and ordering fixed after combat starts", () => {
-    const strongest = new DealDamage("stable-side-strong", "Strong", 3);
-    const weakest = new DealDamage("stable-side-weak", "Weak", 1);
+    const strongest = new DealDamage("Strong", 3);
+    const weakest = new DealDamage("Weak", 1);
     const customDie = new Die({
       id: "stable-power-die",
       name: "Stable Power Die",
       sides: [
         strongest,
         weakest,
-        new DealDamage("stable-side-3", "Side 3", 1),
-        new DealDamage("stable-side-4", "Side 4", 1),
-        new DealDamage("stable-side-5", "Side 5", 1),
-        new DealDamage("stable-side-6", "Side 6", 1),
+        new DealDamage("Side 3", 1),
+        new DealDamage("Side 4", 1),
+        new DealDamage("Side 5", 1),
+        new DealDamage("Side 6", 1),
       ],
       energyCost: 1,
     });
@@ -165,7 +165,7 @@ describe("combat encounter", () => {
     });
 
     const before = state.diePowerById["stable-power-die"];
-    expect(before?.orderedFaces[0]?.sideId).toBe("stable-side-strong");
+    expect(before?.orderedFaces[0]?.sideId).toBe("stable-power-die-side-1");
 
     // Mutate live face values after encounter start; snapshot should remain immutable.
     strongest.applyAdjustment({
@@ -181,7 +181,7 @@ describe("combat encounter", () => {
 
     const after = state.diePowerById["stable-power-die"];
     expect(after).toEqual(before);
-    expect(after?.orderedFaces[0]?.sideId).toBe("stable-side-strong");
+    expect(after?.orderedFaces[0]?.sideId).toBe("stable-power-die-side-1");
   });
 
   it("annotates popup text with CRIT and positive power tone", () => {
@@ -189,8 +189,8 @@ describe("combat encounter", () => {
       id: "popup-crit-die",
       name: "Popup Crit Die",
       sides: [
-        new DealDamage("popup-crit", "Big Hit", 4),
-        new DealDamage("popup-normal", "Chip", 1),
+        new DealDamage("Big Hit", 4),
+        new DealDamage("Chip", 1),
       ],
       energyCost: 1,
     });
@@ -213,8 +213,8 @@ describe("combat encounter", () => {
       id: "popup-miss-die",
       name: "Popup Miss Die",
       sides: [
-        new DealDamage("popup-high", "Strike", 2),
-        new DealSelfDamage("popup-low", "Backfire", 2),
+        new DealDamage("Strike", 2),
+        new DealSelfDamage("Backfire", 2),
       ],
       energyCost: 1,
     });
@@ -244,7 +244,7 @@ describe("combat encounter", () => {
       name: "Focus Up Die",
       energyCost: 1,
       sides: [
-        new FocusUp("focus-side-1", "critical-hit"),
+        new FocusUp("critical-hit"),
       ],
     });
     const attackDie = new Die({
@@ -252,8 +252,8 @@ describe("combat encounter", () => {
       name: "Attack Die",
       energyCost: 1,
       sides: [
-        new DealDamage("attack-side-low", "Low", 1),
-        new DealDamage("attack-side-high", "High", 4),
+        new DealDamage("Low", 1),
+        new DealDamage("High", 4),
       ],
     });
 
@@ -288,15 +288,15 @@ describe("combat encounter", () => {
       id: "focus-die",
       name: "Focus Up Die",
       energyCost: 1,
-      sides: [new FocusUp("focus-side-1", "critical-hit")],
+      sides: [new FocusUp("critical-hit")],
     });
     const heavyDie = new Die({
       id: "heavy-die",
       name: "Heavy Die",
       energyCost: 3,
       sides: [
-        new DealDamage("heavy-low", "Heavy Low", 1),
-        new DealDamage("heavy-high", "Heavy High", 5),
+        new DealDamage("Heavy Low", 1),
+        new DealDamage("Heavy High", 5),
       ],
     });
 

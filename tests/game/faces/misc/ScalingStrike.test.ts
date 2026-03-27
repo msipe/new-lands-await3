@@ -2,7 +2,7 @@ import { ScalingStrike } from "../../../../src/game/faces";
 
 describe("ScalingStrike", () => {
   it("increases damage on each fifth roll", () => {
-    const face = new ScalingStrike("scaling-strike-face", 1, 5, 1);
+    const face = new ScalingStrike(1, 5, 1);
     const values: number[] = [];
 
     for (let roll = 0; roll < 6; roll += 1) {

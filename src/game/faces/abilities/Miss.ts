@@ -9,8 +9,8 @@ import type {
 } from "../FaceAdjustmentModel";
 
 export class Miss extends Face {
-  constructor(id: string) {
-    super(id, "Whiff!", "abilities");
+  constructor() {
+    super("Whiff!", "abilities");
   }
 
   applyUpgrade(_upgrade: FaceUpgrade): boolean {
@@ -46,7 +46,9 @@ export class Miss extends Face {
   }
 
   cloneWithId(newId: string): Miss {
-    return new Miss(newId);
+    const c = new Miss();
+    c.id = newId;
+    return c;
   }
 
   protected onResolve(_context: FaceResolveContext): CombatEvent[] {

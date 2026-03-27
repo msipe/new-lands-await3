@@ -6,9 +6,9 @@ import type { FaceAdjustmentOperation, FaceAdjustmentResult } from "../FaceAdjus
 export class Enrage extends Face {
   private readonly rageCount: number;
 
-  constructor(id: string, rageCount: number) {
+  constructor(rageCount: number) {
     const label = rageCount === 1 ? "Enrage" : `Enrage x${rageCount}`;
-    super(id, label, "abilities");
+    super(label, "abilities");
     this.rageCount = rageCount;
   }
 
@@ -30,7 +30,9 @@ export class Enrage extends Face {
   }
 
   cloneWithId(newId: string): Enrage {
-    return new Enrage(newId, this.rageCount);
+    const c = new Enrage(this.rageCount);
+    c.id = newId;
+    return c;
   }
 
   applyUpgrade(_upgrade: FaceUpgrade): boolean {

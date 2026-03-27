@@ -3,7 +3,7 @@ import { ArcaneBurst, FaceAdjustmentModalityType } from "../../../../src/game/fa
 
 describe("ArcaneBurst", () => {
   it("deals 3 damage by default", () => {
-    const face = new ArcaneBurst("arcane-burst-face");
+    const face = new ArcaneBurst();
 
     const event = face.resolve({
       source: "player",
@@ -17,7 +17,7 @@ describe("ArcaneBurst", () => {
   });
 
   it("supports face-specific numeric upgrade", () => {
-    const face = new ArcaneBurst("arcane-burst-upgrade-face");
+    const face = new ArcaneBurst();
     face.applyUpgrade({ type: "numeric-plus-1" });
 
     const event = face.resolve({
@@ -30,7 +30,7 @@ describe("ArcaneBurst", () => {
   });
 
   it("exposes damage as an upgradeable property", () => {
-    const face = new ArcaneBurst("arcane-burst-upgrade-props");
+    const face = new ArcaneBurst();
     const properties = face.getAdjustmentProperties();
 
     expect(properties).toHaveLength(1);
@@ -45,7 +45,7 @@ describe("ArcaneBurst", () => {
   });
 
   it("supports property-based improve/reduce operations", () => {
-    const face = new ArcaneBurst("arcane-burst-upgrade-ops");
+    const face = new ArcaneBurst();
 
     const improved = face.applyAdjustment({
       propertyId: "damage",
@@ -73,7 +73,7 @@ describe("ArcaneBurst", () => {
   });
 
   it("keeps label synchronized with damage adjustments", () => {
-    const face = new ArcaneBurst("arcane-burst-label-sync");
+    const face = new ArcaneBurst();
 
     expect(face.label).toBe("Arcane Burst +3");
 

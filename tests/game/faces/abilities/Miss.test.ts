@@ -2,7 +2,7 @@ import { Miss } from "../../../../src/game/faces";
 
 describe("Miss", () => {
   it("resolves with no combat events", () => {
-    const face = new Miss("miss-face");
+    const face = new Miss();
 
     const events = face.resolve({
       source: "player",
@@ -15,7 +15,7 @@ describe("Miss", () => {
   });
 
   it("does not accept damage upgrades", () => {
-    const face = new Miss("miss-face");
+    const face = new Miss();
 
     expect(face.applyUpgrade({ type: "damage-plus", amount: 3 })).toBe(false);
     expect(face.applyUpgrade({ type: "numeric-plus-1" })).toBe(false);

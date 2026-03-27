@@ -33,7 +33,7 @@ describe("die", () => {
     });
 
     const rolled = die.roll(makeRandomSource([2]));
-    expect(rolled.id).toBe("s3");
+    expect(rolled.id).toBe("d-1-side-3");
   });
 
   it("supports roll hooks that alter selected side", () => {
@@ -47,7 +47,7 @@ describe("die", () => {
     const result = die.rollWithDetails(makeRandomSource([0]));
 
     expect(result.selectedSideIndex).toBe(1);
-    expect(result.side.id).toBe("b");
+    expect(result.side.id).toBe("d-2-side-2");
   });
 
   it("applies lucky roll hook and tracks both candidate outcomes", () => {
@@ -62,7 +62,7 @@ describe("die", () => {
 
     expect(result.candidateSideIndices).toEqual([0, 2]);
     expect(result.selectedSideIndex).toBe(2);
-    expect(result.side.id).toBe("high");
+    expect(result.side.id).toBe("d-3-side-3");
   });
 
   it("allows lucky hook to use custom comparator", () => {

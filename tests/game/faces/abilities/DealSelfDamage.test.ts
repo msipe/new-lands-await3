@@ -3,7 +3,7 @@ import { DealSelfDamage } from "../../../../src/game/faces";
 
 describe("DealSelfDamage", () => {
   it("deals damage to self", () => {
-    const face = new DealSelfDamage("self-hit-face", "Backfire", 2);
+    const face = new DealSelfDamage("Backfire", 2);
 
     const event = face.resolve({
       source: "player",

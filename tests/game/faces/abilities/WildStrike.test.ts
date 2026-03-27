@@ -28,7 +28,8 @@ describe("WildStrike", () => {
 
     mockedResolveTransientDieFromConstruct.mockReturnValue([baseEvent]);
 
-    const face = new WildStrike("wild-strike-face", 2, "spark-die");
+    const face = new WildStrike(2, "spark-die");
+    face.id = "wild-strike-face";
     const events = face.resolve({
       source: "player",
       cause: "player-roll",
@@ -44,7 +45,7 @@ describe("WildStrike", () => {
   it("returns no events when no transient weapon result is produced", () => {
     mockedResolveTransientDieFromConstruct.mockReturnValue([]);
 
-    const face = new WildStrike("wild-strike-face", 1, "spark-die");
+    const face = new WildStrike(1, "spark-die");
     const events = face.resolve({
       source: "player",
       cause: "player-roll",
@@ -65,7 +66,7 @@ describe("WildStrike", () => {
       return [];
     });
 
-    const face = new WildStrike("wild-strike-face", 1, "rusty-sword-die");
+    const face = new WildStrike(1, "rusty-sword-die");
     const events = face.resolve({
       source: "player",
       cause: "player-roll",
@@ -92,7 +93,7 @@ describe("WildStrike", () => {
       return [];
     });
 
-    const face = new WildStrike("wild-strike-face", 1, "rusty-sword-die");
+    const face = new WildStrike(1, "rusty-sword-die");
     face.applyAdjustment({
       propertyId: "attack_times",
       type: FaceAdjustmentModalityType.Improve,
@@ -116,7 +117,7 @@ describe("WildStrike", () => {
 
   it("exposes upgradeable properties for attack count, weapon choice, and extra damage", () => {
     mockedResolveTransientDieFromConstruct.mockReturnValue([]);
-    const face = new WildStrike("wild-strike-face", 2, "rusty-sword-die");
+    const face = new WildStrike(2, "rusty-sword-die");
 
     const properties = face.getAdjustmentProperties();
     expect(properties.map((entry) => entry.id)).toEqual([
@@ -154,7 +155,7 @@ describe("WildStrike", () => {
       ];
     });
 
-    const face = new WildStrike("wild-strike-face", 1, "rusty-sword-die");
+    const face = new WildStrike(1, "rusty-sword-die");
 
     const attackTimesUpgrade = face.applyAdjustment({
       propertyId: "attack_times",
@@ -202,7 +203,7 @@ describe("WildStrike", () => {
       },
     ]);
 
-    const face = new WildStrike("wild-strike-face", 1, "rusty-sword-die");
+    const face = new WildStrike(1, "rusty-sword-die");
 
     const improve = face.applyAdjustment({
       propertyId: "attack_times",
@@ -230,7 +231,7 @@ describe("WildStrike", () => {
   });
 
   it("keeps label synchronized with attack count, weapon choice, and bonus damage", () => {
-    const face = new WildStrike("wild-strike-label-sync", 1, "rusty-sword-die");
+    const face = new WildStrike(1, "rusty-sword-die");
 
     expect(face.label).toBe("Wild Strike 1x mainhand +1");
 
@@ -257,7 +258,7 @@ describe("WildStrike", () => {
   });
 
   it("exposes non-linear power that scales with attacks, bonus damage, and weapon choice", () => {
-    const face = new WildStrike("wild-strike-power", 1, "rusty-sword-die");
+    const face = new WildStrike(1, "rusty-sword-die");
     const baselinePower = face.power;
 
     face.applyAdjustment({

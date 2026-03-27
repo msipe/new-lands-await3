@@ -19,8 +19,8 @@ export class DealSelfDamage extends Face {
 
   private damage: number;
 
-  constructor(id: string, label: string, damage: number) {
-    super(id, label, "abilities");
+  constructor(label: string, damage: number) {
+    super(label, "abilities");
     this.damage = damage;
   }
 
@@ -51,7 +51,9 @@ export class DealSelfDamage extends Face {
   }
 
   cloneWithId(newId: string): DealSelfDamage {
-    return new DealSelfDamage(newId, this.getBaseLabel(), this.damage);
+    const c = new DealSelfDamage(this.getBaseLabel(), this.damage);
+    c.id = newId;
+    return c;
   }
 
   private getSelfDamagePointValue(): number {

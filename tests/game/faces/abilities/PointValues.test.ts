@@ -10,10 +10,10 @@ import { ScalingStrike } from "../../../../src/game/faces/misc/ScalingStrike";
 
 describe("face adjustment point values", () => {
   it("calculates point metadata for single-property faces", () => {
-    const dealSelfDamage = new DealSelfDamage("self-dmg-face", "Backfire", 2);
-    const healSelf = new HealSelf("heal-face", "Mend", 3);
-    const armorGain = new ArmorGain("armor-face", "Armor Up", 4);
-    const warcry = new Warcry("warcry-face", 2);
+    const dealSelfDamage = new DealSelfDamage("Backfire", 2);
+    const healSelf = new HealSelf("Mend", 3);
+    const armorGain = new ArmorGain("Armor Up", 4);
+    const warcry = new Warcry(2);
 
     const selfDamageProperty = dealSelfDamage.getAdjustmentProperties()[0];
     expect(selfDamageProperty.pointValue).toBe(-2);
@@ -47,7 +47,7 @@ describe("face adjustment point values", () => {
   });
 
   it("supports cross-property point calculations for wild strike", () => {
-    const wildStrike = new WildStrike("wild-strike-face", 2, "rusty-sword-die");
+    const wildStrike = new WildStrike(2, "rusty-sword-die");
     const properties = wildStrike.getAdjustmentProperties();
 
     const attackTimes = properties.find((entry) => entry.id === "attack_times");
@@ -75,7 +75,7 @@ describe("face adjustment point values", () => {
   });
 
   it("adds point metadata for scaling strike scaling step", () => {
-    const scalingStrike = new ScalingStrike("scaling-strike-face", 1, 5, 1);
+    const scalingStrike = new ScalingStrike(1, 5, 1);
     const scalingStep = scalingStrike
       .getAdjustmentProperties()
       .find((entry) => entry.id === "scaling_step");

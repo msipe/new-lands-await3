@@ -3,7 +3,7 @@ import { ArmorGain, FaceAdjustmentModalityType } from "../../../../src/game/face
 
 describe("ArmorGain", () => {
   it("creates an armor event for self", () => {
-    const face = new ArmorGain("armor-gain-face", "Armor Up", 4);
+    const face = new ArmorGain("Armor Up", 4);
     const events = face.resolve({
       source: "player",
       cause: "player-roll",
@@ -18,7 +18,7 @@ describe("ArmorGain", () => {
   });
 
   it("supports numeric-plus-1 upgrades", () => {
-    const face = new ArmorGain("armor-gain-face", "Armor Up", 1);
+    const face = new ArmorGain("Armor Up", 1);
 
     const didApply = face.applyUpgrade({ type: "numeric-plus-1" });
 
@@ -27,7 +27,7 @@ describe("ArmorGain", () => {
   });
 
   it("keeps label synchronized with armor adjustments", () => {
-    const face = new ArmorGain("armor-gain-label-sync", "Armor Up", 2);
+    const face = new ArmorGain("Armor Up", 2);
 
     expect(face.label).toBe("Armor Up +2 armor");
 

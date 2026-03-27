@@ -18,10 +18,10 @@ describe("upgrade flow", () => {
     const die = new Die({
       id: "die-upgrade-1",
       name: "Upgrade Die",
-      sides: [new ArcaneBurst("arcane-burst-side")],
+      sides: [new ArcaneBurst()],
     });
 
-    const didApply = applyUpgradeToDieSide(die, "arcane-burst-side", { type: "numeric-plus-1" });
+    const didApply = applyUpgradeToDieSide(die, "die-upgrade-1-side-1", { type: "numeric-plus-1" });
     const event = die.sides[0].resolve(resolveContext)[0];
 
     expect(didApply).toBe(true);
@@ -33,10 +33,10 @@ describe("upgrade flow", () => {
     const healDie = new Die({
       id: "heal-die",
       name: "Heal Die",
-      sides: [new MinorMend("minor-mend-side")],
+      sides: [new MinorMend()],
     });
 
-    const didApply = applyUpgradeToDieSide(healDie, "minor-mend-side", {
+    const didApply = applyUpgradeToDieSide(healDie, "heal-die-side-1", {
       type: "heal-plus",
       amount: 2,
     });
@@ -51,10 +51,10 @@ describe("upgrade flow", () => {
     const damageDie = new Die({
       id: "damage-die",
       name: "Damage Die",
-      sides: [new ArcaneBurst("damage-side")],
+      sides: [new ArcaneBurst()],
     });
 
-    const didApply = applyUpgradeToDieSide(damageDie, "damage-side", {
+    const didApply = applyUpgradeToDieSide(damageDie, "damage-die-side-1", {
       type: "heal-plus",
       amount: 2,
     });
@@ -65,15 +65,15 @@ describe("upgrade flow", () => {
   });
 
   it("keeps upgrade changes isolated to a single face instance", () => {
-    const first = new ArcaneBurst("first");
-    const second = new ArcaneBurst("second");
+    const first = new ArcaneBurst();
+    const second = new ArcaneBurst();
     const die = new Die({
       id: "instance-die",
       name: "Instance Die",
       sides: [first, second],
     });
 
-    applyUpgradeToDieSide(die, "first", { type: "damage-plus", amount: 2 });
+    applyUpgradeToDieSide(die, "instance-die-side-1", { type: "damage-plus", amount: 2 });
 
     const firstValue = first.resolve(resolveContext)[0].value;
     const secondValue = second.resolve(resolveContext)[0].value;
@@ -83,14 +83,14 @@ describe("upgrade flow", () => {
   });
 
   it("supports scaling-step upgrades for scaling faces", () => {
-    const scaling = new ScalingStrike("scaling", 1, 5, 1);
+    const scaling = new ScalingStrike(1, 5, 1);
     const die = new Die({
       id: "scaling-die",
       name: "Scaling Die",
       sides: [scaling],
     });
 
-    applyUpgradeToDieSide(die, "scaling", { type: "scaling-step-plus", amount: 2 });
+    applyUpgradeToDieSide(die, "scaling-die-side-1", { type: "scaling-step-plus", amount: 2 });
 
     const values: number[] = [];
     for (let roll = 0; roll < 6; roll += 1) {
@@ -104,7 +104,7 @@ describe("upgrade flow", () => {
     const die = new Die({
       id: "missing-side-die",
       name: "Missing Side Die",
-      sides: [new ArcaneBurst("existing")],
+      sides: [new ArcaneBurst()],
     });
 
     const didApply = applyUpgradeToDieSide(die, "unknown-side", { type: "numeric-plus-1" });
@@ -124,7 +124,7 @@ describe("upgrade flow", () => {
       sides: [nonUpgradableSide],
     });
 
-    const didApply = applyUpgradeToDieSide(die, "plain-side", { type: "numeric-plus-1" });
+    const didApply = applyUpgradeToDieSide(die, "plain-die-side-1", { type: "numeric-plus-1" });
     expect(didApply).toBe(false);
   });
 });

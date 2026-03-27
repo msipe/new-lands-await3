@@ -8,9 +8,9 @@ export class SpawnDie extends Face {
   private readonly dieName: string;
   private readonly count: number;
 
-  constructor(id: string, constructId: string, dieName: string, count = 1) {
+  constructor(constructId: string, dieName: string, count = 1) {
     const countLabel = count > 1 ? ` x${count}` : "";
-    super(id, `Spawn ${dieName}${countLabel}`, "abilities");
+    super(`Spawn ${dieName}${countLabel}`, "abilities");
     this.constructId = constructId;
     this.dieName = dieName;
     this.count = count;
@@ -36,7 +36,9 @@ export class SpawnDie extends Face {
   }
 
   cloneWithId(newId: string): SpawnDie {
-    return new SpawnDie(newId, this.constructId, this.dieName, this.count);
+    const c = new SpawnDie(this.constructId, this.dieName, this.count);
+    c.id = newId;
+    return c;
   }
 
   applyUpgrade(_upgrade: FaceUpgrade): boolean {

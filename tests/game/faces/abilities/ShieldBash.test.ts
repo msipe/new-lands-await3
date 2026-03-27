@@ -3,7 +3,7 @@ import { ShieldBash } from "../../../../src/game/faces";
 
 describe("ShieldBash", () => {
   it("deals 2 damage to opponent", () => {
-    const face = new ShieldBash("shield-bash-face");
+    const face = new ShieldBash();
 
     const event = face.resolve({
       source: "player",

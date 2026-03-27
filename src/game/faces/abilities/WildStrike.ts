@@ -155,12 +155,11 @@ export class WildStrike extends Face {
   private lastTransientPopupDataList: TransientDiePopupData[] = [];
 
   constructor(
-    id: string,
     bonusDamage: number,
     mainhandWeaponConstructId?: string,
     label = "Wild Strike",
   ) {
-    super(id, label, "abilities");
+    super(label, "abilities");
     this.bonusDamage = Math.max(0, Math.floor(bonusDamage));
     this.mainhandWeaponConstructId = mainhandWeaponConstructId;
     this.resolveTransientWeaponEvents = createMainhandTransientResolver(mainhandWeaponConstructId);
@@ -206,11 +205,11 @@ export class WildStrike extends Face {
 
   cloneWithId(newId: string): WildStrike {
     const clone = new WildStrike(
-      newId,
       this.bonusDamage,
       this.mainhandWeaponConstructId,
       this.getBaseLabel(),
     );
+    clone.id = newId;
     clone.attackCount = this.attackCount;
     clone.weaponChoice = this.weaponChoice;
     return clone;

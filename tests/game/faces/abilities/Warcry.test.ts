@@ -2,7 +2,7 @@ import { FaceAdjustmentModalityType, Warcry } from "../../../../src/game/faces";
 
 describe("Warcry", () => {
   it("exposes its attack modifier and emits no combat events", () => {
-    const face = new Warcry("warcry-face", 3);
+    const face = new Warcry(3);
     const events = face.resolve({
       source: "player",
       cause: "player-roll",
@@ -14,14 +14,14 @@ describe("Warcry", () => {
   });
 
   it("supports negative modifiers", () => {
-    const face = new Warcry("warcry-face-negative", -2);
+    const face = new Warcry(-2);
 
     expect(face.getAttackModifier()).toBe(-2);
     expect(face.getResolvePopupText()).toBe("Attacks -2 this turn");
   });
 
   it("keeps label synchronized with adjusted modifier", () => {
-    const face = new Warcry("warcry-face-label-sync", 1);
+    const face = new Warcry(1);
 
     expect(face.label).toBe("Warcry +1");
 
@@ -41,8 +41,8 @@ describe("Warcry", () => {
   });
 
   it("exposes power as double the positive attack modifier", () => {
-    const positive = new Warcry("warcry-power-positive", 3);
-    const negative = new Warcry("warcry-power-negative", -2);
+    const positive = new Warcry(3);
+    const negative = new Warcry(-2);
 
     expect(positive.power).toBe(6);
     expect(negative.power).toBe(0);

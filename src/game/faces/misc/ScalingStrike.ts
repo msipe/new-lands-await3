@@ -19,8 +19,8 @@ export class ScalingStrike extends DealDamage {
   private readonly rollThreshold: number;
   private scalingStep: number;
 
-  constructor(id: string, baseDamage = 1, rollThreshold = 5, scalingStep = 1) {
-    super(id, "Scaling Strike", baseDamage);
+  constructor(baseDamage = 1, rollThreshold = 5, scalingStep = 1) {
+    super("Scaling Strike", baseDamage);
     this.rollThreshold = rollThreshold;
     this.scalingStep = scalingStep;
   }
@@ -39,12 +39,13 @@ export class ScalingStrike extends DealDamage {
   }
 
   cloneWithId(newId: string): ScalingStrike {
-    return new ScalingStrike(
-      newId,
+    const c = new ScalingStrike(
       this.getDamageValue(),
       this.rollThreshold,
       this.scalingStep,
     );
+    c.id = newId;
+    return c;
   }
 
   private getScalingStepPointValue(): number {

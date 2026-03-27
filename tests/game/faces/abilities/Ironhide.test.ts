@@ -3,7 +3,7 @@ import { Ironhide } from "../../../../src/game/faces";
 
 describe("Ironhide", () => {
   it("creates an armor event for self", () => {
-    const face = new Ironhide("ironhide-face", 5);
+    const face = new Ironhide(5);
     const events = face.resolve({
       source: "player",
       cause: "player-roll",
@@ -17,7 +17,7 @@ describe("Ironhide", () => {
   });
 
   it("supports zero-armor faces", () => {
-    const face = new Ironhide("ironhide-zero", 0);
+    const face = new Ironhide(0);
 
     expect(face.getResolvePopupText()).toBe("+0 armor");
     expect(face.describe()).toBe("Gain 0 armor.");

@@ -23,8 +23,8 @@ export class HeedlessAssault extends Face {
   private bonusDamage: number;
   private weaponChoice: WeaponChoice;
 
-  constructor(id: string, bonusDamage: number, weaponChoice: WeaponChoice = "both_hands") {
-    super(id, "Heedless Assault", "abilities");
+  constructor(bonusDamage: number, weaponChoice: WeaponChoice = "both_hands") {
+    super("Heedless Assault", "abilities");
     this.bonusDamage = Math.max(0, Math.floor(bonusDamage));
     this.weaponChoice = weaponChoice;
   }
@@ -63,7 +63,9 @@ export class HeedlessAssault extends Face {
   }
 
   cloneWithId(newId: string): HeedlessAssault {
-    return new HeedlessAssault(newId, this.bonusDamage, this.weaponChoice);
+    const c = new HeedlessAssault(this.bonusDamage, this.weaponChoice);
+    c.id = newId;
+    return c;
   }
 
   private static weaponChoiceLabel(choice: WeaponChoice): string {

@@ -15,8 +15,8 @@ const FOCUS_UP_EFFECT_DESCRIPTIONS: Record<FocusUpEffect, string> = {
 export class FocusUp extends Face {
   private readonly effect: FocusUpEffect;
 
-  constructor(id: string, effect: FocusUpEffect) {
-    super(id, "Focus Up", "abilities");
+  constructor(effect: FocusUpEffect) {
+    super("Focus Up", "abilities");
     this.effect = effect;
   }
 
@@ -25,7 +25,9 @@ export class FocusUp extends Face {
   }
 
   cloneWithId(newId: string): FocusUp {
-    return new FocusUp(newId, this.effect);
+    const c = new FocusUp(this.effect);
+    c.id = newId;
+    return c;
   }
 
   describe(): string {

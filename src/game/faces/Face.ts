@@ -15,14 +15,13 @@ export type FaceResolveContext = SideResolveContext & {
 };
 
 export abstract class Face implements DieSide {
-  readonly id: string;
+  id: string = "";
   readonly category: FaceCategory;
 
   private rollCount = 0;
   private readonly baseLabel: string;
 
-  protected constructor(id: string, label: string, category: FaceCategory) {
-    this.id = id;
+  protected constructor(label: string, category: FaceCategory) {
     this.baseLabel = label;
     this.category = category;
   }
