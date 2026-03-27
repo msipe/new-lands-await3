@@ -112,6 +112,7 @@ export type CombatEncounterState = {
   diePowerById: Record<string, DiePowerSnapshot>;
   queuedPlayerRollConversions: QueuedPlayerRollConversion[];
   nextPlayerRollConversionId: number;
+  nextSpawnedDieIndex: number;
   combatLog: string[];
   pendingResolutionPopups: CombatResolutionPopup[];
 };
@@ -189,10 +190,6 @@ function getPlayerEnergyMax(playerProgression: PlayerProgressionState): number {
   return 3;
 }
 
-function canPlayerAffordAnyRemainingDie(state: CombatEncounterState): boolean {
-  const remainingDice = state.player.dice.filter((die) => !state.rolledPlayerDieIds.includes(die.id));
-  return remainingDice.some((die) => die.energyCost <= state.playerEnergyCurrent);
-}
 
 function enterEnemyTurn(state: CombatEncounterState): void {
   state.phase = "enemy-turn";
@@ -339,6 +336,10 @@ type SpawnedDiePopupSide = DieSide & {
 
 type PlayerRollConversionProviderSide = DieSide & {
   getPlayerRollConversionRequests?: () => PlayerRollConversionRequest[];
+};
+
+type DieSpawnerSide = DieSide & {
+  getSpawnedDieConstructIds?: () => string[];
 };
 
 function getSideIndexById(die: Die, sideId: string): number {
@@ -602,6 +603,7 @@ export function createCombatEncounter(
     diePowerById,
     queuedPlayerRollConversions: [],
     nextPlayerRollConversionId: 1,
+    nextSpawnedDieIndex: 0,
     combatLog: [
       `Round 1 begins.`,
       `${enemy.name} prepares ${enemyIntent.pendingPlayerDamage} damage and ${enemyIntent.pendingEnemyHealing} healing.`,
@@ -619,6 +621,14 @@ function startNextRound(state: CombatEncounterState, randomSource: RandomSource)
   state.playerEnergyCurrent = state.playerEnergyMax;
   state.playerRollIndex = 0;
   state.rolledPlayerDieIds = [];
+
+  const leftoverFleeting = state.player.dice.filter((die) => die.fleeting);
+  if (leftoverFleeting.length > 0) {
+    state.player.dice = state.player.dice.filter((die) => !die.fleeting);
+    for (const die of leftoverFleeting) {
+      state.combatLog.push(`${die.name} fades away.`);
+    }
+  }
   state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
 
   state.combatLog.push(`Round ${state.round} begins.`);
@@ -722,8 +732,29 @@ export function rollPlayerDie(
   queueSpawnedDiePopupFromEvents(state, "player", die.id, events, side);
   queuePlayerRollConversionsFromSide(state, die.id, side);
 
+  const spawnerSide = side as DieSpawnerSide;
+  const spawnedConstructIds = spawnerSide.getSpawnedDieConstructIds?.() ?? [];
+  for (const constructId of spawnedConstructIds) {
+    const spawnedDieId = `spawned-${state.nextSpawnedDieIndex}`;
+    state.nextSpawnedDieIndex += 1;
+    const spawnedConstruct = getDieConstructById(constructId);
+    const spawnedDie = createDieFromConstruct({
+      construct: spawnedConstruct,
+      dieId: spawnedDieId,
+      singleUse: true,
+    });
+    state.player.dice.push(spawnedDie);
+    state.diePowerById[spawnedDieId] = buildDiePowerSnapshot(spawnedDie);
+    state.combatLog.push(`${spawnedDie.name} spawned into player pool.`);
+  }
+
   state.playerEnergyCurrent = Math.max(0, state.playerEnergyCurrent - die.energyCost);
   state.rolledPlayerDieIds.push(die.id);
+
+  if (die.singleUse) {
+    state.player.dice = state.player.dice.filter((entry) => entry.id !== die.id);
+  }
+
   state.playerRollIndex = state.rolledPlayerDieIds.length;
 
   if (state.enemy.hp <= 0) {
@@ -774,7 +805,7 @@ export function resolveEnemyDie(
   state: CombatEncounterState,
   eventBus: CombatEventBus,
   dieId: string,
-  randomSource: RandomSource = defaultRandomSource,
+  _randomSource: RandomSource = defaultRandomSource,
 ): CombatEncounterState {
   if (state.phase !== "enemy-turn") {
     return state;

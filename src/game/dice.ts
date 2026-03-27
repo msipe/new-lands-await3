@@ -52,12 +52,17 @@ export type DieRollResult = {
   candidateSideIndices: number[];
 };
 
+export type DieTint = { r: number; g: number; b: number };
+
 export type DieInput = {
   id: string;
   typeId?: string;
   name: string;
   sides: DieSide[];
   energyCost?: number;
+  singleUse?: boolean;
+  fleeting?: boolean;
+  tint?: DieTint;
 };
 
 export const defaultRandomSource: RandomSource = {
@@ -74,6 +79,9 @@ export class Die {
   name: string;
   readonly sides: DieSide[];
   readonly energyCost: number;
+  readonly singleUse: boolean;
+  readonly fleeting: boolean;
+  readonly tint: DieTint | undefined;
 
   private readonly rollHooks: DieRollHook[];
 
@@ -83,6 +91,9 @@ export class Die {
     this.name = input.name;
     this.sides = [...input.sides];
     this.energyCost = Math.max(0, Math.floor(input.energyCost ?? 1));
+    this.singleUse = input.singleUse ?? false;
+    this.fleeting = input.fleeting ?? false;
+    this.tint = input.tint;
     this.rollHooks = [];
   }
 

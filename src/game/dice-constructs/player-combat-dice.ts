@@ -7,7 +7,7 @@ import {
 } from "../face-adjustments";
 import type { PlayerProgressionState } from "../player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "../player-items";
-import { DealDamage, FocusUp, HealSelf, HeedlessAssault, Ironhide, Miss, ScalingStrike, WildStrike, Warcry } from "../faces";
+import { DealDamage, Enrage, FocusUp, HealSelf, HeedlessAssault, Ironhide, Miss, ScalingStrike, SpawnDie, WildStrike, Warcry } from "../faces";
 
 function createWarcryDie(): Die {
   return new Die({
@@ -151,12 +151,23 @@ const FACET_ABILITY_DIE_FACTORIES: Partial<Record<string, (instanceId: string) =
     sides: [new DealDamage("fdb9-s1", "Rampage", 5), new DealDamage("fdb9-s2", "Rampage", 5), new DealDamage("fdb9-s3", "Rampage", 5), new DealDamage("fdb9-s4", "Rampage", 4), new DealDamage("fdb9-s5", "Rampage", 3), new DealDamage("fdb9-s6", "Rampage", 2)],
   }),
   "facet-die-berserker-10": (id) => new Die({
-    id, typeId: "facet-die-berserker-10", name: "Berserker Warcry Die", energyCost: 2,
-    sides: [new Warcry("fdb10-s1", 5), new Warcry("fdb10-s2", 5), new Warcry("fdb10-s3", 4), new Warcry("fdb10-s4", 4), new Warcry("fdb10-s5", 3), new Warcry("fdb10-s6", 2)],
+    id, typeId: "facet-die-berserker-10", name: "Enrage Die", energyCost: 1,
+    sides: [new Miss("fdb10-s1"), new Miss("fdb10-s2"), new Enrage("fdb10-s3", 1), new Enrage("fdb10-s4", 1), new Enrage("fdb10-s5", 2), new Enrage("fdb10-s6", 3)],
   }),
   "facet-die-berserker-11": (id) => new Die({
     id, typeId: "facet-die-berserker-11", name: "Heedless Assault Die", energyCost: 1,
     sides: [new Miss("fdb11-s1"), new Miss("fdb11-s2"), new Miss("fdb11-s3"), new HeedlessAssault("fdb11-s4", 1), new HeedlessAssault("fdb11-s5", 2), new HeedlessAssault("fdb11-s6", 3)],
+  }),
+  "facet-die-berserker-12": (id) => new Die({
+    id, typeId: "facet-die-berserker-12", name: "Battle Cry Die", energyCost: 1,
+    sides: [
+      new SpawnDie("fdb12-s1", "spark-die", "Spark Die"),
+      new SpawnDie("fdb12-s2", "spark-die", "Spark Die"),
+      new SpawnDie("fdb12-s3", "spark-die", "Spark Die"),
+      new SpawnDie("fdb12-s4", "spark-die", "Spark Die"),
+      new SpawnDie("fdb12-s5", "spark-die", "Spark Die"),
+      new SpawnDie("fdb12-s6", "spark-die", "Spark Die"),
+    ],
   }),
 };
 

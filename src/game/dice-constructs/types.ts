@@ -1,4 +1,4 @@
-import type { DieSide } from "../dice";
+import type { DieSide, DieTint } from "../dice";
 
 export type DieConstructMetadata = {
   tags?: string[];
@@ -14,4 +14,5 @@ export type DieConstruct = {
   energyCost: number;
   sideBuilders: DieSideBuilder[];
   metadata?: DieConstructMetadata;
+  tint?: DieTint;
 };

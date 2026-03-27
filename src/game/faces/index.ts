@@ -29,3 +29,5 @@ export { RestorationCharm } from "./items/RestorationCharm";
 
 export { ScalingStrike } from "./misc/ScalingStrike";
 export { HeedlessAssault } from "./abilities/HeedlessAssault";
+export { SpawnDie } from "./abilities/SpawnDie";
+export { Enrage } from "./abilities/Enrage";

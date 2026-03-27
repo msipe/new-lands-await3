@@ -188,6 +188,7 @@ describe("player progression", () => {
         "facet-die-soldier-1",
         "facet-die-soldier-2",
         "facet-die-berserker-1",
+        "facet-die-berserker-10",
       ]);
     });
 

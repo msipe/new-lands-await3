@@ -5,6 +5,7 @@ import {
 } from "./game/combat-encounter";
 import { createDieFromConstruct } from "./game/dice-factory";
 import { getDieConstructById } from "./game/dice-constructs";
+import type { DieTint } from "./game/dice";
 
 type Owner = "player" | "enemy";
 
@@ -32,6 +33,7 @@ type VisualDie = {
   owner: Owner;
   isItemDie?: boolean;
   isSpawnedDie?: boolean;
+  tint?: DieTint;
   combatDieId?: string;
   label: string;
   displayLabel?: string;
@@ -330,6 +332,7 @@ function ensurePlayerDice(uiState: CombatUiState, state: CombatEncounterState): 
       id: `player-pool-${die.id}`,
       owner: "player",
       isItemDie: die.id.startsWith("equipped-"),
+      tint: die.tint,
       combatDieId: die.id,
       label: die.name,
       displayLabel: undefined,
@@ -349,6 +352,65 @@ function ensurePlayerDice(uiState: CombatUiState, state: CombatEncounterState): 
       parkY: position.y,
     };
   });
+}
+
+export function syncSpawnedPlayerDice(
+  uiState: CombatUiState,
+  state: CombatEncounterState,
+): void {
+  const knownCombatIds = new Set(uiState.playerDice.map((vd) => vd.combatDieId));
+  const newSpawned = state.player.dice.filter(
+    (cd) => !knownCombatIds.has(cd.id),
+  );
+
+  if (newSpawned.length === 0) {
+    return;
+  }
+
+  const totalCount = state.player.dice.length;
+  const poolSlotLayout = computePoolSlotLayout(uiState.layout, totalCount);
+
+  // Re-slot all existing parked dice so nothing overlaps.
+  for (const vd of uiState.playerDice) {
+    const combatIndex = state.player.dice.findIndex((cd) => cd.id === vd.combatDieId);
+    if (combatIndex === -1) continue;
+    const position = makePoolPosition(uiState.layout, combatIndex, totalCount);
+    vd.parkX = position.x;
+    vd.parkY = position.y;
+    vd.size = poolSlotLayout.size;
+    if (vd.state === "parked") {
+      vd.x = position.x;
+      vd.y = position.y;
+    }
+  }
+
+  for (const die of newSpawned) {
+    const index = state.player.dice.indexOf(die);
+    const position = makePoolPosition(uiState.layout, index, totalCount);
+    uiState.playerDice.push({
+      id: `player-pool-${die.id}`,
+      owner: "player",
+      isSpawnedDie: true,
+      tint: die.tint,
+      combatDieId: die.id,
+      label: die.name,
+      displayLabel: undefined,
+      rollingLabel: undefined,
+      rollingFaceTimer: 0,
+      faceLocked: false,
+      x: position.x,
+      y: position.y,
+      vx: 0,
+      vy: 0,
+      angle: 0,
+      spin: 0,
+      size: poolSlotLayout.size,
+      state: "parked",
+      slotIndex: index,
+      parkX: position.x,
+      parkY: position.y,
+    });
+  }
 }
 
 function isInsideArena(uiState: CombatUiState, x: number, y: number): boolean {
@@ -678,7 +740,15 @@ function parkEnemyDice(uiState: CombatUiState): void {
 }
 
 function parkPlayerArenaDice(uiState: CombatUiState, state: CombatEncounterState): void {
+  const consumed = new Set<string>();
+
   for (const die of uiState.arenaPlayerDice) {
+    const stillExists = die.combatDieId === undefined || state.player.dice.some((cd) => cd.id === die.combatDieId);
+    if (!stillExists) {
+      consumed.add(die.id);
+      continue;
+    }
+
     die.state = "parked";
     die.vx = 0;
     die.vy = 0;
@@ -694,6 +764,10 @@ function parkPlayerArenaDice(uiState: CombatUiState, state: CombatEncounterState
       die.x = die.parkX;
       die.y = die.parkY;
     }
+  }
+
+  if (consumed.size > 0) {
+    uiState.playerDice = uiState.playerDice.filter((vd) => !consumed.has(vd.id));
   }
 
   uiState.arenaPlayerDice = [];
@@ -747,6 +821,11 @@ function finalizeRoundTransition(uiState: CombatUiState, state: CombatEncounterS
   uiState.readyPlayerDieIds = [];
   uiState.settledPlayerDieIds = [];
   uiState.settledEnemyDieIds = [];
+
+  // Remove visual entries for dice no longer in the combat pool (e.g. fleeting dice that expired).
+  uiState.playerDice = uiState.playerDice.filter(
+    (vd) => state.player.dice.some((cd) => cd.id === vd.combatDieId),
+  );
 
   for (const die of uiState.playerDice) {
     if (die.parkX !== undefined && die.parkY !== undefined) {
@@ -2047,7 +2126,9 @@ function drawDie(die: VisualDie): void {
   love.graphics.translate(die.x, die.y);
   love.graphics.rotate(die.angle);
 
-  if (die.isSpawnedDie) {
+  if (die.tint) {
+    love.graphics.setColor(die.tint.r, die.tint.g, die.tint.b);
+  } else if (die.isSpawnedDie) {
     love.graphics.setColor(0.58, 0.76, 1);
   } else if (die.isItemDie) {
     // Stronger gray tint so equipment dice are clearly distinguishable.

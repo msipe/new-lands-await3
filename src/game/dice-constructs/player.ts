@@ -2,9 +2,23 @@ import { ArcaneBurst } from "../faces/abilities/ArcaneBurst";
 import { MinorMend } from "../faces/abilities/MinorMend";
 import { ShieldBash } from "../faces/abilities/ShieldBash";
 import { SwordSlash } from "../faces/abilities/SwordSlash";
+import { Warcry } from "../faces/abilities/Warcry";
 import type { DieConstruct } from "./types";
 
 export const PLAYER_DIE_CONSTRUCTS: DieConstruct[] = [
+  {
+    id: "rage-die",
+    name: "Rage Die",
+    description: "Channel rage into bonus attack damage this round.",
+    energyCost: 0,
+    tint: { r: 0.88, g: 0.18, b: 0.18 },
+    metadata: { tags: ["berserker", "fleeting"] },
+    sideBuilders: [
+      (sideId) => new Warcry(sideId, 0),
+      (sideId) => new Warcry(sideId, 1),
+      (sideId) => new Warcry(sideId, 2),
+    ],
+  },
   {
     id: "spark-die",
     name: "Spark Die",

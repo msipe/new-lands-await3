@@ -23,6 +23,7 @@ import {
     consumeRequestedSceneAdvance,
     consumeRequestedPlayerTurnEnd,
     setResolvedContinueEnabled,
+    syncSpawnedPlayerDice,
     type CombatUiState,
     updateCombatUiState,
 } from "./combat-ui";
@@ -275,6 +276,7 @@ love.update = (dt: number) => {
         if (resolutionPopups.length > 0) {
             enqueueCombatResolutionPopups(activeCombatUi, resolutionPopups);
         }
+        syncSpawnedPlayerDice(activeCombatUi, activeCombat.state);
 
         if (activeCombat.state.phase === "resolved") {
             if (!hasGrantedCombatProgression && activeCombat.state.enemy.hp <= 0 && activeCombat.state.player.hp > 0) {
