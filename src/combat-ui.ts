@@ -1545,6 +1545,17 @@ function roundPower(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
+function isMissLikeInspectorSide(label: string, description: string): boolean {
+  const normalizedLabel = label.toLowerCase();
+  const normalizedDescription = description.toLowerCase();
+  return (
+    normalizedLabel.includes("miss") ||
+    normalizedLabel.includes("whiff") ||
+    normalizedDescription.includes("miss") ||
+    normalizedDescription.includes("whiff")
+  );
+}
+
 function buildSortedInspectorSidesFromRaw(
   rawSides: Array<{
     id: string;
@@ -1568,7 +1579,9 @@ function buildSortedInspectorSidesFromRaw(
   return sorted.map((side) => ({
     ...side,
     isCriticalHit: side.power === highestPower,
-    isCriticalMiss: side.power === lowestPower,
+    isCriticalMiss:
+      side.power === lowestPower &&
+      (lowestPower < 0 || isMissLikeInspectorSide(side.label, side.description)),
   }));
 }
 

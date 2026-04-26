@@ -129,6 +129,12 @@ function getSidePower(side: DieSide): number {
   return typeof side.power === "number" && Number.isFinite(side.power) ? side.power : 0;
 }
 
+function isMissLikeSide(side: DieSide): boolean {
+  const label = side.label.toLowerCase();
+  const popup = typeof side.getResolvePopupText === "function" ? side.getResolvePopupText().toLowerCase() : "";
+  return label.includes("miss") || label.includes("whiff") || popup.includes("miss") || popup.includes("whiff");
+}
+
 function buildDiePowerSnapshot(die: Die): DiePowerSnapshot {
   const faces = die.sides.map((side, index) => ({
     sideId: side.id,
@@ -154,7 +160,9 @@ function buildDiePowerSnapshot(die: Die): DiePowerSnapshot {
     orderedFaces: sortedFaces.map((face) => ({
       ...face,
       isCriticalHit: face.power === highestPower,
-      isCriticalMiss: face.power === lowestPower,
+      isCriticalMiss:
+        face.power === lowestPower &&
+        (lowestPower < 0 || isMissLikeSide(die.sides[face.baseIndex])),
     })),
   };
 }

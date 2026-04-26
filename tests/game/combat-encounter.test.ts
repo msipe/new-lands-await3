@@ -139,7 +139,7 @@ describe("combat encounter", () => {
     const critHitCount = snapshot?.orderedFaces.filter((face) => face.isCriticalHit).length ?? 0;
     const critMissCount = snapshot?.orderedFaces.filter((face) => face.isCriticalMiss).length ?? 0;
     expect(critHitCount).toBe(2);
-    expect(critMissCount).toBe(4);
+    expect(critMissCount).toBe(0);
   });
 
   it("keeps critical tags and ordering fixed after combat starts", () => {
@@ -236,6 +236,31 @@ describe("combat encounter", () => {
     expect(popups[0].text).toContain("CRITICAL MISS");
     expect(popups[0].sidePowerTone).toBe("negative");
     expect((popups[0].sidePower ?? 0)).toBeLessThan(0);
+  });
+
+  it("does not label the lowest non-miss face as CRITICAL MISS", () => {
+    const encounter = createCombatEncounter({
+      randomSource: fixedRandomSource(),
+      playerDice: [
+        new Die({
+          id: "no-miss-die",
+          name: "No Miss Die",
+          energyCost: 0,
+          sides: [
+            new DealDamage("Hit A", 3),
+            new DealDamage("Hit B", 2),
+            new DealDamage("Hit C", 1),
+          ],
+        }),
+      ],
+    });
+
+    resolveAllEnemyDice(encounter);
+    rollPlayerDie(encounter.state, encounter.eventBus, "no-miss-die", { nextInt: () => 2 });
+    const popups = drainResolutionPopups(encounter.state).filter((popup) => popup.dieId === "no-miss-die");
+
+    expect(popups.length).toBeGreaterThan(0);
+    expect(popups[0].text).not.toContain("CRITICAL MISS");
   });
 
   it("allows focus-up crit conversion to affect a different die", () => {
