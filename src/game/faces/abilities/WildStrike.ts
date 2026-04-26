@@ -69,7 +69,8 @@ function isMatchingWildStrikeDamageEvent(event: CombatEvent): boolean {
     event.value > 0 &&
     event.meta?.wildStrike === true &&
     typeof event.meta?.wildStrikeSourceDieId === "string" &&
-    event.meta.wildStrikeSourceDieId === event.dieId
+    typeof event.meta?.sourceDieId === "string" &&
+    event.meta.wildStrikeSourceDieId === event.meta.sourceDieId
   );
 }
 

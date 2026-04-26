@@ -32,10 +32,12 @@ export type TransientDiePopupData = {
 export function resolveTransientDieFromConstruct(options: ResolveTransientDieOptions): CombatEvent[] {
   const construct = getDieConstructById(options.constructId);
   const transientIsWeapon = construct.metadata?.tags?.includes("weapon") === true;
+  const transientDieId = `${options.parentDieId}-transient-${construct.id}`;
   const transientDie = createDieFromConstruct({
     construct,
-    dieId: `${options.parentDieId}-transient-${construct.id}`,
+    dieId: transientDieId,
     nameOverride: `${construct.name} (Transient)`,
+    extraTags: ["transient"],
   });
 
   const randomSource = options.randomSource ?? defaultRandomSource;
@@ -48,7 +50,7 @@ export function resolveTransientDieFromConstruct(options: ResolveTransientDieOpt
   const events = transientSide.resolve({
     source: options.source,
     cause: options.cause,
-    dieId: options.parentDieId,
+    dieId: transientDie.id,
     randomSource: options.randomSource,
   });
 
@@ -73,6 +75,8 @@ export function resolveTransientDieFromConstruct(options: ResolveTransientDieOpt
       ...(event.meta ?? {}),
       ...(options.extraEventMeta ?? {}),
       transientDie: true,
+      transientDieId,
+      transientSourceDieId: options.parentDieId,
       transientDieConstructId: construct.id,
       transientDieLabel: construct.name,
       transientSideLabel: transientSide.label,

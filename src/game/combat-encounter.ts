@@ -803,7 +803,6 @@ export function rollPlayerDie(
     const existingMeta = event.meta ?? {};
     const isWeaponAttack =
       die.tags.includes("weapon") ||
-      existingMeta.wildStrike === true ||
       existingMeta.transientDieIsWeapon === true;
 
     return {
