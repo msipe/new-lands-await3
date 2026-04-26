@@ -2,6 +2,7 @@ import {
   consumeRequestedPlayerTurnEnd,
   createCombatUiState,
   enqueueCombatResolutionPopups,
+  syncSpawnedPlayerDice,
   isCombatInspectorOpen,
   onCombatMousePressed,
   onCombatMouseReleased,
@@ -10,6 +11,8 @@ import {
   fastForwardCombatUi,
 } from "../../src/combat-ui";
 import { createCombatEncounter, resolveNextEnemyDie } from "../../src/game/combat-encounter";
+import { createDieFromConstruct } from "../../src/game/dice-factory";
+import { getDieConstructById } from "../../src/game/dice-constructs";
 
 describe("combat ui", () => {
   beforeAll(() => {
@@ -378,6 +381,32 @@ describe("combat ui", () => {
     encounter.state.phase = "enemy-turn";
     updateCombatUiState(uiState, encounter.state, 1 / 60);
     expect(uiState.arenaPlayerDice.some((die) => die.isSpawnedDie)).toBe(false);
+  });
+
+  it("opens the normal inspector for a spawned die that has entered the player pool", () => {
+    const encounter = createCombatEncounter();
+    encounter.state.phase = "player-turn";
+    const uiState = createCombatUiState(encounter.state);
+
+    const killingMachineDie = createDieFromConstruct({
+      construct: getDieConstructById("killing-machine-die"),
+      dieId: "spawned-killing-machine",
+      singleUse: true,
+      extraTags: ["spawned"],
+    });
+
+    encounter.state.player.dice.push(killingMachineDie);
+    syncSpawnedPlayerDice(uiState, encounter.state);
+
+    const spawnedDie = uiState.playerDice.find((die) => die.combatDieId === "spawned-killing-machine");
+    expect(spawnedDie).toBeDefined();
+    expect(spawnedDie?.isSpawnedDie).toBe(true);
+
+    onCombatMousePressed(uiState, encounter.state, spawnedDie?.x ?? 0, spawnedDie?.y ?? 0, 2);
+    expect(isCombatInspectorOpen(uiState)).toBe(true);
+
+    onCombatMousePressed(uiState, encounter.state, 560, 310, 1);
+    expect(isCombatInspectorOpen(uiState)).toBe(true);
   });
 
   it("syncs enemy die label from authoritative sideLabel", () => {

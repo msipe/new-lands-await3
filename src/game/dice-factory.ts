@@ -7,6 +7,7 @@ export type CreateDieFromConstructInput = {
   nameOverride?: string;
   singleUse?: boolean;
   fleeting?: boolean;
+  extraTags?: string[];
 };
 
 export function createDieFromConstruct(input: CreateDieFromConstructInput): Die {
@@ -19,6 +20,7 @@ export function createDieFromConstruct(input: CreateDieFromConstructInput): Die 
     singleUse: input.singleUse,
     fleeting: input.fleeting,
     tint: construct.tint,
+    tags: [...(construct.metadata?.tags ?? []), ...(input.extraTags ?? [])],
     sides: construct.sideBuilders.map((buildSide) => buildSide()),
   });
 }

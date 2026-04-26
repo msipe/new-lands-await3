@@ -25,6 +25,25 @@ export type CombatAction = {
 
 export type CombatActionSubscriber = (action: CombatAction) => void;
 
+export enum CombatHitSubscriberTarget {
+  PlayerAttackHit = "player-attack-hit",
+  EnemyAttackHit = "enemy-attack-hit",
+}
+
+export type CombatHitSubscriberDefinition = {
+  name: string;
+  id: string;
+  target: CombatHitSubscriberTarget;
+  duration: Duration;
+};
+
+export type CombatHitSubscriber = (event: CombatEvent) => void;
+
+export type CombatHitSubscriberRegistration = {
+  definition: CombatHitSubscriberDefinition;
+  subscriber: CombatHitSubscriber;
+};
+
 export enum CombatEventSubscriberTarget {
   PlayerAttackDamage = "player-attack-damage",
   EnemyAttackDamage = "enemy-attack-damage",
@@ -63,6 +82,11 @@ type CombatEventModifierEntry = {
   order: number;
 };
 
+type CombatHitSubscriberEntry = {
+  definition: CombatHitSubscriberDefinition;
+  subscriber: CombatHitSubscriber;
+};
+
 function eventMatchesTarget(event: CombatEvent, target: CombatEventSubscriberTarget): boolean {
   if (target === CombatEventSubscriberTarget.PlayerAttackDamage) {
     return (
@@ -76,6 +100,24 @@ function eventMatchesTarget(event: CombatEvent, target: CombatEventSubscriberTar
     event.effect === EffectType.Damage &&
     event.source === "enemy" &&
     event.target === "opponent"
+  );
+}
+
+function eventMatchesHitTarget(event: CombatEvent, target: CombatHitSubscriberTarget): boolean {
+  if (target === CombatHitSubscriberTarget.PlayerAttackHit) {
+    return (
+      event.effect === EffectType.Damage &&
+      event.source === "player" &&
+      event.target === "opponent" &&
+      event.value > 0
+    );
+  }
+
+  return (
+    event.effect === EffectType.Damage &&
+    event.source === "enemy" &&
+    event.target === "opponent" &&
+    event.value > 0
   );
 }
 
@@ -99,6 +141,7 @@ export class CombatEventBus {
   };
 
   private readonly modifierSubscribers: CombatEventModifierEntry[] = [];
+  private readonly hitSubscribers: CombatHitSubscriberEntry[] = [];
   private modifierSubscriptionOrder = 0;
   private readonly actionSubscribers: Record<CombatActionType, CombatActionSubscriber[]> = {
     [CombatActionType.PlayerTurnEnded]: [],
@@ -142,6 +185,25 @@ export class CombatEventBus {
     };
   }
 
+  subscribeHit(
+    definition: CombatHitSubscriberDefinition,
+    subscriber: CombatHitSubscriber,
+  ): () => void {
+    const entry: CombatHitSubscriberEntry = {
+      definition,
+      subscriber,
+    };
+
+    this.hitSubscribers.push(entry);
+
+    return () => {
+      const index = this.hitSubscribers.indexOf(entry);
+      if (index >= 0) {
+        this.hitSubscribers.splice(index, 1);
+      }
+    };
+  }
+
   subscribeAction(actionType: CombatActionType, subscriber: CombatActionSubscriber): () => void {
     this.actionSubscribers[actionType].push(subscriber);
 
@@ -165,6 +227,12 @@ export class CombatEventBus {
         this.modifierSubscribers.splice(index, 1);
       }
     }
+
+    for (let index = this.hitSubscribers.length - 1; index >= 0; index -= 1) {
+      if (this.hitSubscribers[index].definition.duration === duration) {
+        this.hitSubscribers.splice(index, 1);
+      }
+    }
   }
 
   prepareEvent(event: CombatEvent): CombatEvent {
@@ -176,6 +244,8 @@ export class CombatEventBus {
     const modifiedEvent = options?.alreadyPrepared === true
       ? event
       : this.applyModifierSubscribers(event);
+
+    this.publishHitSubscribers(modifiedEvent);
 
     for (const subscriber of this.subscribers[modifiedEvent.effect]) {
       nextEvents.push(...subscriber(modifiedEvent));
@@ -208,6 +278,16 @@ export class CombatEventBus {
     }
 
     return modifiedEvent;
+  }
+
+  private publishHitSubscribers(event: CombatEvent): void {
+    for (const entry of this.hitSubscribers) {
+      if (!eventMatchesHitTarget(event, entry.definition.target)) {
+        continue;
+      }
+
+      entry.subscriber(event);
+    }
   }
 
   private installLifecycleDurationSubscribers(): void {

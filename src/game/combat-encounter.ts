@@ -1,7 +1,10 @@
 import {
   CombatActionType,
+  CombatHitSubscriberRegistration,
+  CombatHitSubscriberTarget,
   CombatEvent,
   CombatEventBus,
+  Duration,
   type CombatEventModifierRegistration,
 } from "./combat-event-bus";
 import {
@@ -113,6 +116,7 @@ export type CombatEncounterState = {
   queuedPlayerRollConversions: QueuedPlayerRollConversion[];
   nextPlayerRollConversionId: number;
   nextSpawnedDieIndex: number;
+  pendingNextRoundDice: Die[];
   combatLog: string[];
   pendingResolutionPopups: CombatResolutionPopup[];
 };
@@ -341,6 +345,40 @@ type PlayerRollConversionProviderSide = DieSide & {
 type DieSpawnerSide = DieSide & {
   getSpawnedDieConstructIds?: () => string[];
 };
+
+type WeaponHitReactorSide = DieSide & {
+  createWeaponHitReaction?: () => { constructId: string; countPerHit: number };
+};
+
+type CombatHitSubscriberSide = DieSide & {
+  createCombatHitSubscriber?: () => CombatHitSubscriberRegistration;
+};
+
+function isWeaponDamageEventFromPlayer(state: CombatEncounterState, event: CombatEvent): boolean {
+  if (event.meta?.isWeaponAttack === true) {
+    return true;
+  }
+
+  if (event.meta?.sourceDieIsWeapon === true || event.meta?.transientDieIsWeapon === true) {
+    return true;
+  }
+
+  return state.player.dice.some((d) => d.id === event.dieId && d.tags.includes("weapon"));
+}
+
+function queuePendingNextRoundDie(state: CombatEncounterState, constructId: string): void {
+  const pendingDieId = `spawned-${state.nextSpawnedDieIndex}`;
+  state.nextSpawnedDieIndex += 1;
+  const pendingConstruct = getDieConstructById(constructId);
+  const pendingDie = createDieFromConstruct({
+    construct: pendingConstruct,
+    dieId: pendingDieId,
+    singleUse: true,
+    extraTags: ["spawned"],
+  });
+  state.pendingNextRoundDice.push(pendingDie);
+  state.combatLog.push(`${pendingDie.name} queued for next round.`);
+}
 
 function getSideIndexById(die: Die, sideId: string): number {
   return die.sides.findIndex((side) => side.id === sideId);
@@ -604,6 +642,7 @@ export function createCombatEncounter(
     queuedPlayerRollConversions: [],
     nextPlayerRollConversionId: 1,
     nextSpawnedDieIndex: 0,
+    pendingNextRoundDice: [],
     combatLog: [
       `Round 1 begins.`,
       `${enemy.name} prepares ${enemyIntent.pendingPlayerDamage} damage and ${enemyIntent.pendingEnemyHealing} healing.`,
@@ -629,6 +668,16 @@ function startNextRound(state: CombatEncounterState, randomSource: RandomSource)
       state.combatLog.push(`${die.name} fades away.`);
     }
   }
+
+  if (state.pendingNextRoundDice.length > 0) {
+    for (const die of state.pendingNextRoundDice) {
+      state.player.dice.push(die);
+      state.diePowerById[die.id] = buildDiePowerSnapshot(die);
+      state.combatLog.push(`${die.name} enters the fray.`);
+    }
+    state.pendingNextRoundDice = [];
+  }
+
   state.enemyIntent = buildEnemyIntent(state.enemy, randomSource);
 
   state.combatLog.push(`Round ${state.round} begins.`);
@@ -711,11 +760,53 @@ export function rollPlayerDie(
     eventBus.subscribeModifier(eventModifier.definition, eventModifier.modifier);
   }
 
+  const weaponHitReaction = (side as WeaponHitReactorSide).createWeaponHitReaction?.();
+  if (weaponHitReaction) {
+    eventBus.subscribeHit(
+      {
+        name: "bloodlust-weapon-hit",
+        id: `${die.id}:${side.id}:weapon-hit`,
+        target: CombatHitSubscriberTarget.PlayerAttackHit,
+        duration: Duration.PlayerTurn,
+      },
+      (event) => {
+        if (!isWeaponDamageEventFromPlayer(state, event)) {
+          return;
+        }
+
+        for (let i = 0; i < weaponHitReaction.countPerHit; i++) {
+          queuePendingNextRoundDie(state, weaponHitReaction.constructId);
+        }
+      },
+    );
+  }
+
+  const combatHitSubscriber = (side as CombatHitSubscriberSide).createCombatHitSubscriber?.();
+  if (combatHitSubscriber) {
+    eventBus.subscribeHit(combatHitSubscriber.definition, combatHitSubscriber.subscriber);
+  }
+
   const events = side.resolve({
     source: "player",
     cause: "player-roll",
     dieId: die.id,
     randomSource,
+  }).map((event) => {
+    const existingMeta = event.meta ?? {};
+    const isWeaponAttack =
+      die.tags.includes("weapon") ||
+      existingMeta.wildStrike === true ||
+      existingMeta.transientDieIsWeapon === true;
+
+    return {
+      ...event,
+      meta: {
+        ...existingMeta,
+        sourceDieId: die.id,
+        sourceDieIsWeapon: die.tags.includes("weapon"),
+        isWeaponAttack: existingMeta.isWeaponAttack === true || isWeaponAttack,
+      },
+    };
   });
 
   state.combatLog.push(
@@ -742,6 +833,7 @@ export function rollPlayerDie(
       construct: spawnedConstruct,
       dieId: spawnedDieId,
       singleUse: true,
+      extraTags: ["spawned"],
     });
     state.player.dice.push(spawnedDie);
     state.diePowerById[spawnedDieId] = buildDiePowerSnapshot(spawnedDie);

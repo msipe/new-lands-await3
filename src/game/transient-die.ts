@@ -31,6 +31,7 @@ export type TransientDiePopupData = {
 
 export function resolveTransientDieFromConstruct(options: ResolveTransientDieOptions): CombatEvent[] {
   const construct = getDieConstructById(options.constructId);
+  const transientIsWeapon = construct.metadata?.tags?.includes("weapon") === true;
   const transientDie = createDieFromConstruct({
     construct,
     dieId: `${options.parentDieId}-transient-${construct.id}`,
@@ -77,6 +78,7 @@ export function resolveTransientDieFromConstruct(options: ResolveTransientDieOpt
       transientSideLabel: transientSide.label,
       transientPopupText: popupText,
       transientSideId: transientSide.id,
+      transientDieIsWeapon: transientIsWeapon,
     },
   }));
 }

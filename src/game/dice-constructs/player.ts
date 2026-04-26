@@ -7,6 +7,19 @@ import type { DieConstruct } from "./types";
 
 export const PLAYER_DIE_CONSTRUCTS: DieConstruct[] = [
   {
+    id: "killing-machine-die",
+    name: "Killing Machine Die",
+    description: "A supercharged rage die born from frenzied slaughter.",
+    energyCost: 0,
+    tint: { r: 0.72, g: 0.10, b: 0.10 },
+    metadata: { tags: ["berserker"] },
+    sideBuilders: [
+      () => new Warcry(0),
+      () => new Warcry(2),
+      () => new Warcry(4),
+    ],
+  },
+  {
     id: "rage-die",
     name: "Rage Die",
     description: "Channel rage into bonus attack damage this round.",

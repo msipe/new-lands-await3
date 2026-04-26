@@ -10,7 +10,7 @@ import {
   rollNextPlayerDie,
 } from "../../src/game/combat-encounter";
 import { Die, EffectType } from "../../src/game/dice";
-import { DealDamage, FaceAdjustmentModalityType } from "../../src/game/faces";
+import { Bloodlust, DealDamage, FaceAdjustmentModalityType, Miss } from "../../src/game/faces";
 import { DealSelfDamage } from "../../src/game/faces/abilities/DealSelfDamage";
 import { FocusUp } from "../../src/game/faces/abilities/FocusUp";
 import { createPlayerCombatDiceLoadout } from "../../src/game/dice-constructs/player-combat-dice";
@@ -733,5 +733,193 @@ describe("combat encounter", () => {
     expect(encounter.state.player.hp).toBe(20);
     expect(encounter.state.player.armor).toBe(2);
     expect(encounter.state.combatLog).toContain("Player gains 5 armor.");
+  });
+
+  describe("Bloodlust weapon-hit reaction", () => {
+    function makeBloodlustEncounter() {
+      const bloodlustDie = new Die({
+        id: "bloodlust-die",
+        name: "Bloodlust Die",
+        energyCost: 0,
+        sides: [new Bloodlust("rage-die")],
+      });
+
+      const weaponDie = new Die({
+        id: "weapon-die",
+        name: "Weapon Die",
+        energyCost: 0,
+        tags: ["weapon"],
+        sides: [new DealDamage("Strike", 3)],
+      });
+
+      const nonWeaponDie = new Die({
+        id: "other-die",
+        name: "Other Die",
+        energyCost: 0,
+        sides: [new DealDamage("Spell", 2)],
+      });
+
+      const encounter = createCombatEncounter({
+        randomSource: fixedRandomSource(),
+        playerDice: [bloodlustDie, weaponDie, nonWeaponDie],
+      });
+
+      resolveAllEnemyDice(encounter);
+      return encounter;
+    }
+
+    it("does not queue dice immediately when Bloodlust is rolled", () => {
+      const encounter = makeBloodlustEncounter();
+
+      rollPlayerDie(encounter.state, encounter.eventBus, "bloodlust-die", fixedRandomSource());
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(0);
+    });
+
+    it("queues a Rage Die when a weapon hit lands after Bloodlust", () => {
+      const encounter = makeBloodlustEncounter();
+
+      rollPlayerDie(encounter.state, encounter.eventBus, "bloodlust-die", fixedRandomSource());
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(0);
+
+      rollPlayerDie(encounter.state, encounter.eventBus, "weapon-die", fixedRandomSource());
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(1);
+      expect(encounter.state.pendingNextRoundDice[0]?.name).toBe("Rage Die");
+    });
+
+    it("queues a Killing Machine Die when the killing-machine Bloodlust face is active", () => {
+      const bloodlustDie = new Die({
+        id: "bloodlust-die",
+        name: "Bloodlust Die",
+        energyCost: 0,
+        sides: [new Bloodlust("killing-machine-die")],
+      });
+
+      const weaponDie = new Die({
+        id: "weapon-die",
+        name: "Weapon Die",
+        energyCost: 0,
+        tags: ["weapon"],
+        sides: [new DealDamage("Strike", 3)],
+      });
+
+      const encounter = createCombatEncounter({
+        randomSource: fixedRandomSource(),
+        playerDice: [bloodlustDie, weaponDie],
+      });
+
+      resolveAllEnemyDice(encounter);
+      rollPlayerDie(encounter.state, encounter.eventBus, "bloodlust-die", fixedRandomSource());
+      rollPlayerDie(encounter.state, encounter.eventBus, "weapon-die", fixedRandomSource());
+
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(1);
+      expect(encounter.state.pendingNextRoundDice[0]?.name).toBe("Killing Machine Die");
+    });
+
+    it("does not queue dice when a non-weapon die deals damage", () => {
+      const encounter = makeBloodlustEncounter();
+
+      rollPlayerDie(encounter.state, encounter.eventBus, "bloodlust-die", fixedRandomSource());
+      rollPlayerDie(encounter.state, encounter.eventBus, "other-die", fixedRandomSource());
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(0);
+    });
+
+    it("promotes pending dice into the pool at the start of next round", () => {
+      const encounter = makeBloodlustEncounter();
+
+      rollPlayerDie(encounter.state, encounter.eventBus, "bloodlust-die", fixedRandomSource());
+      rollPlayerDie(encounter.state, encounter.eventBus, "weapon-die", fixedRandomSource());
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(1);
+
+      const poolSizeBefore = encounter.state.player.dice.length;
+      endPlayerTurnWhenReady(encounter);
+      resolveAllEnemyDice(encounter);
+
+      expect(encounter.state.player.dice).toHaveLength(poolSizeBefore + 1);
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(0);
+      expect(encounter.state.player.dice.some((d) => d.name === "Rage Die")).toBe(true);
+    });
+
+    it("expires Bloodlust reaction at the start of next round", () => {
+      const encounter = makeBloodlustEncounter();
+
+      rollPlayerDie(encounter.state, encounter.eventBus, "bloodlust-die", fixedRandomSource());
+      rollPlayerDie(encounter.state, encounter.eventBus, "weapon-die", fixedRandomSource());
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(1);
+
+      endPlayerTurnWhenReady(encounter);
+      resolveAllEnemyDice(encounter);
+
+      const queuedAfterPromotion = encounter.state.pendingNextRoundDice.length;
+      rollPlayerDie(encounter.state, encounter.eventBus, "weapon-die", fixedRandomSource());
+
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(queuedAfterPromotion);
+    });
+
+    it("queues one die per weapon hit when multiple weapon dice are rolled", () => {
+      const weaponDie2 = new Die({
+        id: "weapon-die-2",
+        name: "Weapon Die 2",
+        energyCost: 0,
+        tags: ["weapon"],
+        sides: [new DealDamage("Strike", 2)],
+      });
+
+      const bloodlustDie = new Die({
+        id: "bloodlust-die",
+        name: "Bloodlust Die",
+        energyCost: 0,
+        sides: [new Bloodlust("rage-die")],
+      });
+
+      const encounter = createCombatEncounter({
+        randomSource: fixedRandomSource(),
+        playerDice: [bloodlustDie, new Die({ id: "weapon-die", name: "Weapon Die", energyCost: 0, tags: ["weapon"], sides: [new DealDamage("Strike", 3)] }), weaponDie2],
+      });
+
+      resolveAllEnemyDice(encounter);
+      rollPlayerDie(encounter.state, encounter.eventBus, "bloodlust-die", fixedRandomSource());
+      rollPlayerDie(encounter.state, encounter.eventBus, "weapon-die", fixedRandomSource());
+      rollPlayerDie(encounter.state, encounter.eventBus, "weapon-die-2", fixedRandomSource());
+
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(2);
+    });
+
+    it("spawned rage dice are singleUse", () => {
+      const encounter = makeBloodlustEncounter();
+
+      rollPlayerDie(encounter.state, encounter.eventBus, "bloodlust-die", fixedRandomSource());
+      rollPlayerDie(encounter.state, encounter.eventBus, "weapon-die", fixedRandomSource());
+
+      expect(encounter.state.pendingNextRoundDice[0]?.singleUse).toBe(true);
+    });
+
+    it("does not queue dice when weapon deals 0 damage", () => {
+      const zeroDamageDie = new Die({
+        id: "zero-weapon",
+        name: "Zero Weapon",
+        energyCost: 0,
+        tags: ["weapon"],
+        sides: [new Miss()],
+      });
+
+      const bloodlustDie = new Die({
+        id: "bloodlust-die",
+        name: "Bloodlust Die",
+        energyCost: 0,
+        sides: [new Bloodlust("rage-die")],
+      });
+
+      const encounter = createCombatEncounter({
+        randomSource: fixedRandomSource(),
+        playerDice: [bloodlustDie, zeroDamageDie],
+      });
+
+      resolveAllEnemyDice(encounter);
+      rollPlayerDie(encounter.state, encounter.eventBus, "bloodlust-die", fixedRandomSource());
+      rollPlayerDie(encounter.state, encounter.eventBus, "zero-weapon", fixedRandomSource());
+
+      expect(encounter.state.pendingNextRoundDice).toHaveLength(0);
+    });
+
   });
 });

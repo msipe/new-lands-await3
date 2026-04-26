@@ -1640,18 +1640,16 @@ function getInspectorDieView(uiState: CombatUiState, state: CombatEncounterState
 
   if (inspector.spawnedDieId) {
     const spawnedDie = findVisualDieById(uiState, inspector.spawnedDieId);
-    if (!spawnedDie || !spawnedDie.spawnedInspectorSides || !spawnedDie.spawnedInspectorName) {
-      return undefined;
+    if (spawnedDie?.spawnedInspectorSides && spawnedDie.spawnedInspectorName) {
+      return {
+        name: spawnedDie.spawnedInspectorName,
+        sides: spawnedDie.spawnedInspectorSides,
+        totalPower: roundPower(
+          spawnedDie.spawnedInspectorTotalPower ??
+            spawnedDie.spawnedInspectorSides.reduce((sum, side) => sum + side.power, 0),
+        ),
+      };
     }
-
-    return {
-      name: spawnedDie.spawnedInspectorName,
-      sides: spawnedDie.spawnedInspectorSides,
-      totalPower: roundPower(
-        spawnedDie.spawnedInspectorTotalPower ??
-          spawnedDie.spawnedInspectorSides.reduce((sum, side) => sum + side.power, 0),
-      ),
-    };
   }
 
   if (!inspector.combatDieId) {
@@ -1685,7 +1683,9 @@ function getInspectorEnergyCost(uiState: CombatUiState, state: CombatEncounterSt
 
   if (inspector.spawnedDieId) {
     const spawnedDie = findVisualDieById(uiState, inspector.spawnedDieId);
-    return spawnedDie?.spawnedInspectorEnergyCost;
+    if (spawnedDie?.spawnedInspectorEnergyCost !== undefined) {
+      return spawnedDie.spawnedInspectorEnergyCost;
+    }
   }
 
   if (!inspector.combatDieId) {
@@ -1826,7 +1826,7 @@ function openInspectorForDie(uiState: CombatUiState, die: VisualDie): void {
   uiState.inspector = {
     owner: die.owner,
     combatDieId: die.combatDieId,
-    spawnedDieId: die.isSpawnedDie ? die.id : undefined,
+    spawnedDieId: die.isSpawnedDie && !die.combatDieId ? die.id : undefined,
     selectedSideIndex: undefined,
     hoveredSideIndex: undefined,
   };

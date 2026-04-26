@@ -7,13 +7,14 @@ import {
 } from "../face-adjustments";
 import type { PlayerProgressionState } from "../player-progression";
 import { EQUIPMENT_SLOT_ORDER } from "../player-items";
-import { DealDamage, Enrage, FocusUp, HealSelf, HeedlessAssault, Ironhide, Miss, ScalingStrike, SpawnDie, WildStrike, Warcry } from "../faces";
+import { Bloodlust, DealDamage, Enrage, FocusUp, HealSelf, HeedlessAssault, Ironhide, Miss, ScalingStrike, SpawnDie, WildStrike, Warcry } from "../faces";
 
 function createWarcryDie(): Die {
   return new Die({
     id: "player-die-1",
     name: "Warcry Die",
     energyCost: 2,
+    tags: ["starter"],
     sides: [
       new Warcry(3),
       new Warcry(2),
@@ -30,6 +31,7 @@ function createWildStrikeDie(mainhandWeaponDiceId?: string): Die {
     id: "player-die-2",
     name: "Wild Strike Die",
     energyCost: 1,
+    tags: ["starter"],
     sides: [
       new WildStrike(2, mainhandWeaponDiceId),
       new WildStrike(1, mainhandWeaponDiceId),
@@ -46,6 +48,7 @@ function createIronhideDie(): Die {
     id: "player-die-3",
     name: "Ironhide Die",
     energyCost: 1,
+    tags: ["starter"],
     sides: [
       new Ironhide(5),
       new Ironhide(4),
@@ -62,6 +65,7 @@ function createFocusUpDie(): Die {
     id: "player-die-4",
     name: "Focus Up Die",
     energyCost: 1,
+    tags: ["starter"],
     sides: [
       new FocusUp("critical-hit"),
       new FocusUp("critical-hit"),
@@ -169,12 +173,26 @@ const FACET_ABILITY_DIE_FACTORIES: Partial<Record<string, (instanceId: string) =
       new SpawnDie("spark-die", "Spark Die"),
     ],
   }),
+  "facet-die-berserker-13": (id) => new Die({
+    id, typeId: "facet-die-berserker-13", name: "Bloodlust Die", energyCost: 1,
+    sides: [
+      new Warcry(-1),
+      new Warcry(-1),
+      new Bloodlust("rage-die"),
+      new Bloodlust("rage-die"),
+      new Bloodlust("rage-die"),
+      new Bloodlust("killing-machine-die"),
+    ],
+  }),
 };
 
 function createFacetAbilityDice(progression: PlayerProgressionState): Die[] {
   return progression.unlockedFacetDieIds.flatMap((typeId, index) => {
     const factory = FACET_ABILITY_DIE_FACTORIES[typeId];
-    return factory ? [factory(`facet-instance-${index}`)] : [];
+    if (!factory) return [];
+    const die = factory(`facet-instance-${index}`);
+    die.tags.push("facet");
+    return [die];
   });
 }
 
@@ -209,6 +227,7 @@ export function createEquippedItemCombatDice(progression?: PlayerProgressionStat
       createDieFromConstruct({
         construct,
         dieId: `equipped-${slotId}-${equipmentIndex}`,
+        extraTags: ["weapon"],
       }),
     );
     equipmentIndex += 1;

@@ -1437,21 +1437,20 @@ local function getInspectorDieView(self, uiState, state)
     end
     if inspector.spawnedDieId then
         local spawnedDie = findVisualDieById(nil, uiState, inspector.spawnedDieId)
-        if not spawnedDie or not spawnedDie.spawnedInspectorSides or not spawnedDie.spawnedInspectorName then
-            return nil
-        end
-        return {
-            name = spawnedDie.spawnedInspectorName,
-            sides = spawnedDie.spawnedInspectorSides,
-            totalPower = roundPower(
-                nil,
-                spawnedDie.spawnedInspectorTotalPower or __TS__ArrayReduce(
-                    spawnedDie.spawnedInspectorSides,
-                    function(____, sum, side) return sum + side.power end,
-                    0
+        if spawnedDie and spawnedDie.spawnedInspectorSides and spawnedDie.spawnedInspectorName then
+            return {
+                name = spawnedDie.spawnedInspectorName,
+                sides = spawnedDie.spawnedInspectorSides,
+                totalPower = roundPower(
+                    nil,
+                    spawnedDie.spawnedInspectorTotalPower or __TS__ArrayReduce(
+                        spawnedDie.spawnedInspectorSides,
+                        function(____, sum, side) return sum + side.power end,
+                        0
+                    )
                 )
-            )
-        }
+            }
+        end
     end
     if not inspector.combatDieId then
         return nil
@@ -1478,7 +1477,9 @@ local function getInspectorEnergyCost(self, uiState, state)
     end
     if inspector.spawnedDieId then
         local spawnedDie = findVisualDieById(nil, uiState, inspector.spawnedDieId)
-        return spawnedDie and spawnedDie.spawnedInspectorEnergyCost
+        if (spawnedDie and spawnedDie.spawnedInspectorEnergyCost) ~= nil then
+            return spawnedDie.spawnedInspectorEnergyCost
+        end
     end
     if not inspector.combatDieId then
         return nil
@@ -1529,8 +1530,8 @@ local function drawDieInspector(self, uiState, state)
         8,
         8
     )
-    local ____opt_40 = uiState.inspector
-    local ownerLabel = (____opt_40 and ____opt_40.owner) == "player" and "Ally" or "Enemy"
+    local ____opt_42 = uiState.inspector
+    local ownerLabel = (____opt_42 and ____opt_42.owner) == "player" and "Ally" or "Enemy"
     local inspectorEnergyCost = getInspectorEnergyCost(nil, uiState, state)
     local energyLabel = inspectorEnergyCost == nil and "Energy Cost: -" or "Energy Cost: " .. tostring(inspectorEnergyCost)
     local powerLabel = "Total Power: " .. tostring(inspectorDie.totalPower)
@@ -1595,13 +1596,13 @@ local function drawDieInspector(self, uiState, state)
         6,
         6
     )
-    local ____opt_42 = uiState.inspector
-    local ____temp_46 = ____opt_42 and ____opt_42.hoveredSideIndex
-    if ____temp_46 == nil then
-        local ____opt_44 = uiState.inspector
-        ____temp_46 = ____opt_44 and ____opt_44.selectedSideIndex
+    local ____opt_44 = uiState.inspector
+    local ____temp_48 = ____opt_44 and ____opt_44.hoveredSideIndex
+    if ____temp_48 == nil then
+        local ____opt_46 = uiState.inspector
+        ____temp_48 = ____opt_46 and ____opt_46.selectedSideIndex
     end
-    local activeSideIndex = ____temp_46
+    local activeSideIndex = ____temp_48
     for ____, tile in ipairs(layout.tiles) do
         local side = inspectorDie.sides[tile.sideIndex + 1]
         local label = layout.denseMode and tostring(tile.sideIndex + 1) or side.label
@@ -1703,7 +1704,7 @@ local function openInspectorForDie(self, uiState, die)
     uiState.inspector = {
         owner = die.owner,
         combatDieId = die.combatDieId,
-        spawnedDieId = die.isSpawnedDie and die.id or nil,
+        spawnedDieId = die.isSpawnedDie and not die.combatDieId and die.id or nil,
         selectedSideIndex = nil,
         hoveredSideIndex = nil
     }
@@ -1782,15 +1783,15 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
     for ____, die in ipairs(uiState.playerDice) do
         do
             if die.state == "arena" then
-                goto __continue292
+                goto __continue293
             end
             if not canDragPlayerDie(nil, uiState, state, die) then
-                goto __continue292
+                goto __continue293
             end
             local half = die.size / 2
             local inside = x >= die.x - half and x <= die.x + half and y >= die.y - half and y <= die.y + half
             if not inside then
-                goto __continue292
+                goto __continue293
             end
             die.state = "dragging"
             die.x = x
@@ -1806,7 +1807,7 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
             }
             return
         end
-        ::__continue292::
+        ::__continue293::
     end
 end
 function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
@@ -1831,9 +1832,9 @@ function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)
     local dragged = __TS__ArrayFind(
         uiState.playerDice,
         function(____, die)
-            local ____die_id_49 = die.id
-            local ____opt_47 = uiState.drag
-            return ____die_id_49 == (____opt_47 and ____opt_47.dieId)
+            local ____die_id_51 = die.id
+            local ____opt_49 = uiState.drag
+            return ____die_id_51 == (____opt_49 and ____opt_49.dieId)
         end
     )
     if not dragged then

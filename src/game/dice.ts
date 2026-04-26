@@ -63,6 +63,7 @@ export type DieInput = {
   singleUse?: boolean;
   fleeting?: boolean;
   tint?: DieTint;
+  tags?: string[];
 };
 
 export const defaultRandomSource: RandomSource = {
@@ -82,6 +83,7 @@ export class Die {
   readonly singleUse: boolean;
   readonly fleeting: boolean;
   readonly tint: DieTint | undefined;
+  readonly tags: string[];
 
   private readonly rollHooks: DieRollHook[];
 
@@ -97,6 +99,7 @@ export class Die {
     this.singleUse = input.singleUse ?? false;
     this.fleeting = input.fleeting ?? false;
     this.tint = input.tint;
+    this.tags = [...(input.tags ?? [])];
     this.rollHooks = [];
   }
 
