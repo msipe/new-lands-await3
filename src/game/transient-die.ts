@@ -1,4 +1,11 @@
 import type { CombatEvent } from "./combat-event-bus";
+import {
+  CombatTagFactory,
+  CoreCombatTags,
+  hasCombatTag,
+  mergeCombatTags,
+  prefixCombatTags,
+} from "./combat-tags";
 import { buildRollCombatLogLines } from "./combat-log";
 import {
   defaultRandomSource,
@@ -31,7 +38,6 @@ export type TransientDiePopupData = {
 
 export function resolveTransientDieFromConstruct(options: ResolveTransientDieOptions): CombatEvent[] {
   const construct = getDieConstructById(options.constructId);
-  const transientIsWeapon = construct.metadata?.tags?.includes("weapon") === true;
   const transientDieId = `${options.parentDieId}-transient-${construct.id}`;
   const transientDie = createDieFromConstruct({
     construct,
@@ -51,6 +57,8 @@ export function resolveTransientDieFromConstruct(options: ResolveTransientDieOpt
     source: options.source,
     cause: options.cause,
     dieId: transientDie.id,
+    originDieId: options.parentDieId,
+    dieTags: transientDie.tags,
     randomSource: options.randomSource,
   });
 
@@ -71,10 +79,14 @@ export function resolveTransientDieFromConstruct(options: ResolveTransientDieOpt
 
   return events.map((event) => ({
     ...event,
+    tags: mergeCombatTags(
+      event.tags,
+      [CoreCombatTags.LifecycleTransient, CoreCombatTags.Transient],
+      prefixCombatTags(CombatTagFactory.dieTag, transientDie.tags),
+    ),
     meta: {
       ...(event.meta ?? {}),
       ...(options.extraEventMeta ?? {}),
-      transientDie: true,
       transientDieId,
       transientSourceDieId: options.parentDieId,
       transientDieConstructId: construct.id,
@@ -82,7 +94,6 @@ export function resolveTransientDieFromConstruct(options: ResolveTransientDieOpt
       transientSideLabel: transientSide.label,
       transientPopupText: popupText,
       transientSideId: transientSide.id,
-      transientDieIsWeapon: transientIsWeapon,
     },
   }));
 }
@@ -90,7 +101,7 @@ export function resolveTransientDieFromConstruct(options: ResolveTransientDieOpt
 export function getTransientDiePopupDataFromEvents(
   events: CombatEvent[],
 ): TransientDiePopupData | undefined {
-  const transientEvent = events.find((event) => event.meta?.transientDie === true);
+  const transientEvent = events.find((event) => hasCombatTag(event.tags, CoreCombatTags.Transient));
   if (!transientEvent) {
     return undefined;
   }

@@ -24,6 +24,8 @@ describe("WildStrike", () => {
       cause: "player-roll",
       dieId: "player-die-1",
       sideId: "transient-side",
+      originDieId: "player-die-1",
+      tags: ["effect:damage", "actor:player", "target:opponent", "cause:player-roll", "attack", "hit", "transient"],
     };
 
     mockedResolveTransientDieFromConstruct.mockReturnValue([baseEvent]);
@@ -151,6 +153,8 @@ describe("WildStrike", () => {
           cause: "player-roll",
           dieId: "player-die-1",
           sideId: "transient-side",
+          originDieId: "player-die-1",
+          tags: ["effect:damage", "actor:player", "target:opponent", "cause:player-roll", "attack", "hit", "transient"],
         },
       ];
     });
@@ -200,6 +204,8 @@ describe("WildStrike", () => {
         cause: "player-roll",
         dieId: "player-die-1",
         sideId: "transient-side",
+        originDieId: "player-die-1",
+        tags: ["effect:damage", "actor:player", "target:opponent", "cause:player-roll", "attack", "hit", "transient"],
       },
     ]);
 
