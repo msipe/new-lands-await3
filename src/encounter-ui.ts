@@ -843,28 +843,14 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
           love.graphics.setColor(1, 1, 1, 0.98);
           love.graphics.printf(
             option.playerLine,
-            optionButton.rect.x + (option.questPrompt !== undefined ? 24 : 10),
+            optionButton.rect.x + 10,
             optionButton.rect.y + 10,
-            optionButton.rect.width - (option.questPrompt !== undefined ? 34 : 20),
+            optionButton.rect.width - 20,
             "left",
             0,
             0.51,
             0.51,
           );
-
-          if (option.questReady === true) {
-            love.graphics.setColor(1, 0.86, 0.25, 0.98);
-            love.graphics.printf(
-              "!",
-              optionButton.rect.x + 8,
-              optionButton.rect.y + 8,
-              12,
-              "center",
-              0,
-              0.72,
-              0.72,
-            );
-          }
         }
       }
 
