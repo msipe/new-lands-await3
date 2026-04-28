@@ -96,16 +96,37 @@ local function createCharacterButtons(self, width, selectedLocation)
         function(____, character, index) return {characterId = character.id, rect = {x = panelX + 12, y = startY + index * (buttonHeight + gap), width = buttonWidth, height = buttonHeight}} end
     )
 end
-local function createDialogButtons(self, width)
+local function getDialogLayoutMetrics(self, height, optionCount)
+    local optionRowHeight = 36
+    local optionGap = 8
+    local optionsHeight = optionCount > 0 and optionCount * optionRowHeight + (optionCount - 1) * optionGap or 0
+    local safeBottomY = height - 160
+    local defaultOptionsStartY = 496
+    local optionsStartY = math.min(defaultOptionsStartY, safeBottomY - optionsHeight)
+    local dialogBoxHeight = 52
+    local dialogGap = 10
+    local dialogBoxY = math.min(434, optionsStartY - dialogGap - dialogBoxHeight)
+    local dialogTitleY = dialogBoxY - 24
+    return {
+        dialogTitleY = dialogTitleY,
+        dialogBoxY = dialogBoxY,
+        optionsStartY = optionsStartY,
+        questActionY = math.min(614, height - 190),
+        responseY = height - 148
+    }
+end
+local function createDialogButtons(self, width, height, optionCount)
     local panelX = math.floor(width * 0.54)
     local detailsWidth = math.floor(width * 0.4)
     local buttonWidth = math.floor((detailsWidth - 36) * 0.5)
-    return {standard = {x = panelX + 14, y = 496, width = detailsWidth - 28, height = 36}, quest = {x = panelX + 14, y = 540, width = detailsWidth - 28, height = 36}, yes = {x = panelX + 14, y = 614, width = buttonWidth, height = 34}, no = {x = panelX + 22 + buttonWidth, y = 614, width = buttonWidth, height = 34}}
+    local metrics = getDialogLayoutMetrics(nil, height, optionCount)
+    return {standard = {x = panelX + 14, y = 496, width = detailsWidth - 28, height = 36}, quest = {x = panelX + 14, y = 540, width = detailsWidth - 28, height = 36}, yes = {x = panelX + 14, y = metrics.questActionY, width = buttonWidth, height = 34}, no = {x = panelX + 22 + buttonWidth, y = metrics.questActionY, width = buttonWidth, height = 34}}
 end
-local function createDialogOptionButtons(self, width, options)
+local function createDialogOptionButtons(self, width, height, options)
     local panelX = math.floor(width * 0.54)
     local detailsWidth = math.floor(width * 0.4)
-    local startY = 496
+    local metrics = getDialogLayoutMetrics(nil, height, #options)
+    local startY = metrics.optionsStartY
     local buttonHeight = 36
     local gap = 8
     return __TS__ArrayMap(
@@ -154,8 +175,8 @@ local function refreshLayoutIfNeeded(self, uiState)
         width,
         getSelectedLocation(nil, uiState)
     )
-    uiState.dialogButtons = createDialogButtons(nil, width)
-    uiState.dialogOptionButtons = createDialogOptionButtons(nil, width, uiState.availableDialogOptions)
+    uiState.dialogButtons = createDialogButtons(nil, width, height, #uiState.availableDialogOptions)
+    uiState.dialogOptionButtons = createDialogOptionButtons(nil, width, height, uiState.availableDialogOptions)
 end
 local function isInRect(self, x, y, rect)
     return x >= rect.x and x <= rect.x + rect.width and y >= rect.y and y <= rect.y + rect.height
@@ -214,7 +235,7 @@ local function refreshDialogForSelection(self, uiState)
         uiState.availableQuestPrompts = {}
         uiState.selectedQuestPrompt = nil
         uiState.questResponseText = nil
-        uiState.dialogOptionButtons = createDialogOptionButtons(nil, uiState.width, uiState.availableDialogOptions)
+        uiState.dialogOptionButtons = createDialogOptionButtons(nil, uiState.width, uiState.height, uiState.availableDialogOptions)
         return
     end
     if character.npcId == nil then
@@ -224,7 +245,7 @@ local function refreshDialogForSelection(self, uiState)
         uiState.availableQuestPrompts = {}
         uiState.selectedQuestPrompt = nil
         uiState.questResponseText = nil
-        uiState.dialogOptionButtons = createDialogOptionButtons(nil, uiState.width, uiState.availableDialogOptions)
+        uiState.dialogOptionButtons = createDialogOptionButtons(nil, uiState.width, uiState.height, uiState.availableDialogOptions)
         return
     end
     local lines = getStandardDialogForNpc(nil, character.npcId)
@@ -262,7 +283,7 @@ local function refreshDialogForSelection(self, uiState)
     uiState.availableQuestPrompts = prompts
     uiState.selectedQuestPrompt = nil
     uiState.questResponseText = nil
-    uiState.dialogOptionButtons = createDialogOptionButtons(nil, uiState.width, uiState.availableDialogOptions)
+    uiState.dialogOptionButtons = createDialogOptionButtons(nil, uiState.width, uiState.height, uiState.availableDialogOptions)
 end
 function ____exports.createEncounterUiState(self, context)
     local width = love.graphics.getWidth()
@@ -304,7 +325,7 @@ function ____exports.createEncounterUiState(self, context)
         genericButtons = createGenericButtons(nil, width, height),
         locationButtons = createLocationButtons(nil, width, locations),
         characterButtons = createCharacterButtons(nil, width, locations[1]),
-        dialogButtons = createDialogButtons(nil, width),
+        dialogButtons = createDialogButtons(nil, width, height, 0),
         dialogOptionButtons = {},
         dialogMode = "none",
         dialogText = "Select a character to begin dialog.",
@@ -667,11 +688,12 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                     0.56
                 )
             end
+            local dialogLayout = getDialogLayoutMetrics(nil, uiState.height, #uiState.availableDialogOptions)
             love.graphics.setColor(0.9, 0.94, 1, 0.95)
             love.graphics.printf(
                 "Dialog",
                 detailsX + 12,
-                410,
+                dialogLayout.dialogTitleY,
                 detailsWidth - 24,
                 "left",
                 0,
@@ -682,7 +704,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
             love.graphics.rectangle(
                 "fill",
                 detailsX + 12,
-                434,
+                dialogLayout.dialogBoxY,
                 detailsWidth - 24,
                 52,
                 6,
@@ -692,7 +714,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
             love.graphics.rectangle(
                 "line",
                 detailsX + 12,
-                434,
+                dialogLayout.dialogBoxY,
                 detailsWidth - 24,
                 52,
                 6,
@@ -702,7 +724,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
             love.graphics.printf(
                 uiState.dialogText,
                 detailsX + 20,
-                444,
+                dialogLayout.dialogBoxY + 10,
                 detailsWidth - 40,
                 "left",
                 0,
@@ -717,7 +739,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                             function(____, entry) return entry.id == optionButton.optionId end
                         )
                         if option == nil then
-                            goto __continue103
+                            goto __continue104
                         end
                         love.graphics.setColor(0.31, 0.24, 0.43, 0.96)
                         love.graphics.rectangle(
@@ -764,7 +786,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                             )
                         end
                     end
-                    ::__continue103::
+                    ::__continue104::
                 end
             end
             if uiState.dialogMode == "quest" then
@@ -854,7 +876,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                 love.graphics.printf(
                     uiState.questResponseText,
                     detailsX + 12,
-                    658,
+                    dialogLayout.responseY,
                     detailsWidth - 24,
                     "left",
                     0,

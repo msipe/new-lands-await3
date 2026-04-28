@@ -51,6 +51,14 @@ type DialogOptionButton = {
   rect: Rect;
 };
 
+type DialogLayoutMetrics = {
+  dialogTitleY: number;
+  dialogBoxY: number;
+  optionsStartY: number;
+  questActionY: number;
+  responseY: number;
+};
+
 type EncounterMode = "generic" | "town";
 
 export type EncounterUiContext = {
@@ -188,10 +196,33 @@ function createCharacterButtons(
   }));
 }
 
-function createDialogButtons(width: number): DialogButtons {
+function getDialogLayoutMetrics(height: number, optionCount: number): DialogLayoutMetrics {
+  const optionRowHeight = 36;
+  const optionGap = 8;
+  const optionsHeight =
+    optionCount > 0 ? optionCount * optionRowHeight + (optionCount - 1) * optionGap : 0;
+  const safeBottomY = height - 160;
+  const defaultOptionsStartY = 496;
+  const optionsStartY = Math.min(defaultOptionsStartY, safeBottomY - optionsHeight);
+  const dialogBoxHeight = 52;
+  const dialogGap = 10;
+  const dialogBoxY = Math.min(434, optionsStartY - dialogGap - dialogBoxHeight);
+  const dialogTitleY = dialogBoxY - 24;
+
+  return {
+    dialogTitleY,
+    dialogBoxY,
+    optionsStartY,
+    questActionY: Math.min(614, height - 190),
+    responseY: height - 148,
+  };
+}
+
+function createDialogButtons(width: number, height: number, optionCount: number): DialogButtons {
   const panelX = Math.floor(width * 0.54);
   const detailsWidth = Math.floor(width * 0.4);
   const buttonWidth = Math.floor((detailsWidth - 36) * 0.5);
+  const metrics = getDialogLayoutMetrics(height, optionCount);
 
   return {
     standard: {
@@ -208,23 +239,28 @@ function createDialogButtons(width: number): DialogButtons {
     },
     yes: {
       x: panelX + 14,
-      y: 614,
+      y: metrics.questActionY,
       width: buttonWidth,
       height: 34,
     },
     no: {
       x: panelX + 22 + buttonWidth,
-      y: 614,
+      y: metrics.questActionY,
       width: buttonWidth,
       height: 34,
     },
   };
 }
 
-function createDialogOptionButtons(width: number, options: DialogOption[]): DialogOptionButton[] {
+function createDialogOptionButtons(
+  width: number,
+  height: number,
+  options: DialogOption[],
+): DialogOptionButton[] {
   const panelX = Math.floor(width * 0.54);
   const detailsWidth = Math.floor(width * 0.4);
-  const startY = 496;
+  const metrics = getDialogLayoutMetrics(height, options.length);
+  const startY = metrics.optionsStartY;
   const buttonHeight = 36;
   const gap = 8;
 
@@ -285,8 +321,12 @@ function refreshLayoutIfNeeded(uiState: EncounterUiState): void {
   uiState.genericButtons = createGenericButtons(width, height);
   uiState.locationButtons = createLocationButtons(width, uiState.locations);
   uiState.characterButtons = createCharacterButtons(width, getSelectedLocation(uiState));
-  uiState.dialogButtons = createDialogButtons(width);
-  uiState.dialogOptionButtons = createDialogOptionButtons(width, uiState.availableDialogOptions);
+  uiState.dialogButtons = createDialogButtons(width, height, uiState.availableDialogOptions.length);
+  uiState.dialogOptionButtons = createDialogOptionButtons(
+    width,
+    height,
+    uiState.availableDialogOptions,
+  );
 }
 
 function isInRect(x: number, y: number, rect: Rect): boolean {
@@ -364,7 +404,11 @@ function refreshDialogForSelection(uiState: EncounterUiState): void {
     uiState.availableQuestPrompts = [];
     uiState.selectedQuestPrompt = undefined;
     uiState.questResponseText = undefined;
-    uiState.dialogOptionButtons = createDialogOptionButtons(uiState.width, uiState.availableDialogOptions);
+    uiState.dialogOptionButtons = createDialogOptionButtons(
+      uiState.width,
+      uiState.height,
+      uiState.availableDialogOptions,
+    );
     return;
   }
 
@@ -382,7 +426,11 @@ function refreshDialogForSelection(uiState: EncounterUiState): void {
     uiState.availableQuestPrompts = [];
     uiState.selectedQuestPrompt = undefined;
     uiState.questResponseText = undefined;
-    uiState.dialogOptionButtons = createDialogOptionButtons(uiState.width, uiState.availableDialogOptions);
+    uiState.dialogOptionButtons = createDialogOptionButtons(
+      uiState.width,
+      uiState.height,
+      uiState.availableDialogOptions,
+    );
     return;
   }
 
@@ -416,7 +464,11 @@ function refreshDialogForSelection(uiState: EncounterUiState): void {
   uiState.availableQuestPrompts = prompts;
   uiState.selectedQuestPrompt = undefined;
   uiState.questResponseText = undefined;
-  uiState.dialogOptionButtons = createDialogOptionButtons(uiState.width, uiState.availableDialogOptions);
+  uiState.dialogOptionButtons = createDialogOptionButtons(
+    uiState.width,
+    uiState.height,
+    uiState.availableDialogOptions,
+  );
 }
 
 export function createEncounterUiState(context?: EncounterUiContext): EncounterUiState {
@@ -449,7 +501,7 @@ export function createEncounterUiState(context?: EncounterUiContext): EncounterU
     genericButtons: createGenericButtons(width, height),
     locationButtons: createLocationButtons(width, locations),
     characterButtons: createCharacterButtons(width, locations[0]),
-    dialogButtons: createDialogButtons(width),
+    dialogButtons: createDialogButtons(width, height, 0),
     dialogOptionButtons: [],
     dialogMode: "none",
     dialogText: "Select a character to begin dialog.",
@@ -730,15 +782,35 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
 
       }
 
+      const dialogLayout = getDialogLayoutMetrics(uiState.height, uiState.availableDialogOptions.length);
+
       love.graphics.setColor(0.9, 0.94, 1, 0.95);
-      love.graphics.printf("Dialog", detailsX + 12, 410, detailsWidth - 24, "left", 0, 0.64, 0.64);
+      love.graphics.printf(
+        "Dialog",
+        detailsX + 12,
+        dialogLayout.dialogTitleY,
+        detailsWidth - 24,
+        "left",
+        0,
+        0.64,
+        0.64,
+      );
 
       love.graphics.setColor(0.2, 0.19, 0.29, 0.95);
-      love.graphics.rectangle("fill", detailsX + 12, 434, detailsWidth - 24, 52, 6, 6);
+      love.graphics.rectangle("fill", detailsX + 12, dialogLayout.dialogBoxY, detailsWidth - 24, 52, 6, 6);
       love.graphics.setColor(0.74, 0.69, 0.86, 0.72);
-      love.graphics.rectangle("line", detailsX + 12, 434, detailsWidth - 24, 52, 6, 6);
+      love.graphics.rectangle("line", detailsX + 12, dialogLayout.dialogBoxY, detailsWidth - 24, 52, 6, 6);
       love.graphics.setColor(0.92, 0.9, 0.99, 0.96);
-      love.graphics.printf(uiState.dialogText, detailsX + 20, 444, detailsWidth - 40, "left", 0, 0.55, 0.55);
+      love.graphics.printf(
+        uiState.dialogText,
+        detailsX + 20,
+        dialogLayout.dialogBoxY + 10,
+        detailsWidth - 40,
+        "left",
+        0,
+        0.55,
+        0.55,
+      );
 
       if (uiState.dialogMode !== "quest") {
         for (const optionButton of uiState.dialogOptionButtons) {
@@ -888,7 +960,7 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
         love.graphics.printf(
           uiState.questResponseText,
           detailsX + 12,
-          658,
+          dialogLayout.responseY,
           detailsWidth - 24,
           "left",
           0,
