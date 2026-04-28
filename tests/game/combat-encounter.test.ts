@@ -613,6 +613,22 @@ describe("combat encounter", () => {
     expect(encounter.state.enemy.hp).toBe(enemyHpBefore);
   });
 
+  it("applies Warcry +3 to self-damage from weapon attack events", () => {
+    const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
+
+    resolveAllEnemyDice(encounter);
+    expect(encounter.state.phase).toBe("player-turn");
+
+    const wildStrikeDieId = getPlayerDieIdByName(encounter, "Wild Strike Die");
+    const playerHpBefore = encounter.state.player.hp;
+
+    // Roll Warcry +3 first, then Wild Strike into Rusty Sword's "Hit yourself!" side.
+    rollPlayerDie(encounter.state, encounter.eventBus, "player-die-1", sequenceRandomSource([0]));
+    rollPlayerDie(encounter.state, encounter.eventBus, wildStrikeDieId, sequenceRandomSource([0, 0]));
+
+    expect(playerHpBefore - encounter.state.player.hp).toBe(4);
+  });
+
   it("queues spawned transient popup when wild strike transient roll misses", () => {
     const encounter = createCombatEncounter({ randomSource: fixedRandomSource() });
 

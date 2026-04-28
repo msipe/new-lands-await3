@@ -92,7 +92,8 @@ function eventMatchesTarget(event: CombatEvent, target: CombatEventSubscriberTar
     return (
       event.effect === EffectType.Damage &&
       event.source === "player" &&
-      event.target === "opponent"
+      (event.target === "opponent" ||
+        (event.target === "self" && event.meta?.isWeaponAttack === true))
     );
   }
 

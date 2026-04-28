@@ -496,6 +496,42 @@ describe("combat ui", () => {
     expect(die.state).toBe("parked");
   });
 
+  it("allows pickup but rejects arena drop when die is out of energy", () => {
+    const encounter = createCombatEncounter();
+    encounter.state.phase = "player-turn";
+    encounter.state.playerEnergyCurrent = 0;
+    const uiState = createCombatUiState(encounter.state);
+    uiState.pendingRound = undefined;
+
+    const expensiveCombatDie = encounter.state.player.dice.find((die) => die.energyCost > 0);
+    expect(expensiveCombatDie).toBeDefined();
+
+    const die = uiState.playerDice.find((entry) => entry.combatDieId === expensiveCombatDie?.id);
+    expect(die).toBeDefined();
+    if (!die || !expensiveCombatDie) {
+      return;
+    }
+
+    onCombatMousePressed(uiState, encounter.state, die.x, die.y, 1);
+    expect(uiState.drag).toBeDefined();
+    expect(die.state).toBe("dragging");
+
+    const dropX = uiState.layout.arenaX + 90;
+    const dropY = uiState.layout.arenaY + 80;
+    onCombatMouseReleased(uiState, encounter.state, dropX, dropY, 1);
+
+    expect(die.state).toBe("parked");
+    expect(die.x).toBe(die.parkX);
+    expect(die.y).toBe(die.parkY);
+    expect(uiState.arenaPlayerDice.find((entry) => entry.id === die.id)).toBeUndefined();
+    expect(uiState.rolledPlayerDieIds).not.toContain(expensiveCombatDie.id);
+    expect(
+      uiState.floatingPopups.some(
+        (popup) => popup.text === "Out of energy" && popup.source === "player" && popup.powerTone === "negative",
+      ),
+    ).toBe(true);
+  });
+
   it("auto-requests end turn when player cannot afford any remaining die", () => {
     const encounter = createCombatEncounter();
     const uiState = createCombatUiState(encounter.state);
