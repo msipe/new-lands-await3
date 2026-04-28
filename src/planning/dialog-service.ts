@@ -1,10 +1,12 @@
-import { getNpcById, listQuests } from "./content-registry";
+import { getNpcById, getQuestById, listQuests } from "./content-registry";
 import { isQuestAccepted, listQuestEntries } from "./quest-log";
 
 export type QuestDialogPrompt = {
   kind: "offer" | "turn-in";
   questId: string;
   questName: string;
+  recommendedLevel: number;
+  playerLine: string;
   prompt: string;
 };
 
@@ -23,7 +25,9 @@ function buildQuestPromptMap(): void {
       kind: "offer",
       questId: quest.id,
       questName: quest.name,
-      prompt: `Quest offer: ${quest.summary}`,
+      recommendedLevel: quest.recommendedLevel,
+      playerLine: quest.conversationStarter ?? `Do you have work related to ${quest.name}?`,
+      prompt: `${quest.name}: ${quest.summary}`,
     });
     QUEST_OFFERS_BY_NPC_ID[quest.offerNpcId] = bucket;
   }
@@ -56,6 +60,8 @@ export function getQuestDialogPromptsForNpc(npcId: string): QuestDialogPrompt[] 
       kind: "turn-in",
       questId: entry.questId,
       questName: entry.questName,
+      recommendedLevel: getQuestById(entry.questId).recommendedLevel,
+      playerLine: `I've finished ${entry.questName}.`,
       prompt: `Turn in: ${entry.questName}`,
     });
   }

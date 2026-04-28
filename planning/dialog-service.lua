@@ -4,6 +4,7 @@ local __TS__ArrayFilter = ____lualib.__TS__ArrayFilter
 local ____exports = {}
 local ____content_2Dregistry = require("planning.content-registry")
 local getNpcById = ____content_2Dregistry.getNpcById
+local getQuestById = ____content_2Dregistry.getQuestById
 local listQuests = ____content_2Dregistry.listQuests
 local ____quest_2Dlog = require("planning.quest-log")
 local isQuestAccepted = ____quest_2Dlog.isQuestAccepted
@@ -17,7 +18,14 @@ local function buildQuestPromptMap(self)
                 goto __continue3
             end
             local bucket = QUEST_OFFERS_BY_NPC_ID[quest.offerNpcId] or ({})
-            bucket[#bucket + 1] = {kind = "offer", questId = quest.id, questName = quest.name, prompt = "Quest offer: " .. quest.summary}
+            bucket[#bucket + 1] = {
+                kind = "offer",
+                questId = quest.id,
+                questName = quest.name,
+                recommendedLevel = quest.recommendedLevel,
+                playerLine = quest.conversationStarter or ("Do you have work related to " .. quest.name) .. "?",
+                prompt = (quest.name .. ": ") .. quest.summary
+            }
             QUEST_OFFERS_BY_NPC_ID[quest.offerNpcId] = bucket
         end
         ::__continue3::
@@ -45,7 +53,14 @@ function ____exports.getQuestDialogPromptsForNpc(self, npcId)
         function(____, entry) return entry.turnInNpcId == npcId and entry.status == "ready-to-turn-in" end
     )
     for ____, entry in ipairs(readyToTurnIn) do
-        prompts[#prompts + 1] = {kind = "turn-in", questId = entry.questId, questName = entry.questName, prompt = "Turn in: " .. entry.questName}
+        prompts[#prompts + 1] = {
+            kind = "turn-in",
+            questId = entry.questId,
+            questName = entry.questName,
+            recommendedLevel = getQuestById(nil, entry.questId).recommendedLevel,
+            playerLine = ("I've finished " .. entry.questName) .. ".",
+            prompt = "Turn in: " .. entry.questName
+        }
     end
     return prompts
 end

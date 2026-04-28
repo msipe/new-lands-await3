@@ -119,7 +119,7 @@ function syncShopVisualDice(self, uiState, dice, layout, _forceRespawn)
                 function(____, entry) return entry.id == target.id end
             )
             if not die then
-                goto __continue144
+                goto __continue149
             end
             local targetX = target.rect.x + target.rect.width * 0.5
             local targetY = target.rect.y + target.rect.height * 0.5
@@ -131,7 +131,7 @@ function syncShopVisualDice(self, uiState, dice, layout, _forceRespawn)
                 size = target.rect.width
             }
         end
-        ::__continue144::
+        ::__continue149::
     end
     uiState.shopVisualDice = nextVisuals
 end
@@ -296,6 +296,22 @@ local function listQuestEntriesForCategory(self, category)
         listQuestEntries(nil),
         function(____, entry) return entry.category == category end
     )
+end
+local function getQuestDifficultyColor(self, playerLevel, recommendedLevel)
+    local delta = recommendedLevel - playerLevel
+    if delta <= -4 then
+        return {0.62, 0.62, 0.62}
+    end
+    if delta <= -2 then
+        return {0.3, 0.82, 0.36}
+    end
+    if delta <= 1 then
+        return {1, 0.9, 0.42}
+    end
+    if delta <= 3 then
+        return {1, 0.63, 0.28}
+    end
+    return {1, 0.34, 0.34}
 end
 local function ensureQuestSelection(self, uiState)
     local entries = listQuestEntriesForCategory(nil, uiState.selectedQuestCategory)
@@ -1391,28 +1407,28 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, tab in ipairs(layout.categoryTabs) do
             do
                 if not isPointInRect(nil, x, y, tab.rect) then
-                    goto __continue241
+                    goto __continue246
                 end
                 uiState.selectedQuestCategory = tab.category
                 ensureQuestSelection(nil, uiState)
                 return nil
             end
-            ::__continue241::
+            ::__continue246::
         end
         for ____, row in ipairs(layout.questRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue244
+                    goto __continue249
                 end
                 uiState.selectedQuestId = row.questId
                 return nil
             end
-            ::__continue244::
+            ::__continue249::
         end
         for ____, goToButton in ipairs(layout.objectiveGoToButtons) do
             do
                 if not isPointInRect(nil, x, y, goToButton.rect) then
-                    goto __continue247
+                    goto __continue252
                 end
                 local selectedQuest = getSelectedQuestEntry(nil, uiState)
                 if selectedQuest == nil then
@@ -1433,7 +1449,7 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
                 uiState.isQuestMenuOpen = false
                 return nil
             end
-            ::__continue247::
+            ::__continue252::
         end
         return nil
     end
@@ -1452,7 +1468,7 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, row in ipairs(layout.craftsfolkRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue256
+                    goto __continue261
                 end
                 uiState.selectedCraftsfolkId = row.id
                 uiState.shopAwaitingRemoveConfirm = false
@@ -1464,7 +1480,7 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
                 ____uiState_126.shopStatusText = "Selected craftsfolk: " .. (____opt_124 and ____opt_124.name or row.id)
                 return nil
             end
-            ::__continue256::
+            ::__continue261::
         end
         local clickedVisualDie = getShopVisualDieAt(nil, uiState, x, y)
         if clickedVisualDie then
@@ -1509,14 +1525,14 @@ function ____exports.onExploreMouseReleased(self, uiState, x, y, button)
         for ____, row in ipairs(layout.propertyRows) do
             do
                 if not isPointInRect(nil, x, y, row.rect) then
-                    goto __continue264
+                    goto __continue269
                 end
                 uiState.selectedUpgradePropertyId = row.id
                 uiState.shopAwaitingRemoveConfirm = false
                 uiState.shopStatusText = "Selected face property."
                 return nil
             end
-            ::__continue264::
+            ::__continue269::
         end
         if isPointInRect(nil, x, y, layout.primaryActionButtonRect) then
             uiState.shopFocusedAction = "primary"
@@ -2141,8 +2157,9 @@ local function drawQuestMenuOverlay(self, uiState)
                 function(____, candidate) return candidate.questId == row.questId end
             )
             if not entry then
-                goto __continue298
+                goto __continue303
             end
+            local quest = getQuestById(nil, entry.questId)
             local selected = row.questId == uiState.selectedQuestId
             love.graphics.setColor(selected and 0.24 or 0.16, selected and 0.35 or 0.21, selected and 0.46 or 0.3, 0.96)
             love.graphics.rectangle(
@@ -2169,11 +2186,27 @@ local function drawQuestMenuOverlay(self, uiState)
                 entry.questName,
                 row.rect.x + 8,
                 row.rect.y + 8,
-                row.rect.width - 84,
+                row.rect.width - 132,
                 "left",
                 0,
                 0.52,
                 0.52
+            )
+            local levelR, levelG, levelB = unpack(
+                getQuestDifficultyColor(nil, uiState.playerProgression.level, quest.recommendedLevel),
+                1,
+                3
+            )
+            love.graphics.setColor(levelR, levelG, levelB, 0.95)
+            love.graphics.printf(
+                "Lv " .. tostring(quest.recommendedLevel),
+                row.rect.x + row.rect.width - 138,
+                row.rect.y + 8,
+                56,
+                "right",
+                0,
+                0.5,
+                0.5
             )
             love.graphics.setColor(0.88, 0.94, 1, 0.9)
             love.graphics.printf(
@@ -2187,7 +2220,7 @@ local function drawQuestMenuOverlay(self, uiState)
                 0.48
             )
         end
-        ::__continue298::
+        ::__continue303::
     end
     if selectedEntry == nil or selectedQuest == nil then
         love.graphics.setColor(0.82, 0.88, 0.96, 0.88)
@@ -2214,18 +2247,34 @@ local function drawQuestMenuOverlay(self, uiState)
         0.78,
         0.78
     )
+    local recommendedR, recommendedG, recommendedB = unpack(
+        getQuestDifficultyColor(nil, uiState.playerProgression.level, selectedQuest.recommendedLevel),
+        1,
+        3
+    )
+    love.graphics.setColor(recommendedR, recommendedG, recommendedB, 0.96)
+    love.graphics.printf(
+        ((("Recommended: Lv " .. tostring(selectedQuest.recommendedLevel)) .. " (You: Lv ") .. tostring(uiState.playerProgression.level)) .. ")",
+        layout.panelRect.x + 340,
+        layout.panelRect.y + 132,
+        460,
+        "left",
+        0,
+        0.54,
+        0.54
+    )
     love.graphics.setColor(0.78, 0.87, 0.98, 0.92)
     love.graphics.printf(
         selectedQuest.summary,
         layout.panelRect.x + 340,
-        layout.panelRect.y + 132,
+        layout.panelRect.y + 154,
         460,
         "left",
         0,
         0.56,
         0.56
     )
-    local objectiveY = layout.panelRect.y + 174
+    local objectiveY = layout.panelRect.y + 196
     for ____, objective in ipairs(selectedQuest.objectives) do
         local progress = __TS__ArrayFind(
             selectedEntry.objectives,

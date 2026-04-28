@@ -18,12 +18,13 @@ local __TS__NumberIsFinite = ____lualib.__TS__NumberIsFinite
 local __TS__ArrayReduce = ____lualib.__TS__ArrayReduce
 local __TS__NumberToString = ____lualib.__TS__NumberToString
 local __TS__ArrayPushArray = ____lualib.__TS__ArrayPushArray
+local __TS__StringIncludes = ____lualib.__TS__StringIncludes
 local __TS__ArraySort = ____lualib.__TS__ArraySort
 local __TS__ArrayForEach = ____lualib.__TS__ArrayForEach
 local __TS__StringSlice = ____lualib.__TS__StringSlice
 local __TS__ArraySlice = ____lualib.__TS__ArraySlice
 local ____exports = {}
-local isDieSettled, getDieEnergyCost, getProjectedPendingEnergySpend, getProjectedPlayerEnergy, canAffordAnyUnthrownDie, roundPower, buildSortedInspectorSidesFromRaw, describeDieSide
+local isDieSettled, getDieEnergyCost, getProjectedPendingEnergySpend, getProjectedPlayerEnergy, canAffordAnyUnthrownDie, roundPower, isMissLikeInspectorSide, buildSortedInspectorSidesFromRaw, describeDieSide
 local ____combat_2Dencounter = require("game.combat-encounter")
 local getDiePowerSnapshot = ____combat_2Dencounter.getDiePowerSnapshot
 local ____dice_2Dfactory = require("game.dice-factory")
@@ -85,6 +86,11 @@ end
 function roundPower(self, value)
     return math.floor(value * 1000 + 0.5) / 1000
 end
+function isMissLikeInspectorSide(self, label, description)
+    local normalizedLabel = string.lower(label)
+    local normalizedDescription = string.lower(description)
+    return __TS__StringIncludes(normalizedLabel, "miss") or __TS__StringIncludes(normalizedLabel, "whiff") or __TS__StringIncludes(normalizedDescription, "miss") or __TS__StringIncludes(normalizedDescription, "whiff")
+end
 function buildSortedInspectorSidesFromRaw(self, rawSides)
     local sorted = __TS__ArraySort(
         {unpack(rawSides)},
@@ -101,7 +107,14 @@ function buildSortedInspectorSidesFromRaw(self, rawSides)
     local lowestPower = ____opt_36 and ____opt_36.power or 0
     return __TS__ArrayMap(
         sorted,
-        function(____, side) return __TS__ObjectAssign({}, side, {isCriticalHit = side.power == highestPower, isCriticalMiss = side.power == lowestPower}) end
+        function(____, side) return __TS__ObjectAssign(
+            {},
+            side,
+            {
+                isCriticalHit = side.power == highestPower,
+                isCriticalMiss = side.power == lowestPower and (lowestPower < 0 or isMissLikeInspectorSide(nil, side.label, side.description))
+            }
+        ) end
     )
 end
 function describeDieSide(self, side)
@@ -1388,7 +1401,7 @@ local function buildInspectorViewFromCombatDie(self, state, dieId, owner)
             do
                 local side = sideById[face.sideId]
                 if not side then
-                    goto __continue241
+                    goto __continue242
                 end
                 orderedSides[#orderedSides + 1] = {
                     id = side.id,
@@ -1400,7 +1413,7 @@ local function buildInspectorViewFromCombatDie(self, state, dieId, owner)
                     isCriticalMiss = face.isCriticalMiss
                 }
             end
-            ::__continue241::
+            ::__continue242::
         end
         return {name = die.name, sides = orderedSides, totalPower = snapshot.totalPower}
     end
@@ -1783,15 +1796,15 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
     for ____, die in ipairs(uiState.playerDice) do
         do
             if die.state == "arena" then
-                goto __continue293
+                goto __continue294
             end
             if not canDragPlayerDie(nil, uiState, state, die) then
-                goto __continue293
+                goto __continue294
             end
             local half = die.size / 2
             local inside = x >= die.x - half and x <= die.x + half and y >= die.y - half and y <= die.y + half
             if not inside then
-                goto __continue293
+                goto __continue294
             end
             die.state = "dragging"
             die.x = x
@@ -1807,7 +1820,7 @@ function ____exports.onCombatMousePressed(self, uiState, state, x, y, button)
             }
             return
         end
-        ::__continue293::
+        ::__continue294::
     end
 end
 function ____exports.onCombatMouseMoved(self, uiState, state, x, y, dx, dy)

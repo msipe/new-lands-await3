@@ -26,13 +26,26 @@ type CharacterButton = {
   rect: Rect;
 };
 
-type DialogMode = "none" | "standard" | "quest";
+type DialogMode = "none" | "options" | "standard" | "quest";
 
 type DialogButtons = {
   standard: Rect;
   quest: Rect;
   yes: Rect;
   no: Rect;
+};
+
+type DialogOption = {
+  id: string;
+  kind: "standard" | "quest";
+  playerLine: string;
+  npcResponse: string;
+  questPrompt?: QuestDialogPrompt;
+};
+
+type DialogOptionButton = {
+  optionId: string;
+  rect: Rect;
 };
 
 type EncounterMode = "generic" | "town";
@@ -44,6 +57,7 @@ export type EncounterUiContext = {
   locations: TownLocation[];
   explorationFlowId: string | null;
   flowLevel: number;
+  playerLevel?: number;
 };
 
 type GenericButtons = {
@@ -70,12 +84,14 @@ export type EncounterUiState = {
   locationButtons: LocationButton[];
   characterButtons: CharacterButton[];
   dialogButtons: DialogButtons;
+  dialogOptionButtons: DialogOptionButton[];
   dialogMode: DialogMode;
   dialogText: string;
+  availableDialogOptions: DialogOption[];
   availableQuestPrompts: QuestDialogPrompt[];
-  canQuestTalk: boolean;
   selectedQuestPrompt?: QuestDialogPrompt;
   questResponseText?: string;
+  playerLevel: number;
   hoveredContinue: boolean;
   hoveredGenericButton: "back" | "explore" | "previous" | undefined;
   hoveredLocationId?: string;
@@ -88,7 +104,7 @@ function createContinueButton(width: number, height: number): Rect {
   const buttonHeight = 56;
   return {
     x: Math.floor((width - buttonWidth) * 0.5),
-    y: Math.floor(height * 0.7),
+    y: height - buttonHeight - 72,
     width: buttonWidth,
     height: buttonHeight,
   };
@@ -126,11 +142,11 @@ function createGenericButtons(width: number, height: number): GenericButtons {
 }
 
 function createLocationButtons(width: number, locations: TownLocation[]): LocationButton[] {
-  const buttonWidth = Math.max(280, Math.floor(width * 0.42));
-  const buttonHeight = 44;
-  const x = Math.floor(width * 0.08);
-  const startY = 186;
-  const gap = 10;
+  const buttonWidth = Math.max(300, Math.floor(width * 0.42));
+  const buttonHeight = 48;
+  const x = Math.floor(width * 0.06);
+  const startY = 170;
+  const gap = 14;
 
   return locations.map((location, index) => ({
     locationId: location.id,
@@ -151,11 +167,11 @@ function createCharacterButtons(
     return [];
   }
 
-  const panelX = Math.floor(width * 0.56);
-  const buttonWidth = Math.floor(width * 0.36) - 24;
-  const buttonHeight = 34;
-  const startY = 296;
-  const gap = 8;
+  const panelX = Math.floor(width * 0.54);
+  const buttonWidth = Math.floor(width * 0.4) - 32;
+  const buttonHeight = 38;
+  const startY = 318;
+  const gap = 10;
 
   return selectedLocation.characters.map((character, index) => ({
     characterId: character.id,
@@ -169,36 +185,75 @@ function createCharacterButtons(
 }
 
 function createDialogButtons(width: number): DialogButtons {
-  const panelX = Math.floor(width * 0.56);
-  const detailsWidth = Math.floor(width * 0.36);
-  const buttonWidth = Math.floor((detailsWidth - 32) * 0.5);
+  const panelX = Math.floor(width * 0.54);
+  const detailsWidth = Math.floor(width * 0.4);
+  const buttonWidth = Math.floor((detailsWidth - 36) * 0.5);
 
   return {
     standard: {
-      x: panelX + 12,
-      y: 436,
-      width: buttonWidth,
-      height: 34,
+      x: panelX + 14,
+      y: 496,
+      width: detailsWidth - 28,
+      height: 36,
     },
     quest: {
-      x: panelX + 20 + buttonWidth,
-      y: 436,
+      x: panelX + 14,
+      y: 540,
+      width: detailsWidth - 28,
+      height: 36,
+    },
+    yes: {
+      x: panelX + 14,
+      y: 614,
       width: buttonWidth,
       height: 34,
     },
-    yes: {
-      x: panelX + 12,
-      y: 514,
-      width: buttonWidth,
-      height: 30,
-    },
     no: {
-      x: panelX + 20 + buttonWidth,
-      y: 514,
+      x: panelX + 22 + buttonWidth,
+      y: 614,
       width: buttonWidth,
-      height: 30,
+      height: 34,
     },
   };
+}
+
+function createDialogOptionButtons(width: number, options: DialogOption[]): DialogOptionButton[] {
+  const panelX = Math.floor(width * 0.54);
+  const detailsWidth = Math.floor(width * 0.4);
+  const startY = 496;
+  const buttonHeight = 36;
+  const gap = 8;
+
+  return options.map((option, index) => ({
+    optionId: option.id,
+    rect: {
+      x: panelX + 14,
+      y: startY + index * (buttonHeight + gap),
+      width: detailsWidth - 28,
+      height: buttonHeight,
+    },
+  }));
+}
+
+function getQuestDifficultyColor(playerLevel: number, recommendedLevel: number): [number, number, number] {
+  const delta = recommendedLevel - playerLevel;
+  if (delta <= -4) {
+    return [0.62, 0.62, 0.62];
+  }
+
+  if (delta <= -2) {
+    return [0.3, 0.82, 0.36];
+  }
+
+  if (delta <= 1) {
+    return [1, 0.9, 0.42];
+  }
+
+  if (delta <= 3) {
+    return [1, 0.63, 0.28];
+  }
+
+  return [1, 0.34, 0.34];
 }
 
 function refreshLayoutIfNeeded(uiState: EncounterUiState): void {
@@ -215,6 +270,7 @@ function refreshLayoutIfNeeded(uiState: EncounterUiState): void {
   uiState.locationButtons = createLocationButtons(width, uiState.locations);
   uiState.characterButtons = createCharacterButtons(width, getSelectedLocation(uiState));
   uiState.dialogButtons = createDialogButtons(width);
+  uiState.dialogOptionButtons = createDialogOptionButtons(width, uiState.availableDialogOptions);
 }
 
 function isInRect(x: number, y: number, rect: Rect): boolean {
@@ -249,6 +305,20 @@ function getCharacterButtonAt(uiState: EncounterUiState, x: number, y: number): 
   return undefined;
 }
 
+function getDialogOptionButtonAt(
+  uiState: EncounterUiState,
+  x: number,
+  y: number,
+): DialogOptionButton | undefined {
+  for (const button of uiState.dialogOptionButtons) {
+    if (isInRect(x, y, button.rect)) {
+      return button;
+    }
+  }
+
+  return undefined;
+}
+
 function getSelectedCharacterName(uiState: EncounterUiState): string | undefined {
   const selectedLocation = getSelectedLocation(uiState);
   if (selectedLocation === undefined || uiState.selectedCharacterId === undefined) {
@@ -274,32 +344,56 @@ function refreshDialogForSelection(uiState: EncounterUiState): void {
   if (character === undefined) {
     uiState.dialogMode = "none";
     uiState.dialogText = "Select a character to begin dialog.";
+    uiState.availableDialogOptions = [];
     uiState.availableQuestPrompts = [];
-    uiState.canQuestTalk = false;
     uiState.selectedQuestPrompt = undefined;
     uiState.questResponseText = undefined;
+    uiState.dialogOptionButtons = createDialogOptionButtons(uiState.width, uiState.availableDialogOptions);
     return;
   }
 
   if (character.npcId === undefined) {
-    uiState.dialogMode = "standard";
-    uiState.dialogText = character.description;
+    uiState.dialogMode = "options";
+    uiState.dialogText = "Choose something to say.";
+    uiState.availableDialogOptions = [
+      {
+        id: `standard:${character.id}`,
+        kind: "standard",
+        playerLine: `Can you tell me more about ${character.name}?`,
+        npcResponse: character.description,
+      },
+    ];
     uiState.availableQuestPrompts = [];
-    uiState.canQuestTalk = false;
     uiState.selectedQuestPrompt = undefined;
     uiState.questResponseText = undefined;
+    uiState.dialogOptionButtons = createDialogOptionButtons(uiState.width, uiState.availableDialogOptions);
     return;
   }
 
   const lines = getStandardDialogForNpc(character.npcId);
   recordNpcInteracted(character.npcId);
   const prompts = getQuestDialogPromptsForNpc(character.npcId);
-  uiState.dialogMode = "standard";
-  uiState.dialogText = lines[0] ?? character.description;
+  uiState.dialogMode = "options";
+  uiState.dialogText = "Choose something to say.";
+  uiState.availableDialogOptions = [
+    {
+      id: `standard:${character.npcId}`,
+      kind: "standard",
+      playerLine: "Any local rumors I should know?",
+      npcResponse: lines[0] ?? character.description,
+    },
+    ...prompts.map((prompt) => ({
+      id: `quest:${prompt.questId}:${prompt.kind}`,
+      kind: "quest" as const,
+      playerLine: prompt.playerLine,
+      npcResponse: prompt.prompt,
+      questPrompt: prompt,
+    })),
+  ];
   uiState.availableQuestPrompts = prompts;
-  uiState.canQuestTalk = prompts.length > 0;
-  uiState.selectedQuestPrompt = prompts[0];
+  uiState.selectedQuestPrompt = undefined;
   uiState.questResponseText = undefined;
+  uiState.dialogOptionButtons = createDialogOptionButtons(uiState.width, uiState.availableDialogOptions);
 }
 
 export function createEncounterUiState(context?: EncounterUiContext): EncounterUiState {
@@ -333,12 +427,14 @@ export function createEncounterUiState(context?: EncounterUiContext): EncounterU
     locationButtons: createLocationButtons(width, locations),
     characterButtons: createCharacterButtons(width, locations[0]),
     dialogButtons: createDialogButtons(width),
+    dialogOptionButtons: [],
     dialogMode: "none",
     dialogText: "Select a character to begin dialog.",
+    availableDialogOptions: [],
     availableQuestPrompts: [],
-    canQuestTalk: false,
     selectedQuestPrompt: undefined,
     questResponseText: undefined,
+    playerLevel: Math.max(1, Math.floor(context?.playerLevel ?? 1)),
     hoveredContinue: false,
     hoveredGenericButton: undefined,
     hoveredLocationId: undefined,
@@ -404,38 +500,47 @@ export function onEncounterMouseReleased(uiState: EncounterUiState, x: number, y
       return false;
     }
 
-    if (isInRect(x, y, uiState.dialogButtons.standard)) {
-      const character = getSelectedCharacter(uiState);
-      if (character?.npcId !== undefined) {
-        const lines = getStandardDialogForNpc(character.npcId);
-        uiState.dialogMode = "standard";
-        uiState.dialogText = lines[0] ?? character.description;
-      } else if (character !== undefined) {
-        uiState.dialogMode = "standard";
-        uiState.dialogText = character.description;
+    const optionButton = getDialogOptionButtonAt(uiState, x, y);
+    if (optionButton !== undefined) {
+      const option = uiState.availableDialogOptions.find((entry) => entry.id === optionButton.optionId);
+      if (option === undefined) {
+        return false;
       }
+
+      if (option.kind === "quest" && option.questPrompt !== undefined) {
+        uiState.dialogMode = "quest";
+        uiState.dialogText = option.npcResponse;
+        uiState.selectedQuestPrompt = option.questPrompt;
+      } else {
+        uiState.dialogMode = "standard";
+        uiState.dialogText = option.npcResponse;
+        uiState.selectedQuestPrompt = undefined;
+      }
+
       uiState.questResponseText = undefined;
       return false;
     }
 
+    // Legacy hit targets retained for tests and compatibility.
+    if (isInRect(x, y, uiState.dialogButtons.standard)) {
+      const standard = uiState.availableDialogOptions.find((entry) => entry.kind === "standard");
+      if (standard !== undefined) {
+        uiState.dialogMode = "standard";
+        uiState.dialogText = standard.npcResponse;
+        uiState.selectedQuestPrompt = undefined;
+        uiState.questResponseText = undefined;
+      }
+      return false;
+    }
+
     if (isInRect(x, y, uiState.dialogButtons.quest)) {
-      if (!uiState.canQuestTalk) {
-        return false;
-      }
-
-      const character = getSelectedCharacter(uiState);
-      if (character?.npcId !== undefined) {
-        uiState.selectedQuestPrompt = uiState.availableQuestPrompts[0];
-      }
-
-      if (uiState.selectedQuestPrompt !== undefined) {
+      const questOption = uiState.availableDialogOptions.find((entry) => entry.kind === "quest");
+      if (questOption?.questPrompt !== undefined) {
         uiState.dialogMode = "quest";
-        uiState.dialogText = uiState.selectedQuestPrompt.prompt;
-      } else {
-        uiState.dialogMode = "quest";
-        uiState.dialogText = "No quest dialog is currently available for this character.";
+        uiState.dialogText = questOption.npcResponse;
+        uiState.selectedQuestPrompt = questOption.questPrompt;
+        uiState.questResponseText = undefined;
       }
-      uiState.questResponseText = undefined;
       return false;
     }
 
@@ -464,6 +569,7 @@ export function onEncounterMouseReleased(uiState: EncounterUiState, x: number, y
       } else {
         uiState.questResponseText = "No quest selected.";
       }
+      uiState.dialogMode = "options";
       return false;
     }
   }
@@ -539,10 +645,10 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
       love.graphics.printf(label, button.rect.x + 12, button.rect.y + 13, button.rect.width - 24, "left", 0, 0.7, 0.7);
     }
 
-    const detailsX = Math.floor(uiState.width * 0.56);
-    const detailsY = 186;
-    const detailsWidth = Math.floor(uiState.width * 0.36);
-    const detailsHeight = Math.floor(uiState.height * 0.46);
+    const detailsX = Math.floor(uiState.width * 0.54);
+    const detailsY = 158;
+    const detailsWidth = Math.floor(uiState.width * 0.4);
+    const detailsHeight = Math.floor(uiState.height * 0.66);
     const selectedLocation = getSelectedLocation(uiState);
 
     love.graphics.setColor(0.16, 0.14, 0.24, 0.9);
@@ -567,7 +673,7 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
       );
 
       love.graphics.setColor(0.88, 0.84, 0.95, 0.96);
-      love.graphics.printf("Characters", detailsX + 12, detailsY + 94, detailsWidth - 24, "left", 0, 0.65, 0.65);
+      love.graphics.printf("Characters", detailsX + 12, detailsY + 112, detailsWidth - 24, "left", 0, 0.65, 0.65);
 
       for (const button of uiState.characterButtons) {
         const character = selectedLocation.characters.find((entry) => entry.id === button.characterId);
@@ -590,98 +696,77 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
         love.graphics.printf(label, button.rect.x + 8, button.rect.y + 11, button.rect.width - 16, "left", 0, 0.56, 0.56);
       }
 
-      const selectedCharacterName = getSelectedCharacterName(uiState);
-      if (selectedCharacterName !== undefined) {
-        love.graphics.setColor(0.79, 0.75, 0.91, 0.94);
-        love.graphics.printf(
-          `Interact: ${selectedCharacterName}`,
-          detailsX + 12,
-          detailsY + detailsHeight - 30,
-          detailsWidth - 24,
-          "left",
-          0,
-          0.57,
-          0.57,
-        );
-      }
-
       love.graphics.setColor(0.9, 0.94, 1, 0.95);
-      love.graphics.printf("Dialog", detailsX + 12, 394, detailsWidth - 24, "left", 0, 0.64, 0.64);
+      love.graphics.printf("Dialog", detailsX + 12, 410, detailsWidth - 24, "left", 0, 0.64, 0.64);
 
       love.graphics.setColor(0.2, 0.19, 0.29, 0.95);
-      love.graphics.rectangle("fill", detailsX + 12, 414, detailsWidth - 24, 92, 6, 6);
+      love.graphics.rectangle("fill", detailsX + 12, 434, detailsWidth - 24, 52, 6, 6);
       love.graphics.setColor(0.74, 0.69, 0.86, 0.72);
-      love.graphics.rectangle("line", detailsX + 12, 414, detailsWidth - 24, 92, 6, 6);
+      love.graphics.rectangle("line", detailsX + 12, 434, detailsWidth - 24, 52, 6, 6);
       love.graphics.setColor(0.92, 0.9, 0.99, 0.96);
-      love.graphics.printf(uiState.dialogText, detailsX + 20, 422, detailsWidth - 40, "left", 0, 0.55, 0.55);
+      love.graphics.printf(uiState.dialogText, detailsX + 20, 444, detailsWidth - 40, "left", 0, 0.55, 0.55);
 
-      love.graphics.setColor(0.31, 0.24, 0.43, 0.96);
-      love.graphics.rectangle(
-        "fill",
-        uiState.dialogButtons.standard.x,
-        uiState.dialogButtons.standard.y,
-        uiState.dialogButtons.standard.width,
-        uiState.dialogButtons.standard.height,
-        6,
-        6,
-      );
-      love.graphics.setColor(0.79, 0.73, 0.91, 0.85);
-      love.graphics.rectangle(
-        "line",
-        uiState.dialogButtons.standard.x,
-        uiState.dialogButtons.standard.y,
-        uiState.dialogButtons.standard.width,
-        uiState.dialogButtons.standard.height,
-        6,
-        6,
-      );
-      love.graphics.setColor(1, 1, 1, 0.98);
-      love.graphics.printf(
-        "Standard Talk",
-        uiState.dialogButtons.standard.x,
-        uiState.dialogButtons.standard.y + 10,
-        uiState.dialogButtons.standard.width,
-        "center",
-        0,
-        0.56,
-        0.56,
-      );
+      if (uiState.dialogMode !== "quest") {
+        for (const optionButton of uiState.dialogOptionButtons) {
+          const option = uiState.availableDialogOptions.find((entry) => entry.id === optionButton.optionId);
+          if (option === undefined) {
+            continue;
+          }
 
-      if (uiState.canQuestTalk) {
-        love.graphics.setColor(0.31, 0.24, 0.43, 0.96);
-        love.graphics.rectangle(
-          "fill",
-          uiState.dialogButtons.quest.x,
-          uiState.dialogButtons.quest.y,
-          uiState.dialogButtons.quest.width,
-          uiState.dialogButtons.quest.height,
-          6,
-          6,
-        );
-        love.graphics.setColor(0.79, 0.73, 0.91, 0.85);
-        love.graphics.rectangle(
-          "line",
-          uiState.dialogButtons.quest.x,
-          uiState.dialogButtons.quest.y,
-          uiState.dialogButtons.quest.width,
-          uiState.dialogButtons.quest.height,
-          6,
-          6,
-        );
-        love.graphics.setColor(1, 1, 1, 0.98);
-        love.graphics.printf(
-          "Quest Talk",
-          uiState.dialogButtons.quest.x,
-          uiState.dialogButtons.quest.y + 10,
-          uiState.dialogButtons.quest.width,
-          "center",
-          0,
-          0.56,
-          0.56,
-        );
+          love.graphics.setColor(0.31, 0.24, 0.43, 0.96);
+          love.graphics.rectangle(
+            "fill",
+            optionButton.rect.x,
+            optionButton.rect.y,
+            optionButton.rect.width,
+            optionButton.rect.height,
+            6,
+            6,
+          );
+          love.graphics.setColor(0.79, 0.73, 0.91, 0.85);
+          love.graphics.rectangle(
+            "line",
+            optionButton.rect.x,
+            optionButton.rect.y,
+            optionButton.rect.width,
+            optionButton.rect.height,
+            6,
+            6,
+          );
+
+          if (option.questPrompt !== undefined) {
+            const [r, g, b] = getQuestDifficultyColor(
+              uiState.playerLevel,
+              option.questPrompt.recommendedLevel,
+            );
+            love.graphics.setColor(r, g, b, 0.95);
+            love.graphics.printf(
+              `Lv ${option.questPrompt.recommendedLevel}`,
+              optionButton.rect.x + optionButton.rect.width - 66,
+              optionButton.rect.y + 11,
+              54,
+              "right",
+              0,
+              0.5,
+              0.5,
+            );
+          }
+
+          love.graphics.setColor(1, 1, 1, 0.98);
+          love.graphics.printf(
+            option.playerLine,
+            optionButton.rect.x + 10,
+            optionButton.rect.y + 10,
+            optionButton.rect.width - 84,
+            "left",
+            0,
+            0.51,
+            0.51,
+          );
+        }
       }
 
-      if (uiState.canQuestTalk && uiState.dialogMode === "quest") {
+      if (uiState.dialogMode === "quest") {
         love.graphics.setColor(0.35, 0.27, 0.47, 0.96);
         love.graphics.rectangle(
           "fill",
@@ -752,12 +837,27 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
         love.graphics.printf(
           uiState.questResponseText,
           detailsX + 12,
-          548,
+          658,
           detailsWidth - 24,
           "left",
           0,
           0.52,
           0.52,
+        );
+      }
+
+      const selectedCharacterName = getSelectedCharacterName(uiState);
+      if (selectedCharacterName !== undefined) {
+        love.graphics.setColor(0.79, 0.75, 0.91, 0.94);
+        love.graphics.printf(
+          `Interact: ${selectedCharacterName}  |  Your level: ${uiState.playerLevel}`,
+          detailsX + 12,
+          detailsY + detailsHeight - 30,
+          detailsWidth - 24,
+          "left",
+          0,
+          0.57,
+          0.57,
         );
       }
     }

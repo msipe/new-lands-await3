@@ -346,6 +346,27 @@ function listQuestEntriesForCategory(category: QuestCategory): QuestLogEntry[] {
   return listQuestEntries().filter((entry) => entry.category === category);
 }
 
+function getQuestDifficultyColor(playerLevel: number, recommendedLevel: number): [number, number, number] {
+  const delta = recommendedLevel - playerLevel;
+  if (delta <= -4) {
+    return [0.62, 0.62, 0.62];
+  }
+
+  if (delta <= -2) {
+    return [0.3, 0.82, 0.36];
+  }
+
+  if (delta <= 1) {
+    return [1, 0.9, 0.42];
+  }
+
+  if (delta <= 3) {
+    return [1, 0.63, 0.28];
+  }
+
+  return [1, 0.34, 0.34];
+}
+
 function ensureQuestSelection(uiState: ExploreUiState): void {
   const entries = listQuestEntriesForCategory(uiState.selectedQuestCategory);
   if (entries.length === 0) {
@@ -2249,6 +2270,7 @@ function drawQuestMenuOverlay(uiState: ExploreUiState): void {
     if (!entry) {
       continue;
     }
+    const quest = getQuestById(entry.questId);
 
     const selected = row.questId === uiState.selectedQuestId;
     love.graphics.setColor(selected ? 0.24 : 0.16, selected ? 0.35 : 0.21, selected ? 0.46 : 0.3, 0.96);
@@ -2257,7 +2279,22 @@ function drawQuestMenuOverlay(uiState: ExploreUiState): void {
     love.graphics.rectangle("line", row.rect.x, row.rect.y, row.rect.width, row.rect.height, 7, 7);
 
     love.graphics.setColor(1, 1, 1, 0.98);
-    love.graphics.printf(entry.questName, row.rect.x + 8, row.rect.y + 8, row.rect.width - 84, "left", 0, 0.52, 0.52);
+    love.graphics.printf(entry.questName, row.rect.x + 8, row.rect.y + 8, row.rect.width - 132, "left", 0, 0.52, 0.52);
+    const [levelR, levelG, levelB] = getQuestDifficultyColor(
+      uiState.playerProgression.level,
+      quest.recommendedLevel,
+    );
+    love.graphics.setColor(levelR, levelG, levelB, 0.95);
+    love.graphics.printf(
+      `Lv ${quest.recommendedLevel}`,
+      row.rect.x + row.rect.width - 138,
+      row.rect.y + 8,
+      56,
+      "right",
+      0,
+      0.5,
+      0.5,
+    );
     love.graphics.setColor(0.88, 0.94, 1, 0.9);
     love.graphics.printf(entry.status, row.rect.x + row.rect.width - 74, row.rect.y + 8, 66, "right", 0, 0.48, 0.48);
   }
@@ -2270,10 +2307,25 @@ function drawQuestMenuOverlay(uiState: ExploreUiState): void {
 
   love.graphics.setColor(0.96, 0.98, 1, 1);
   love.graphics.printf(selectedQuest.name, layout.panelRect.x + 340, layout.panelRect.y + 108, 460, "left", 0, 0.78, 0.78);
+  const [recommendedR, recommendedG, recommendedB] = getQuestDifficultyColor(
+    uiState.playerProgression.level,
+    selectedQuest.recommendedLevel,
+  );
+  love.graphics.setColor(recommendedR, recommendedG, recommendedB, 0.96);
+  love.graphics.printf(
+    `Recommended: Lv ${selectedQuest.recommendedLevel} (You: Lv ${uiState.playerProgression.level})`,
+    layout.panelRect.x + 340,
+    layout.panelRect.y + 132,
+    460,
+    "left",
+    0,
+    0.54,
+    0.54,
+  );
   love.graphics.setColor(0.78, 0.87, 0.98, 0.92);
-  love.graphics.printf(selectedQuest.summary, layout.panelRect.x + 340, layout.panelRect.y + 132, 460, "left", 0, 0.56, 0.56);
+  love.graphics.printf(selectedQuest.summary, layout.panelRect.x + 340, layout.panelRect.y + 154, 460, "left", 0, 0.56, 0.56);
 
-  let objectiveY = layout.panelRect.y + 174;
+  let objectiveY = layout.panelRect.y + 196;
   for (const objective of selectedQuest.objectives) {
     const progress = selectedEntry.objectives.find((candidate) => candidate.id === objective.id);
     const progressText = progress ? `${progress.currentCount}/${progress.targetCount}` : `0/${objective.targetCount}`;

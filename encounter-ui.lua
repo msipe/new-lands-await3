@@ -30,7 +30,7 @@ local function createContinueButton(self, width, height)
     local buttonHeight = 56
     return {
         x = math.floor((width - buttonWidth) * 0.5),
-        y = math.floor(height * 0.7),
+        y = height - buttonHeight - 72,
         width = buttonWidth,
         height = buttonHeight
     }
@@ -66,13 +66,13 @@ local function createGenericButtons(self, width, height)
 end
 local function createLocationButtons(self, width, locations)
     local buttonWidth = math.max(
-        280,
+        300,
         math.floor(width * 0.42)
     )
-    local buttonHeight = 44
-    local x = math.floor(width * 0.08)
-    local startY = 186
-    local gap = 10
+    local buttonHeight = 48
+    local x = math.floor(width * 0.06)
+    local startY = 170
+    local gap = 14
     return __TS__ArrayMap(
         locations,
         function(____, location, index) return {locationId = location.id, rect = {x = x, y = startY + index * (buttonHeight + gap), width = buttonWidth, height = buttonHeight}} end
@@ -82,21 +82,48 @@ local function createCharacterButtons(self, width, selectedLocation)
     if selectedLocation == nil then
         return {}
     end
-    local panelX = math.floor(width * 0.56)
-    local buttonWidth = math.floor(width * 0.36) - 24
-    local buttonHeight = 34
-    local startY = 296
-    local gap = 8
+    local panelX = math.floor(width * 0.54)
+    local buttonWidth = math.floor(width * 0.4) - 32
+    local buttonHeight = 38
+    local startY = 318
+    local gap = 10
     return __TS__ArrayMap(
         selectedLocation.characters,
         function(____, character, index) return {characterId = character.id, rect = {x = panelX + 12, y = startY + index * (buttonHeight + gap), width = buttonWidth, height = buttonHeight}} end
     )
 end
 local function createDialogButtons(self, width)
-    local panelX = math.floor(width * 0.56)
-    local detailsWidth = math.floor(width * 0.36)
-    local buttonWidth = math.floor((detailsWidth - 32) * 0.5)
-    return {standard = {x = panelX + 12, y = 436, width = buttonWidth, height = 34}, quest = {x = panelX + 20 + buttonWidth, y = 436, width = buttonWidth, height = 34}, yes = {x = panelX + 12, y = 514, width = buttonWidth, height = 30}, no = {x = panelX + 20 + buttonWidth, y = 514, width = buttonWidth, height = 30}}
+    local panelX = math.floor(width * 0.54)
+    local detailsWidth = math.floor(width * 0.4)
+    local buttonWidth = math.floor((detailsWidth - 36) * 0.5)
+    return {standard = {x = panelX + 14, y = 496, width = detailsWidth - 28, height = 36}, quest = {x = panelX + 14, y = 540, width = detailsWidth - 28, height = 36}, yes = {x = panelX + 14, y = 614, width = buttonWidth, height = 34}, no = {x = panelX + 22 + buttonWidth, y = 614, width = buttonWidth, height = 34}}
+end
+local function createDialogOptionButtons(self, width, options)
+    local panelX = math.floor(width * 0.54)
+    local detailsWidth = math.floor(width * 0.4)
+    local startY = 496
+    local buttonHeight = 36
+    local gap = 8
+    return __TS__ArrayMap(
+        options,
+        function(____, option, index) return {optionId = option.id, rect = {x = panelX + 14, y = startY + index * (buttonHeight + gap), width = detailsWidth - 28, height = buttonHeight}} end
+    )
+end
+local function getQuestDifficultyColor(self, playerLevel, recommendedLevel)
+    local delta = recommendedLevel - playerLevel
+    if delta <= -4 then
+        return {0.62, 0.62, 0.62}
+    end
+    if delta <= -2 then
+        return {0.3, 0.82, 0.36}
+    end
+    if delta <= 1 then
+        return {1, 0.9, 0.42}
+    end
+    if delta <= 3 then
+        return {1, 0.63, 0.28}
+    end
+    return {1, 0.34, 0.34}
 end
 local function refreshLayoutIfNeeded(self, uiState)
     local width = love.graphics.getWidth()
@@ -115,6 +142,7 @@ local function refreshLayoutIfNeeded(self, uiState)
         getSelectedLocation(nil, uiState)
     )
     uiState.dialogButtons = createDialogButtons(nil, width)
+    uiState.dialogOptionButtons = createDialogOptionButtons(nil, width, uiState.availableDialogOptions)
 end
 local function isInRect(self, x, y, rect)
     return x >= rect.x and x <= rect.x + rect.width and y >= rect.y and y <= rect.y + rect.height
@@ -129,6 +157,14 @@ local function getLocationButtonAt(self, uiState, x, y)
 end
 local function getCharacterButtonAt(self, uiState, x, y)
     for ____, button in ipairs(uiState.characterButtons) do
+        if isInRect(nil, x, y, button.rect) then
+            return button
+        end
+    end
+    return nil
+end
+local function getDialogOptionButtonAt(self, uiState, x, y)
+    for ____, button in ipairs(uiState.dialogOptionButtons) do
         if isInRect(nil, x, y, button.rect) then
             return button
         end
@@ -161,30 +197,45 @@ local function refreshDialogForSelection(self, uiState)
     if character == nil then
         uiState.dialogMode = "none"
         uiState.dialogText = "Select a character to begin dialog."
+        uiState.availableDialogOptions = {}
         uiState.availableQuestPrompts = {}
-        uiState.canQuestTalk = false
         uiState.selectedQuestPrompt = nil
         uiState.questResponseText = nil
+        uiState.dialogOptionButtons = createDialogOptionButtons(nil, uiState.width, uiState.availableDialogOptions)
         return
     end
     if character.npcId == nil then
-        uiState.dialogMode = "standard"
-        uiState.dialogText = character.description
+        uiState.dialogMode = "options"
+        uiState.dialogText = "Choose something to say."
+        uiState.availableDialogOptions = {{id = "standard:" .. character.id, kind = "standard", playerLine = ("Can you tell me more about " .. character.name) .. "?", npcResponse = character.description}}
         uiState.availableQuestPrompts = {}
-        uiState.canQuestTalk = false
         uiState.selectedQuestPrompt = nil
         uiState.questResponseText = nil
+        uiState.dialogOptionButtons = createDialogOptionButtons(nil, uiState.width, uiState.availableDialogOptions)
         return
     end
     local lines = getStandardDialogForNpc(nil, character.npcId)
     recordNpcInteracted(nil, character.npcId)
     local prompts = getQuestDialogPromptsForNpc(nil, character.npcId)
-    uiState.dialogMode = "standard"
-    uiState.dialogText = lines[1] or character.description
+    uiState.dialogMode = "options"
+    uiState.dialogText = "Choose something to say."
+    uiState.availableDialogOptions = {
+        {id = "standard:" .. character.npcId, kind = "standard", playerLine = "Any local rumors I should know?", npcResponse = lines[1] or character.description},
+        unpack(__TS__ArrayMap(
+            prompts,
+            function(____, prompt) return {
+                id = (("quest:" .. prompt.questId) .. ":") .. prompt.kind,
+                kind = "quest",
+                playerLine = prompt.playerLine,
+                npcResponse = prompt.prompt,
+                questPrompt = prompt
+            } end
+        ))
+    }
     uiState.availableQuestPrompts = prompts
-    uiState.canQuestTalk = #prompts > 0
-    uiState.selectedQuestPrompt = prompts[1]
+    uiState.selectedQuestPrompt = nil
     uiState.questResponseText = nil
+    uiState.dialogOptionButtons = createDialogOptionButtons(nil, uiState.width, uiState.availableDialogOptions)
 end
 function ____exports.createEncounterUiState(self, context)
     local width = love.graphics.getWidth()
@@ -197,28 +248,28 @@ function ____exports.createEncounterUiState(self, context)
     local flowLevel = context and context.flowLevel or 0
     local maxLevels = explorationFlow ~= nil and #explorationFlow.levels or 0
     local viewLevel = maxLevels > 0 and math.min(flowLevel, maxLevels - 1) or 0
-    local ____mode_20 = mode
-    local ____temp_21 = context and context.tileName or "Unknown Tile"
-    local ____tileZone_22 = tileZone
-    local ____temp_23 = context and context.tileDescription or ""
-    local ____explorationFlow_24 = explorationFlow
-    local ____flowLevel_25 = flowLevel
-    local ____viewLevel_26 = viewLevel
-    local ____locations_27 = locations
+    local ____mode_22 = mode
+    local ____temp_23 = context and context.tileName or "Unknown Tile"
+    local ____tileZone_24 = tileZone
+    local ____temp_25 = context and context.tileDescription or ""
+    local ____explorationFlow_26 = explorationFlow
+    local ____flowLevel_27 = flowLevel
+    local ____viewLevel_28 = viewLevel
+    local ____locations_29 = locations
     local ____opt_14 = locations[1]
-    local ____temp_28 = ____opt_14 and ____opt_14.id
+    local ____temp_30 = ____opt_14 and ____opt_14.id
     local ____opt_18 = locations[1]
     local ____opt_16 = ____opt_18 and ____opt_18.characters[1]
     local initialState = {
-        mode = ____mode_20,
-        tileName = ____temp_21,
-        tileZone = ____tileZone_22,
-        tileDescription = ____temp_23,
-        explorationFlow = ____explorationFlow_24,
-        flowLevel = ____flowLevel_25,
-        viewLevel = ____viewLevel_26,
-        locations = ____locations_27,
-        selectedLocationId = ____temp_28,
+        mode = ____mode_22,
+        tileName = ____temp_23,
+        tileZone = ____tileZone_24,
+        tileDescription = ____temp_25,
+        explorationFlow = ____explorationFlow_26,
+        flowLevel = ____flowLevel_27,
+        viewLevel = ____viewLevel_28,
+        locations = ____locations_29,
+        selectedLocationId = ____temp_30,
         selectedCharacterId = ____opt_16 and ____opt_16.id,
         width = width,
         height = height,
@@ -227,12 +278,17 @@ function ____exports.createEncounterUiState(self, context)
         locationButtons = createLocationButtons(nil, width, locations),
         characterButtons = createCharacterButtons(nil, width, locations[1]),
         dialogButtons = createDialogButtons(nil, width),
+        dialogOptionButtons = {},
         dialogMode = "none",
         dialogText = "Select a character to begin dialog.",
+        availableDialogOptions = {},
         availableQuestPrompts = {},
-        canQuestTalk = false,
         selectedQuestPrompt = nil,
         questResponseText = nil,
+        playerLevel = math.max(
+            1,
+            math.floor(context and context.playerLevel or 1)
+        ),
         hoveredContinue = false,
         hoveredGenericButton = nil,
         hoveredLocationId = nil,
@@ -250,10 +306,10 @@ function ____exports.onEncounterMouseMoved(self, uiState, x, y)
     refreshLayoutIfNeeded(nil, uiState)
     uiState.hoveredContinue = isInRect(nil, x, y, uiState.continueButton)
     if uiState.mode == "generic" then
-        local ____uiState_genericButtons_29 = uiState.genericButtons
-        local backToMap = ____uiState_genericButtons_29.backToMap
-        local exploreFurther = ____uiState_genericButtons_29.exploreFurther
-        local previousArea = ____uiState_genericButtons_29.previousArea
+        local ____uiState_genericButtons_31 = uiState.genericButtons
+        local backToMap = ____uiState_genericButtons_31.backToMap
+        local exploreFurther = ____uiState_genericButtons_31.exploreFurther
+        local previousArea = ____uiState_genericButtons_31.previousArea
         if isInRect(nil, x, y, backToMap) then
             uiState.hoveredGenericButton = "back"
         elseif isInRect(nil, x, y, exploreFurther) then
@@ -280,9 +336,9 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
             uiState.selectedLocationId = locationButton.locationId
             local selectedLocation = getSelectedLocation(nil, uiState)
             uiState.characterButtons = createCharacterButtons(nil, uiState.width, selectedLocation)
-            local ____uiState_38 = uiState
-            local ____opt_34 = selectedLocation and selectedLocation.characters[1]
-            ____uiState_38.selectedCharacterId = ____opt_34 and ____opt_34.id
+            local ____uiState_40 = uiState
+            local ____opt_36 = selectedLocation and selectedLocation.characters[1]
+            ____uiState_40.selectedCharacterId = ____opt_36 and ____opt_36.id
             refreshDialogForSelection(nil, uiState)
             return false
         end
@@ -292,35 +348,51 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
             refreshDialogForSelection(nil, uiState)
             return false
         end
-        if isInRect(nil, x, y, uiState.dialogButtons.standard) then
-            local character = getSelectedCharacter(nil, uiState)
-            if (character and character.npcId) ~= nil then
-                local lines = getStandardDialogForNpc(nil, character.npcId)
+        local optionButton = getDialogOptionButtonAt(nil, uiState, x, y)
+        if optionButton ~= nil then
+            local option = __TS__ArrayFind(
+                uiState.availableDialogOptions,
+                function(____, entry) return entry.id == optionButton.optionId end
+            )
+            if option == nil then
+                return false
+            end
+            if option.kind == "quest" and option.questPrompt ~= nil then
+                uiState.dialogMode = "quest"
+                uiState.dialogText = option.npcResponse
+                uiState.selectedQuestPrompt = option.questPrompt
+            else
                 uiState.dialogMode = "standard"
-                uiState.dialogText = lines[1] or character.description
-            elseif character ~= nil then
-                uiState.dialogMode = "standard"
-                uiState.dialogText = character.description
+                uiState.dialogText = option.npcResponse
+                uiState.selectedQuestPrompt = nil
             end
             uiState.questResponseText = nil
             return false
         end
+        if isInRect(nil, x, y, uiState.dialogButtons.standard) then
+            local standard = __TS__ArrayFind(
+                uiState.availableDialogOptions,
+                function(____, entry) return entry.kind == "standard" end
+            )
+            if standard ~= nil then
+                uiState.dialogMode = "standard"
+                uiState.dialogText = standard.npcResponse
+                uiState.selectedQuestPrompt = nil
+                uiState.questResponseText = nil
+            end
+            return false
+        end
         if isInRect(nil, x, y, uiState.dialogButtons.quest) then
-            if not uiState.canQuestTalk then
-                return false
-            end
-            local character = getSelectedCharacter(nil, uiState)
-            if (character and character.npcId) ~= nil then
-                uiState.selectedQuestPrompt = uiState.availableQuestPrompts[1]
-            end
-            if uiState.selectedQuestPrompt ~= nil then
+            local questOption = __TS__ArrayFind(
+                uiState.availableDialogOptions,
+                function(____, entry) return entry.kind == "quest" end
+            )
+            if (questOption and questOption.questPrompt) ~= nil then
                 uiState.dialogMode = "quest"
-                uiState.dialogText = uiState.selectedQuestPrompt.prompt
-            else
-                uiState.dialogMode = "quest"
-                uiState.dialogText = "No quest dialog is currently available for this character."
+                uiState.dialogText = questOption.npcResponse
+                uiState.selectedQuestPrompt = questOption.questPrompt
+                uiState.questResponseText = nil
             end
-            uiState.questResponseText = nil
             return false
         end
         if uiState.dialogMode == "quest" and isInRect(nil, x, y, uiState.dialogButtons.yes) then
@@ -347,6 +419,7 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
             else
                 uiState.questResponseText = "No quest selected."
             end
+            uiState.dialogMode = "options"
             return false
         end
     end
@@ -453,10 +526,10 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                 0.7
             )
         end
-        local detailsX = math.floor(uiState.width * 0.56)
-        local detailsY = 186
-        local detailsWidth = math.floor(uiState.width * 0.36)
-        local detailsHeight = math.floor(uiState.height * 0.46)
+        local detailsX = math.floor(uiState.width * 0.54)
+        local detailsY = 158
+        local detailsWidth = math.floor(uiState.width * 0.4)
+        local detailsHeight = math.floor(uiState.height * 0.66)
         local selectedLocation = getSelectedLocation(nil, uiState)
         love.graphics.setColor(0.16, 0.14, 0.24, 0.9)
         love.graphics.rectangle(
@@ -505,7 +578,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
             love.graphics.printf(
                 "Characters",
                 detailsX + 12,
-                detailsY + 94,
+                detailsY + 112,
                 detailsWidth - 24,
                 "left",
                 0,
@@ -558,25 +631,11 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                     0.56
                 )
             end
-            local selectedCharacterName = getSelectedCharacterName(nil, uiState)
-            if selectedCharacterName ~= nil then
-                love.graphics.setColor(0.79, 0.75, 0.91, 0.94)
-                love.graphics.printf(
-                    "Interact: " .. selectedCharacterName,
-                    detailsX + 12,
-                    detailsY + detailsHeight - 30,
-                    detailsWidth - 24,
-                    "left",
-                    0,
-                    0.57,
-                    0.57
-                )
-            end
             love.graphics.setColor(0.9, 0.94, 1, 0.95)
             love.graphics.printf(
                 "Dialog",
                 detailsX + 12,
-                394,
+                410,
                 detailsWidth - 24,
                 "left",
                 0,
@@ -587,9 +646,9 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
             love.graphics.rectangle(
                 "fill",
                 detailsX + 12,
-                414,
+                434,
                 detailsWidth - 24,
-                92,
+                52,
                 6,
                 6
             )
@@ -597,9 +656,9 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
             love.graphics.rectangle(
                 "line",
                 detailsX + 12,
-                414,
+                434,
                 detailsWidth - 24,
-                92,
+                52,
                 6,
                 6
             )
@@ -607,78 +666,77 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
             love.graphics.printf(
                 uiState.dialogText,
                 detailsX + 20,
-                422,
+                444,
                 detailsWidth - 40,
                 "left",
                 0,
                 0.55,
                 0.55
             )
-            love.graphics.setColor(0.31, 0.24, 0.43, 0.96)
-            love.graphics.rectangle(
-                "fill",
-                uiState.dialogButtons.standard.x,
-                uiState.dialogButtons.standard.y,
-                uiState.dialogButtons.standard.width,
-                uiState.dialogButtons.standard.height,
-                6,
-                6
-            )
-            love.graphics.setColor(0.79, 0.73, 0.91, 0.85)
-            love.graphics.rectangle(
-                "line",
-                uiState.dialogButtons.standard.x,
-                uiState.dialogButtons.standard.y,
-                uiState.dialogButtons.standard.width,
-                uiState.dialogButtons.standard.height,
-                6,
-                6
-            )
-            love.graphics.setColor(1, 1, 1, 0.98)
-            love.graphics.printf(
-                "Standard Talk",
-                uiState.dialogButtons.standard.x,
-                uiState.dialogButtons.standard.y + 10,
-                uiState.dialogButtons.standard.width,
-                "center",
-                0,
-                0.56,
-                0.56
-            )
-            if uiState.canQuestTalk then
-                love.graphics.setColor(0.31, 0.24, 0.43, 0.96)
-                love.graphics.rectangle(
-                    "fill",
-                    uiState.dialogButtons.quest.x,
-                    uiState.dialogButtons.quest.y,
-                    uiState.dialogButtons.quest.width,
-                    uiState.dialogButtons.quest.height,
-                    6,
-                    6
-                )
-                love.graphics.setColor(0.79, 0.73, 0.91, 0.85)
-                love.graphics.rectangle(
-                    "line",
-                    uiState.dialogButtons.quest.x,
-                    uiState.dialogButtons.quest.y,
-                    uiState.dialogButtons.quest.width,
-                    uiState.dialogButtons.quest.height,
-                    6,
-                    6
-                )
-                love.graphics.setColor(1, 1, 1, 0.98)
-                love.graphics.printf(
-                    "Quest Talk",
-                    uiState.dialogButtons.quest.x,
-                    uiState.dialogButtons.quest.y + 10,
-                    uiState.dialogButtons.quest.width,
-                    "center",
-                    0,
-                    0.56,
-                    0.56
-                )
+            if uiState.dialogMode ~= "quest" then
+                for ____, optionButton in ipairs(uiState.dialogOptionButtons) do
+                    do
+                        local option = __TS__ArrayFind(
+                            uiState.availableDialogOptions,
+                            function(____, entry) return entry.id == optionButton.optionId end
+                        )
+                        if option == nil then
+                            goto __continue97
+                        end
+                        love.graphics.setColor(0.31, 0.24, 0.43, 0.96)
+                        love.graphics.rectangle(
+                            "fill",
+                            optionButton.rect.x,
+                            optionButton.rect.y,
+                            optionButton.rect.width,
+                            optionButton.rect.height,
+                            6,
+                            6
+                        )
+                        love.graphics.setColor(0.79, 0.73, 0.91, 0.85)
+                        love.graphics.rectangle(
+                            "line",
+                            optionButton.rect.x,
+                            optionButton.rect.y,
+                            optionButton.rect.width,
+                            optionButton.rect.height,
+                            6,
+                            6
+                        )
+                        if option.questPrompt ~= nil then
+                            local r, g, b = unpack(
+                                getQuestDifficultyColor(nil, uiState.playerLevel, option.questPrompt.recommendedLevel),
+                                1,
+                                3
+                            )
+                            love.graphics.setColor(r, g, b, 0.95)
+                            love.graphics.printf(
+                                "Lv " .. tostring(option.questPrompt.recommendedLevel),
+                                optionButton.rect.x + optionButton.rect.width - 66,
+                                optionButton.rect.y + 11,
+                                54,
+                                "right",
+                                0,
+                                0.5,
+                                0.5
+                            )
+                        end
+                        love.graphics.setColor(1, 1, 1, 0.98)
+                        love.graphics.printf(
+                            option.playerLine,
+                            optionButton.rect.x + 10,
+                            optionButton.rect.y + 10,
+                            optionButton.rect.width - 84,
+                            "left",
+                            0,
+                            0.51,
+                            0.51
+                        )
+                    end
+                    ::__continue97::
+                end
             end
-            if uiState.canQuestTalk and uiState.dialogMode == "quest" then
+            if uiState.dialogMode == "quest" then
                 love.graphics.setColor(0.35, 0.27, 0.47, 0.96)
                 love.graphics.rectangle(
                     "fill",
@@ -747,12 +805,26 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                 love.graphics.printf(
                     uiState.questResponseText,
                     detailsX + 12,
-                    548,
+                    658,
                     detailsWidth - 24,
                     "left",
                     0,
                     0.52,
                     0.52
+                )
+            end
+            local selectedCharacterName = getSelectedCharacterName(nil, uiState)
+            if selectedCharacterName ~= nil then
+                love.graphics.setColor(0.79, 0.75, 0.91, 0.94)
+                love.graphics.printf(
+                    (("Interact: " .. selectedCharacterName) .. "  |  Your level: ") .. tostring(uiState.playerLevel),
+                    detailsX + 12,
+                    detailsY + detailsHeight - 30,
+                    detailsWidth - 24,
+                    "left",
+                    0,
+                    0.57,
+                    0.57
                 )
             end
         end

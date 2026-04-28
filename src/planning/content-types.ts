@@ -130,6 +130,8 @@ export type ContentQuest = {
   id: string;
   name: string;
   summary: string;
+  recommendedLevel: number;
+  conversationStarter?: string;
   category: "main" | "side" | "town";
   offerNpcId?: string;
   turnInNpcId?: string;

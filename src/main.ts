@@ -234,6 +234,7 @@ love.update = (dt: number) => {
                           locations: currentTile.locations,
                           explorationFlowId: currentTile.explorationFlowId,
                           flowLevel: currentTile.flowLevel,
+                          playerLevel: playerProgression.level,
                       }
                     : undefined,
             );
