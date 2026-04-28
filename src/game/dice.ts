@@ -12,6 +12,8 @@ export type SideResolveContext = {
   source: DiceEventSource;
   cause: DiceEventCause;
   dieId: string;
+  originDieId?: string;
+  dieTags?: string[];
   randomSource?: RandomSource;
 };
 
@@ -21,6 +23,7 @@ export interface DieSide {
   power?: number;
   describe?: () => string;
   getResolvePopupText?: () => string;
+  getTags?: () => string[];
   resolve(context: SideResolveContext): import("./combat-event-bus").CombatEvent[];
 }
 

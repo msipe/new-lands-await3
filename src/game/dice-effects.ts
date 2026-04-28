@@ -1,4 +1,5 @@
 import type { CombatEvent } from "./combat-event-bus";
+import { CombatTagFactory, mergeCombatTags } from "./combat-tags";
 import { type DiceEventCause, type DiceEventSource, EffectType } from "./dice";
 
 export type EffectTarget = "self" | "opponent";
@@ -8,7 +9,13 @@ export interface DiceEffectScript {
   effectType: EffectType;
   value: number;
   target: EffectTarget;
-  toEvent(source: DiceEventSource, cause: DiceEventCause, dieId: string, sideId: string): CombatEvent;
+  toEvent(
+    source: DiceEventSource,
+    cause: DiceEventCause,
+    dieId: string,
+    sideId: string,
+    extraTags?: string[],
+  ): CombatEvent;
 }
 
 abstract class BaseEffectScript implements DiceEffectScript {
@@ -29,7 +36,13 @@ abstract class BaseEffectScript implements DiceEffectScript {
     this.target = target;
   }
 
-  toEvent(source: DiceEventSource, cause: DiceEventCause, dieId: string, sideId: string): CombatEvent {
+  toEvent(
+    source: DiceEventSource,
+    cause: DiceEventCause,
+    dieId: string,
+    sideId: string,
+    extraTags?: string[],
+  ): CombatEvent {
     return {
       effect: this.effectType,
       value: this.value,
@@ -38,6 +51,16 @@ abstract class BaseEffectScript implements DiceEffectScript {
       cause,
       dieId,
       sideId,
+      originDieId: dieId,
+      tags: mergeCombatTags(
+        [
+          CombatTagFactory.effect(this.effectType),
+          CombatTagFactory.actor(source),
+          CombatTagFactory.target(this.target),
+          CombatTagFactory.cause(cause),
+        ],
+        extraTags,
+      ),
     };
   }
 }

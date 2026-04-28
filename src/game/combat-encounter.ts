@@ -18,6 +18,13 @@ import { getDieConstructById } from "./dice-constructs";
 import { createDieFromConstruct } from "./dice-factory";
 import { createPlayerCombatDiceLoadout } from "./dice-constructs/player-combat-dice";
 import { buildRollCombatLogLines } from "./combat-log";
+import {
+  CombatTagFactory,
+  CoreCombatTags,
+  hasCombatTag,
+  isCauseTagId,
+  mergeCombatTags,
+} from "./combat-tags";
 import { getTransientDiePopupDataFromEvents } from "./transient-die";
 import type {
   PlayerRollConversionRequest,
@@ -362,18 +369,6 @@ type CombatHitSubscriberSide = DieSide & {
   createCombatHitSubscriber?: () => CombatHitSubscriberRegistration;
 };
 
-function isWeaponDamageEventFromPlayer(state: CombatEncounterState, event: CombatEvent): boolean {
-  if (event.meta?.isWeaponAttack === true) {
-    return true;
-  }
-
-  if (event.meta?.sourceDieIsWeapon === true || event.meta?.transientDieIsWeapon === true) {
-    return true;
-  }
-
-  return state.player.dice.some((d) => d.id === event.dieId && d.tags.includes("weapon"));
-}
-
 function queuePendingNextRoundDie(state: CombatEncounterState, constructId: string): void {
   const pendingDieId = `spawned-${state.nextSpawnedDieIndex}`;
   state.nextSpawnedDieIndex += 1;
@@ -538,6 +533,10 @@ function resolveImmediateEvents(
     const triggeredEvents = eventBus.publish(preparedEvent, { alreadyPrepared: true }).map((nextEvent) => ({
       ...nextEvent,
       cause: "triggered" as const,
+      tags: mergeCombatTags(
+        nextEvent.tags.filter((tag) => !isCauseTagId(tag)),
+        [CombatTagFactory.cause("triggered")],
+      ),
     }));
 
     applyCombatEvent(state, preparedEvent);
@@ -565,6 +564,8 @@ function buildEnemyIntent(
       source: "enemy",
       cause: "enemy-intent",
       dieId: die.id,
+      originDieId: die.id,
+      dieTags: die.tags,
     });
 
     eventsByDieId[die.id] = dieEvents;
@@ -778,7 +779,7 @@ export function rollPlayerDie(
         duration: Duration.PlayerTurn,
       },
       (event) => {
-        if (!isWeaponDamageEventFromPlayer(state, event)) {
+        if (!hasCombatTag(event.tags, CoreCombatTags.AttackWeapon)) {
           return;
         }
 
@@ -798,22 +799,9 @@ export function rollPlayerDie(
     source: "player",
     cause: "player-roll",
     dieId: die.id,
+    originDieId: die.id,
+    dieTags: die.tags,
     randomSource,
-  }).map((event) => {
-    const existingMeta = event.meta ?? {};
-    const isWeaponAttack =
-      die.tags.includes("weapon") ||
-      existingMeta.transientDieIsWeapon === true;
-
-    return {
-      ...event,
-      meta: {
-        ...existingMeta,
-        sourceDieId: die.id,
-        sourceDieIsWeapon: die.tags.includes("weapon"),
-        isWeaponAttack: existingMeta.isWeaponAttack === true || isWeaponAttack,
-      },
-    };
   });
 
   state.combatLog.push(

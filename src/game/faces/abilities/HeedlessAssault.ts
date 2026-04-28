@@ -1,4 +1,5 @@
 import { type CombatEvent } from "../../combat-event-bus";
+import { CombatTagFactory } from "../../combat-tags";
 import { DamageEffectScript } from "../../dice-effects";
 import { EffectType } from "../../dice";
 import { Face, type FaceResolveContext } from "../Face";
@@ -267,6 +268,13 @@ export class HeedlessAssault extends Face {
       cause: context.cause,
       dieId: context.dieId,
       sideId: this.id,
+      originDieId: context.dieId,
+      tags: [
+        CombatTagFactory.effect(EffectType.Armor).id,
+        CombatTagFactory.actor(context.source).id,
+        CombatTagFactory.target("self").id,
+        CombatTagFactory.cause(context.cause).id,
+      ],
       meta: { stripAllArmor: true },
     };
 

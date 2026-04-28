@@ -5,6 +5,7 @@ import {
   type CombatEvent,
   type CombatEventModifierRegistration,
 } from "../../combat-event-bus";
+import { CombatTagFactory, CoreCombatTags, hasAllCombatTags, hasCombatTag } from "../../combat-tags";
 import type { CombatLogRollContext } from "../../combat-log";
 import { EffectType, defaultRandomSource, type RandomSource } from "../../dice";
 import {
@@ -63,14 +64,15 @@ function hasWildStrikeMeta(event: CombatEvent): boolean {
 
 function isMatchingWildStrikeDamageEvent(event: CombatEvent): boolean {
   return (
-    event.effect === EffectType.Damage &&
-    event.source === "player" &&
-    event.target === "opponent" &&
-    event.value > 0 &&
+    hasAllCombatTags(event.tags, [
+      CombatTagFactory.effect(EffectType.Damage),
+      CombatTagFactory.actor("player"),
+      CombatTagFactory.target("opponent"),
+      CoreCombatTags.Hit,
+    ]) &&
     event.meta?.wildStrike === true &&
     typeof event.meta?.wildStrikeSourceDieId === "string" &&
-    typeof event.meta?.sourceDieId === "string" &&
-    event.meta.wildStrikeSourceDieId === event.meta.sourceDieId
+    event.meta.wildStrikeSourceDieId === event.originDieId
   );
 }
 
@@ -89,7 +91,7 @@ export function normalizeWildStrikeWeaponLabel(weaponLabel: string): string {
 
 export function summarizeWildStrikeRoll(events: CombatEvent[]): WildStrikeRollSummary {
   const variantBonus = getWildStrikeVariantBonus(events);
-  const transientEvent = events.find((event) => event.meta?.transientDie === true);
+  const transientEvent = events.find((event) => hasCombatTag(event.tags, CoreCombatTags.Transient));
 
   if (!transientEvent) {
     return {
@@ -108,9 +110,11 @@ export function summarizeWildStrikeRoll(events: CombatEvent[]): WildStrikeRollSu
     .filter(
       (event) =>
         event.effect === EffectType.Damage &&
-        event.source === "player" &&
-        event.target === "opponent" &&
-        event.meta?.transientDie === true,
+        hasAllCombatTags(event.tags, [
+          CombatTagFactory.actor("player"),
+          CombatTagFactory.target("opponent"),
+          CoreCombatTags.Transient,
+        ]),
     )
     .reduce((total, event) => total + Math.max(0, Math.floor(event.value)), 0);
 
