@@ -1,7 +1,9 @@
 import type { TownLocation, ZoneType } from "./exploration/explore-state";
 import {
+  getDialogOptionsForNpc,
   getQuestDialogPromptsForNpc,
   getStandardDialogForNpc,
+  type NpcDialogOption,
   type QuestDialogPrompt,
 } from "./planning/dialog-service";
 import { acceptQuest, turnInQuest } from "./planning/quest-log";
@@ -40,6 +42,7 @@ type DialogOption = {
   kind: "standard" | "quest";
   playerLine: string;
   npcResponse: string;
+  questReady?: boolean;
   questPrompt?: QuestDialogPrompt;
 };
 
@@ -92,6 +95,7 @@ export type EncounterUiState = {
   selectedQuestPrompt?: QuestDialogPrompt;
   questResponseText?: string;
   playerLevel: number;
+  questDialogUnlockedByCharacterId: Record<string, true>;
   hoveredContinue: boolean;
   hoveredGenericButton: "back" | "explore" | "previous" | undefined;
   hoveredLocationId?: string;
@@ -256,6 +260,18 @@ function getQuestDifficultyColor(playerLevel: number, recommendedLevel: number):
   return [1, 0.34, 0.34];
 }
 
+function getQuestAcceptLabel(prompt: QuestDialogPrompt | undefined): string {
+  if (prompt === undefined) {
+    return "Accept";
+  }
+
+  if (prompt.kind === "turn-in") {
+    return "Yes, I've done it.";
+  }
+
+  return "Yes, I'll look into it.";
+}
+
 function refreshLayoutIfNeeded(uiState: EncounterUiState): void {
   const width = love.graphics.getWidth();
   const height = love.graphics.getHeight();
@@ -373,22 +389,29 @@ function refreshDialogForSelection(uiState: EncounterUiState): void {
   const lines = getStandardDialogForNpc(character.npcId);
   recordNpcInteracted(character.npcId);
   const prompts = getQuestDialogPromptsForNpc(character.npcId);
+  const npcDialogOptions = getDialogOptionsForNpc(character.npcId);
+  const isQuestDialogUnlocked = uiState.questDialogUnlockedByCharacterId[character.id] === true;
   uiState.dialogMode = "options";
   uiState.dialogText = "Choose something to say.";
   uiState.availableDialogOptions = [
-    {
-      id: `standard:${character.npcId}`,
-      kind: "standard",
-      playerLine: "Any local rumors I should know?",
-      npcResponse: lines[0] ?? character.description,
-    },
-    ...prompts.map((prompt) => ({
-      id: `quest:${prompt.questId}:${prompt.kind}`,
-      kind: "quest" as const,
-      playerLine: prompt.playerLine,
-      npcResponse: prompt.prompt,
-      questPrompt: prompt,
+    ...npcDialogOptions.map((option: NpcDialogOption) => ({
+      id: `standard:${option.id}`,
+      kind: "standard" as const,
+      playerLine: option.playerLine,
+      npcResponse: option.npcResponse || lines[0] || character.description,
+      questReady: option.questReady,
     })),
+    ...(
+      isQuestDialogUnlocked
+        ? prompts.map((prompt) => ({
+            id: `quest:${prompt.questId}:${prompt.kind}`,
+            kind: "quest" as const,
+            playerLine: prompt.playerLine,
+            npcResponse: prompt.prompt,
+            questPrompt: prompt,
+          }))
+        : []
+    ),
   ];
   uiState.availableQuestPrompts = prompts;
   uiState.selectedQuestPrompt = undefined;
@@ -435,6 +458,7 @@ export function createEncounterUiState(context?: EncounterUiContext): EncounterU
     selectedQuestPrompt: undefined,
     questResponseText: undefined,
     playerLevel: Math.max(1, Math.floor(context?.playerLevel ?? 1)),
+    questDialogUnlockedByCharacterId: {},
     hoveredContinue: false,
     hoveredGenericButton: undefined,
     hoveredLocationId: undefined,
@@ -500,6 +524,35 @@ export function onEncounterMouseReleased(uiState: EncounterUiState, x: number, y
       return false;
     }
 
+    if (uiState.dialogMode === "quest" && isInRect(x, y, uiState.dialogButtons.yes)) {
+      if (uiState.selectedQuestPrompt !== undefined) {
+        if (uiState.selectedQuestPrompt.kind === "turn-in") {
+          const questName = uiState.selectedQuestPrompt.questName;
+          turnInQuest(uiState.selectedQuestPrompt.questId);
+          refreshDialogForSelection(uiState);
+          uiState.questResponseText = `Turned in: ${questName}`;
+        } else {
+          const questName = uiState.selectedQuestPrompt.questName;
+          acceptQuest(uiState.selectedQuestPrompt.questId);
+          refreshDialogForSelection(uiState);
+          uiState.questResponseText = `Accepted: ${questName}`;
+        }
+      } else {
+        uiState.questResponseText = "No quest selected.";
+      }
+      return false;
+    }
+
+    if (uiState.dialogMode === "quest" && isInRect(x, y, uiState.dialogButtons.no)) {
+      if (uiState.selectedQuestPrompt !== undefined) {
+        uiState.questResponseText = `Declined: ${uiState.selectedQuestPrompt.questName}`;
+      } else {
+        uiState.questResponseText = "No quest selected.";
+      }
+      uiState.dialogMode = "options";
+      return false;
+    }
+
     const optionButton = getDialogOptionButtonAt(uiState, x, y);
     if (optionButton !== undefined) {
       const option = uiState.availableDialogOptions.find((entry) => entry.id === optionButton.optionId);
@@ -512,6 +565,14 @@ export function onEncounterMouseReleased(uiState: EncounterUiState, x: number, y
         uiState.dialogText = option.npcResponse;
         uiState.selectedQuestPrompt = option.questPrompt;
       } else {
+        const character = getSelectedCharacter(uiState);
+        if (character !== undefined) {
+          const hasQuestPrompts = uiState.availableQuestPrompts.length > 0;
+          if (hasQuestPrompts && option.questReady === true) {
+            uiState.questDialogUnlockedByCharacterId[character.id] = true;
+            refreshDialogForSelection(uiState);
+          }
+        }
         uiState.dialogMode = "standard";
         uiState.dialogText = option.npcResponse;
         uiState.selectedQuestPrompt = undefined;
@@ -544,34 +605,6 @@ export function onEncounterMouseReleased(uiState: EncounterUiState, x: number, y
       return false;
     }
 
-    if (uiState.dialogMode === "quest" && isInRect(x, y, uiState.dialogButtons.yes)) {
-      if (uiState.selectedQuestPrompt !== undefined) {
-        if (uiState.selectedQuestPrompt.kind === "turn-in") {
-          const questName = uiState.selectedQuestPrompt.questName;
-          turnInQuest(uiState.selectedQuestPrompt.questId);
-          refreshDialogForSelection(uiState);
-          uiState.questResponseText = `Turned in: ${questName}`;
-        } else {
-          const questName = uiState.selectedQuestPrompt.questName;
-          acceptQuest(uiState.selectedQuestPrompt.questId);
-          refreshDialogForSelection(uiState);
-          uiState.questResponseText = `Accepted: ${questName}`;
-        }
-      } else {
-        uiState.questResponseText = "No quest selected.";
-      }
-      return false;
-    }
-
-    if (uiState.dialogMode === "quest" && isInRect(x, y, uiState.dialogButtons.no)) {
-      if (uiState.selectedQuestPrompt !== undefined) {
-        uiState.questResponseText = `Declined: ${uiState.selectedQuestPrompt.questName}`;
-      } else {
-        uiState.questResponseText = "No quest selected.";
-      }
-      uiState.dialogMode = "options";
-      return false;
-    }
   }
 
   if (uiState.mode === "generic") {
@@ -694,6 +727,7 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
 
         love.graphics.setColor(0.93, 0.9, 0.99, 0.98);
         love.graphics.printf(label, button.rect.x + 8, button.rect.y + 11, button.rect.width - 16, "left", 0, 0.56, 0.56);
+
       }
 
       love.graphics.setColor(0.9, 0.94, 1, 0.95);
@@ -734,35 +768,31 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
             6,
           );
 
-          if (option.questPrompt !== undefined) {
-            const [r, g, b] = getQuestDifficultyColor(
-              uiState.playerLevel,
-              option.questPrompt.recommendedLevel,
-            );
-            love.graphics.setColor(r, g, b, 0.95);
-            love.graphics.printf(
-              `Lv ${option.questPrompt.recommendedLevel}`,
-              optionButton.rect.x + optionButton.rect.width - 66,
-              optionButton.rect.y + 11,
-              54,
-              "right",
-              0,
-              0.5,
-              0.5,
-            );
-          }
-
           love.graphics.setColor(1, 1, 1, 0.98);
           love.graphics.printf(
             option.playerLine,
-            optionButton.rect.x + 10,
+            optionButton.rect.x + (option.questPrompt !== undefined ? 24 : 10),
             optionButton.rect.y + 10,
-            optionButton.rect.width - 84,
+            optionButton.rect.width - (option.questPrompt !== undefined ? 34 : 20),
             "left",
             0,
             0.51,
             0.51,
           );
+
+          if (option.questReady === true) {
+            love.graphics.setColor(1, 0.86, 0.25, 0.98);
+            love.graphics.printf(
+              "!",
+              optionButton.rect.x + 8,
+              optionButton.rect.y + 8,
+              12,
+              "center",
+              0,
+              0.72,
+              0.72,
+            );
+          }
         }
       }
 
@@ -789,7 +819,7 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
         );
         love.graphics.setColor(1, 1, 1, 1);
         love.graphics.printf(
-          "Yes",
+          getQuestAcceptLabel(uiState.selectedQuestPrompt),
           uiState.dialogButtons.yes.x,
           uiState.dialogButtons.yes.y + 8,
           uiState.dialogButtons.yes.width,
@@ -798,6 +828,27 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
           0.55,
           0.55,
         );
+
+        if (
+          uiState.selectedQuestPrompt !== undefined &&
+          uiState.selectedQuestPrompt.kind === "offer"
+        ) {
+          const [r, g, b] = getQuestDifficultyColor(
+            uiState.playerLevel,
+            uiState.selectedQuestPrompt.recommendedLevel,
+          );
+          love.graphics.setColor(r, g, b, 0.95);
+          love.graphics.printf(
+            `Lv ${uiState.selectedQuestPrompt.recommendedLevel}`,
+            uiState.dialogButtons.yes.x + 8,
+            uiState.dialogButtons.yes.y + 9,
+            uiState.dialogButtons.yes.width - 16,
+            "left",
+            0,
+            0.48,
+            0.48,
+          );
+        }
 
         love.graphics.setColor(0.35, 0.27, 0.47, 0.96);
         love.graphics.rectangle(
@@ -821,7 +872,7 @@ export function drawEncounterUi(uiState: EncounterUiState, visitCount: number): 
         );
         love.graphics.setColor(1, 1, 1, 1);
         love.graphics.printf(
-          "No",
+          "Not now.",
           uiState.dialogButtons.no.x,
           uiState.dialogButtons.no.y + 8,
           uiState.dialogButtons.no.width,

@@ -41,6 +41,12 @@ function cloneQuestObjective(objective: ContentQuest["objectives"][number]): Con
 const NPCS: ContentNpc[] = RAW_NPCS.map((entry) => ({
   ...entry,
   standardDialog: [...entry.standardDialog],
+  dialogOptions:
+    entry.dialogOptions !== undefined
+      ? entry.dialogOptions.map((option) => ({
+          ...option,
+        }))
+      : undefined,
 }));
 const QUESTS: ContentQuest[] = RAW_QUESTS.map((entry) => ({
   ...entry,
@@ -126,6 +132,12 @@ export function listNpcs(): ContentNpc[] {
   return NPCS.map((entry) => ({
     ...entry,
     standardDialog: [...entry.standardDialog],
+    dialogOptions:
+      entry.dialogOptions !== undefined
+        ? entry.dialogOptions.map((option) => ({
+            ...option,
+          }))
+        : undefined,
   }));
 }
 

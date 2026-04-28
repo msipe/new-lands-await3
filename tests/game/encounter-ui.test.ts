@@ -62,8 +62,26 @@ describe("encounter-ui quest flow", () => {
 
     onEncounterMouseReleased(
       uiState,
-      uiState.dialogButtons.quest.x + 4,
-      uiState.dialogButtons.quest.y + 4,
+      uiState.dialogOptionButtons[0]!.rect.x + 4,
+      uiState.dialogOptionButtons[0]!.rect.y + 4,
+      1,
+    );
+    expect(isQuestAccepted("main:defeat-dracula")).toBe(false);
+
+    onEncounterMouseReleased(
+      uiState,
+      uiState.dialogOptionButtons[1]!.rect.x + 4,
+      uiState.dialogOptionButtons[1]!.rect.y + 4,
+      1,
+    );
+    const questOptionIndex = uiState.availableDialogOptions.findIndex(
+      (option) => option.kind === "quest",
+    );
+    expect(questOptionIndex).toBeGreaterThanOrEqual(0);
+    onEncounterMouseReleased(
+      uiState,
+      uiState.dialogOptionButtons[questOptionIndex]!.rect.x + 4,
+      uiState.dialogOptionButtons[questOptionIndex]!.rect.y + 4,
       1,
     );
     onEncounterMouseReleased(
@@ -82,11 +100,27 @@ describe("encounter-ui quest flow", () => {
     setQuestStatus("main:defeat-dracula", "ready-to-turn-in");
 
     const uiState = createTownEncounterForIgor();
+    onEncounterMouseReleased(
+      uiState,
+      uiState.dialogOptionButtons[0]!.rect.x + 4,
+      uiState.dialogOptionButtons[0]!.rect.y + 4,
+      1,
+    );
 
     onEncounterMouseReleased(
       uiState,
-      uiState.dialogButtons.quest.x + 4,
-      uiState.dialogButtons.quest.y + 4,
+      uiState.dialogOptionButtons[1]!.rect.x + 4,
+      uiState.dialogOptionButtons[1]!.rect.y + 4,
+      1,
+    );
+    const questOptionIndex = uiState.availableDialogOptions.findIndex(
+      (option) => option.kind === "quest",
+    );
+    expect(questOptionIndex).toBeGreaterThanOrEqual(0);
+    onEncounterMouseReleased(
+      uiState,
+      uiState.dialogOptionButtons[questOptionIndex]!.rect.x + 4,
+      uiState.dialogOptionButtons[questOptionIndex]!.rect.y + 4,
       1,
     );
     onEncounterMouseReleased(

@@ -57,7 +57,13 @@ local NPCS = __TS__ArrayMap(
     function(____, entry) return __TS__ObjectAssign(
         {},
         entry,
-        {standardDialog = {unpack(entry.standardDialog)}}
+        {
+            standardDialog = {unpack(entry.standardDialog)},
+            dialogOptions = entry.dialogOptions ~= nil and __TS__ArrayMap(
+                entry.dialogOptions,
+                function(____, option) return __TS__ObjectAssign({}, option) end
+            ) or nil
+        }
     ) end
 )
 local QUESTS = __TS__ArrayMap(
@@ -228,7 +234,13 @@ function ____exports.listNpcs(self)
         function(____, entry) return __TS__ObjectAssign(
             {},
             entry,
-            {standardDialog = {unpack(entry.standardDialog)}}
+            {
+                standardDialog = {unpack(entry.standardDialog)},
+                dialogOptions = entry.dialogOptions ~= nil and __TS__ArrayMap(
+                    entry.dialogOptions,
+                    function(____, option) return __TS__ObjectAssign({}, option) end
+                ) or nil
+            }
         ) end
     )
 end

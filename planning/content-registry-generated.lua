@@ -8,7 +8,8 @@ ____exports.RAW_NPCS = {
         defaultZone = "town",
         residenceBuilding = "square",
         notes = "Provides clues needed to defeat Dracula.",
-        standardDialog = {"Keep your lantern high. Shadows here remember faces.", "If you seek Dracula's weakness, begin where old vows were broken."}
+        standardDialog = {"Keep your lantern high. Shadows here remember faces.", "If you seek Dracula's weakness, begin where old vows were broken."},
+        dialogOptions = {{id = "igor:town-mood", playerLine = "How fares the town these nights?", npcResponse = "No one sleeps deeply. Even the dogs stare uphill."}, {id = "igor:dark-castle", playerLine = "I've heard tale of a dark castle in the outer reaches.", npcResponse = "Then you've heard true. If you would stand against Dracula, there is work to begin.", questReady = true}}
     },
     {
         id = "npc:castle-librarian",
@@ -17,7 +18,8 @@ ____exports.RAW_NPCS = {
         defaultZone = "mountain",
         residenceBuilding = "guild",
         notes = "Holds information about the Sacred Tome.",
-        standardDialog = {"Books bite when handled by fools. Turn pages carefully.", "Knowledge is a blade. Know where to point it."}
+        standardDialog = {"Books bite when handled by fools. Turn pages carefully.", "Knowledge is a blade. Know where to point it."},
+        dialogOptions = {{id = "librarian:archives-status", playerLine = "How are the archives holding up?", npcResponse = "Dust and fear, mostly. Too many shelves are still sealed."}, {id = "librarian:tome-help", playerLine = "If the Sacred Tome still exists, I can retrieve it.", npcResponse = "Good. Then listen carefully before you set foot in those halls.", questReady = true}}
     },
     {
         id = "npc:captain-marla",
@@ -26,7 +28,8 @@ ____exports.RAW_NPCS = {
         defaultZone = "town",
         residenceBuilding = "inn",
         notes = "Leads moonlit supply routes and knows hidden road hazards.",
-        standardDialog = {"Moonlight keeps the raiders nervous. We move when they squint.", "Tie your packs high. Mud steals more than bandits do."}
+        standardDialog = {"Moonlight keeps the raiders nervous. We move when they squint.", "Tie your packs high. Mud steals more than bandits do."},
+        dialogOptions = {{id = "marla:route-status", playerLine = "How bad are the roads right now?", npcResponse = "Worse after dusk. Wagons vanish where lanterns should be."}, {id = "marla:escort-offer", playerLine = "Give me the route and I'll escort your caravan.", npcResponse = "Brave words. Let's see if you can match them on the trail.", questReady = true}}
     },
     {
         id = "npc:warden-bren",
@@ -35,7 +38,8 @@ ____exports.RAW_NPCS = {
         defaultZone = "town",
         residenceBuilding = "square",
         notes = "Coordinates militia patrols and tracks nearby den activity.",
-        standardDialog = {"Bandits test fences first, then resolve.", "If you clear the den, people will sleep with both eyes shut."}
+        standardDialog = {"Bandits test fences first, then resolve.", "If you clear the den, people will sleep with both eyes shut."},
+        dialogOptions = {{id = "bren:town-check", playerLine = "How is the town holding up?", npcResponse = "Holding, barely. Nights are loud and patrols are thin."}, {id = "bren:offer-help", playerLine = "If you need a blade, point me where trouble is worst.", npcResponse = "Good. We've got two urgent problems, and either could use a brave hand.", questReady = true}}
     },
     {
         id = "npc:ferryman-colt",
@@ -44,7 +48,8 @@ ____exports.RAW_NPCS = {
         defaultZone = "town",
         residenceBuilding = "inn",
         notes = "Controls crossing schedules when floodwaters rise.",
-        standardDialog = {"River decides the fare. I just collect it.", "Storm upstream means trouble here by sundown."}
+        standardDialog = {"River decides the fare. I just collect it.", "Storm upstream means trouble here by sundown."},
+        dialogOptions = {{id = "colt:crossing-status", playerLine = "How bad is the crossing this week?", npcResponse = "Bad enough that honest folk wait and desperate ones gamble."}, {id = "colt:crossing-help", playerLine = "If passage is blocked, I can help settle it.", npcResponse = "Then we can speak tolls, trouble, and who is making both worse.", questReady = true}}
     }
 }
 ____exports.RAW_TILES = {

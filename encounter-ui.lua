@@ -1,9 +1,13 @@
 local ____lualib = require("lualib_bundle")
 local __TS__ArrayMap = ____lualib.__TS__ArrayMap
 local __TS__ArrayFind = ____lualib.__TS__ArrayFind
+local __TS__SparseArrayNew = ____lualib.__TS__SparseArrayNew
+local __TS__SparseArrayPush = ____lualib.__TS__SparseArrayPush
+local __TS__SparseArraySpread = ____lualib.__TS__SparseArraySpread
 local ____exports = {}
 local getSelectedLocation
 local ____dialog_2Dservice = require("planning.dialog-service")
+local getDialogOptionsForNpc = ____dialog_2Dservice.getDialogOptionsForNpc
 local getQuestDialogPromptsForNpc = ____dialog_2Dservice.getQuestDialogPromptsForNpc
 local getStandardDialogForNpc = ____dialog_2Dservice.getStandardDialogForNpc
 local ____quest_2Dlog = require("planning.quest-log")
@@ -125,6 +129,15 @@ local function getQuestDifficultyColor(self, playerLevel, recommendedLevel)
     end
     return {1, 0.34, 0.34}
 end
+local function getQuestAcceptLabel(self, prompt)
+    if prompt == nil then
+        return "Accept"
+    end
+    if prompt.kind == "turn-in" then
+        return "Yes, I've done it."
+    end
+    return "Yes, I'll look into it."
+end
 local function refreshLayoutIfNeeded(self, uiState)
     local width = love.graphics.getWidth()
     local height = love.graphics.getHeight()
@@ -217,11 +230,24 @@ local function refreshDialogForSelection(self, uiState)
     local lines = getStandardDialogForNpc(nil, character.npcId)
     recordNpcInteracted(nil, character.npcId)
     local prompts = getQuestDialogPromptsForNpc(nil, character.npcId)
+    local npcDialogOptions = getDialogOptionsForNpc(nil, character.npcId)
+    local isQuestDialogUnlocked = uiState.questDialogUnlockedByCharacterId[character.id] == true
     uiState.dialogMode = "options"
     uiState.dialogText = "Choose something to say."
-    uiState.availableDialogOptions = {
-        {id = "standard:" .. character.npcId, kind = "standard", playerLine = "Any local rumors I should know?", npcResponse = lines[1] or character.description},
-        unpack(__TS__ArrayMap(
+    local ____uiState_3 = uiState
+    local ____array_2 = __TS__SparseArrayNew(unpack(__TS__ArrayMap(
+        npcDialogOptions,
+        function(____, option) return {
+            id = "standard:" .. option.id,
+            kind = "standard",
+            playerLine = option.playerLine,
+            npcResponse = option.npcResponse or lines[1] or character.description,
+            questReady = option.questReady
+        } end
+    )))
+    __TS__SparseArrayPush(
+        ____array_2,
+        unpack(isQuestDialogUnlocked and __TS__ArrayMap(
             prompts,
             function(____, prompt) return {
                 id = (("quest:" .. prompt.questId) .. ":") .. prompt.kind,
@@ -230,8 +256,9 @@ local function refreshDialogForSelection(self, uiState)
                 npcResponse = prompt.prompt,
                 questPrompt = prompt
             } end
-        ))
-    }
+        ) or ({}))
+    )
+    ____uiState_3.availableDialogOptions = {__TS__SparseArraySpread(____array_2)}
     uiState.availableQuestPrompts = prompts
     uiState.selectedQuestPrompt = nil
     uiState.questResponseText = nil
@@ -248,29 +275,29 @@ function ____exports.createEncounterUiState(self, context)
     local flowLevel = context and context.flowLevel or 0
     local maxLevels = explorationFlow ~= nil and #explorationFlow.levels or 0
     local viewLevel = maxLevels > 0 and math.min(flowLevel, maxLevels - 1) or 0
-    local ____mode_22 = mode
-    local ____temp_23 = context and context.tileName or "Unknown Tile"
-    local ____tileZone_24 = tileZone
-    local ____temp_25 = context and context.tileDescription or ""
-    local ____explorationFlow_26 = explorationFlow
-    local ____flowLevel_27 = flowLevel
-    local ____viewLevel_28 = viewLevel
-    local ____locations_29 = locations
-    local ____opt_14 = locations[1]
-    local ____temp_30 = ____opt_14 and ____opt_14.id
-    local ____opt_18 = locations[1]
-    local ____opt_16 = ____opt_18 and ____opt_18.characters[1]
+    local ____mode_24 = mode
+    local ____temp_25 = context and context.tileName or "Unknown Tile"
+    local ____tileZone_26 = tileZone
+    local ____temp_27 = context and context.tileDescription or ""
+    local ____explorationFlow_28 = explorationFlow
+    local ____flowLevel_29 = flowLevel
+    local ____viewLevel_30 = viewLevel
+    local ____locations_31 = locations
+    local ____opt_16 = locations[1]
+    local ____temp_32 = ____opt_16 and ____opt_16.id
+    local ____opt_20 = locations[1]
+    local ____opt_18 = ____opt_20 and ____opt_20.characters[1]
     local initialState = {
-        mode = ____mode_22,
-        tileName = ____temp_23,
-        tileZone = ____tileZone_24,
-        tileDescription = ____temp_25,
-        explorationFlow = ____explorationFlow_26,
-        flowLevel = ____flowLevel_27,
-        viewLevel = ____viewLevel_28,
-        locations = ____locations_29,
-        selectedLocationId = ____temp_30,
-        selectedCharacterId = ____opt_16 and ____opt_16.id,
+        mode = ____mode_24,
+        tileName = ____temp_25,
+        tileZone = ____tileZone_26,
+        tileDescription = ____temp_27,
+        explorationFlow = ____explorationFlow_28,
+        flowLevel = ____flowLevel_29,
+        viewLevel = ____viewLevel_30,
+        locations = ____locations_31,
+        selectedLocationId = ____temp_32,
+        selectedCharacterId = ____opt_18 and ____opt_18.id,
         width = width,
         height = height,
         continueButton = createContinueButton(nil, width, height),
@@ -289,6 +316,7 @@ function ____exports.createEncounterUiState(self, context)
             1,
             math.floor(context and context.playerLevel or 1)
         ),
+        questDialogUnlockedByCharacterId = {},
         hoveredContinue = false,
         hoveredGenericButton = nil,
         hoveredLocationId = nil,
@@ -306,10 +334,10 @@ function ____exports.onEncounterMouseMoved(self, uiState, x, y)
     refreshLayoutIfNeeded(nil, uiState)
     uiState.hoveredContinue = isInRect(nil, x, y, uiState.continueButton)
     if uiState.mode == "generic" then
-        local ____uiState_genericButtons_31 = uiState.genericButtons
-        local backToMap = ____uiState_genericButtons_31.backToMap
-        local exploreFurther = ____uiState_genericButtons_31.exploreFurther
-        local previousArea = ____uiState_genericButtons_31.previousArea
+        local ____uiState_genericButtons_33 = uiState.genericButtons
+        local backToMap = ____uiState_genericButtons_33.backToMap
+        local exploreFurther = ____uiState_genericButtons_33.exploreFurther
+        local previousArea = ____uiState_genericButtons_33.previousArea
         if isInRect(nil, x, y, backToMap) then
             uiState.hoveredGenericButton = "back"
         elseif isInRect(nil, x, y, exploreFurther) then
@@ -336,9 +364,9 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
             uiState.selectedLocationId = locationButton.locationId
             local selectedLocation = getSelectedLocation(nil, uiState)
             uiState.characterButtons = createCharacterButtons(nil, uiState.width, selectedLocation)
-            local ____uiState_40 = uiState
-            local ____opt_36 = selectedLocation and selectedLocation.characters[1]
-            ____uiState_40.selectedCharacterId = ____opt_36 and ____opt_36.id
+            local ____uiState_42 = uiState
+            local ____opt_38 = selectedLocation and selectedLocation.characters[1]
+            ____uiState_42.selectedCharacterId = ____opt_38 and ____opt_38.id
             refreshDialogForSelection(nil, uiState)
             return false
         end
@@ -346,6 +374,33 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
         if characterButton then
             uiState.selectedCharacterId = characterButton.characterId
             refreshDialogForSelection(nil, uiState)
+            return false
+        end
+        if uiState.dialogMode == "quest" and isInRect(nil, x, y, uiState.dialogButtons.yes) then
+            if uiState.selectedQuestPrompt ~= nil then
+                if uiState.selectedQuestPrompt.kind == "turn-in" then
+                    local questName = uiState.selectedQuestPrompt.questName
+                    turnInQuest(nil, uiState.selectedQuestPrompt.questId)
+                    refreshDialogForSelection(nil, uiState)
+                    uiState.questResponseText = "Turned in: " .. questName
+                else
+                    local questName = uiState.selectedQuestPrompt.questName
+                    acceptQuest(nil, uiState.selectedQuestPrompt.questId)
+                    refreshDialogForSelection(nil, uiState)
+                    uiState.questResponseText = "Accepted: " .. questName
+                end
+            else
+                uiState.questResponseText = "No quest selected."
+            end
+            return false
+        end
+        if uiState.dialogMode == "quest" and isInRect(nil, x, y, uiState.dialogButtons.no) then
+            if uiState.selectedQuestPrompt ~= nil then
+                uiState.questResponseText = "Declined: " .. uiState.selectedQuestPrompt.questName
+            else
+                uiState.questResponseText = "No quest selected."
+            end
+            uiState.dialogMode = "options"
             return false
         end
         local optionButton = getDialogOptionButtonAt(nil, uiState, x, y)
@@ -362,6 +417,14 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
                 uiState.dialogText = option.npcResponse
                 uiState.selectedQuestPrompt = option.questPrompt
             else
+                local character = getSelectedCharacter(nil, uiState)
+                if character ~= nil then
+                    local hasQuestPrompts = #uiState.availableQuestPrompts > 0
+                    if hasQuestPrompts and option.questReady == true then
+                        uiState.questDialogUnlockedByCharacterId[character.id] = true
+                        refreshDialogForSelection(nil, uiState)
+                    end
+                end
                 uiState.dialogMode = "standard"
                 uiState.dialogText = option.npcResponse
                 uiState.selectedQuestPrompt = nil
@@ -395,41 +458,14 @@ function ____exports.onEncounterMouseReleased(self, uiState, x, y, button)
             end
             return false
         end
-        if uiState.dialogMode == "quest" and isInRect(nil, x, y, uiState.dialogButtons.yes) then
-            if uiState.selectedQuestPrompt ~= nil then
-                if uiState.selectedQuestPrompt.kind == "turn-in" then
-                    local questName = uiState.selectedQuestPrompt.questName
-                    turnInQuest(nil, uiState.selectedQuestPrompt.questId)
-                    refreshDialogForSelection(nil, uiState)
-                    uiState.questResponseText = "Turned in: " .. questName
-                else
-                    local questName = uiState.selectedQuestPrompt.questName
-                    acceptQuest(nil, uiState.selectedQuestPrompt.questId)
-                    refreshDialogForSelection(nil, uiState)
-                    uiState.questResponseText = "Accepted: " .. questName
-                end
-            else
-                uiState.questResponseText = "No quest selected."
-            end
-            return false
-        end
-        if uiState.dialogMode == "quest" and isInRect(nil, x, y, uiState.dialogButtons.no) then
-            if uiState.selectedQuestPrompt ~= nil then
-                uiState.questResponseText = "Declined: " .. uiState.selectedQuestPrompt.questName
-            else
-                uiState.questResponseText = "No quest selected."
-            end
-            uiState.dialogMode = "options"
-            return false
-        end
     end
     if uiState.mode == "generic" then
         local flow = uiState.explorationFlow
         local maxLevels = flow ~= nil and #flow.levels or 0
-        local ____uiState_genericButtons_43 = uiState.genericButtons
-        local backToMap = ____uiState_genericButtons_43.backToMap
-        local exploreFurther = ____uiState_genericButtons_43.exploreFurther
-        local previousArea = ____uiState_genericButtons_43.previousArea
+        local ____uiState_genericButtons_45 = uiState.genericButtons
+        local backToMap = ____uiState_genericButtons_45.backToMap
+        local exploreFurther = ____uiState_genericButtons_45.exploreFurther
+        local previousArea = ____uiState_genericButtons_45.previousArea
         if isInRect(nil, x, y, previousArea) and uiState.viewLevel > 0 then
             uiState.viewLevel = uiState.viewLevel - 1
             return false
@@ -681,7 +717,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                             function(____, entry) return entry.id == optionButton.optionId end
                         )
                         if option == nil then
-                            goto __continue97
+                            goto __continue103
                         end
                         love.graphics.setColor(0.31, 0.24, 0.43, 0.96)
                         love.graphics.rectangle(
@@ -703,37 +739,32 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                             6,
                             6
                         )
-                        if option.questPrompt ~= nil then
-                            local r, g, b = unpack(
-                                getQuestDifficultyColor(nil, uiState.playerLevel, option.questPrompt.recommendedLevel),
-                                1,
-                                3
-                            )
-                            love.graphics.setColor(r, g, b, 0.95)
-                            love.graphics.printf(
-                                "Lv " .. tostring(option.questPrompt.recommendedLevel),
-                                optionButton.rect.x + optionButton.rect.width - 66,
-                                optionButton.rect.y + 11,
-                                54,
-                                "right",
-                                0,
-                                0.5,
-                                0.5
-                            )
-                        end
                         love.graphics.setColor(1, 1, 1, 0.98)
                         love.graphics.printf(
                             option.playerLine,
-                            optionButton.rect.x + 10,
+                            optionButton.rect.x + (option.questPrompt ~= nil and 24 or 10),
                             optionButton.rect.y + 10,
-                            optionButton.rect.width - 84,
+                            optionButton.rect.width - (option.questPrompt ~= nil and 34 or 20),
                             "left",
                             0,
                             0.51,
                             0.51
                         )
+                        if option.questReady == true then
+                            love.graphics.setColor(1, 0.86, 0.25, 0.98)
+                            love.graphics.printf(
+                                "!",
+                                optionButton.rect.x + 8,
+                                optionButton.rect.y + 8,
+                                12,
+                                "center",
+                                0,
+                                0.72,
+                                0.72
+                            )
+                        end
                     end
-                    ::__continue97::
+                    ::__continue103::
                 end
             end
             if uiState.dialogMode == "quest" then
@@ -759,7 +790,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                 )
                 love.graphics.setColor(1, 1, 1, 1)
                 love.graphics.printf(
-                    "Yes",
+                    getQuestAcceptLabel(nil, uiState.selectedQuestPrompt),
                     uiState.dialogButtons.yes.x,
                     uiState.dialogButtons.yes.y + 8,
                     uiState.dialogButtons.yes.width,
@@ -768,6 +799,24 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                     0.55,
                     0.55
                 )
+                if uiState.selectedQuestPrompt ~= nil and uiState.selectedQuestPrompt.kind == "offer" then
+                    local r, g, b = unpack(
+                        getQuestDifficultyColor(nil, uiState.playerLevel, uiState.selectedQuestPrompt.recommendedLevel),
+                        1,
+                        3
+                    )
+                    love.graphics.setColor(r, g, b, 0.95)
+                    love.graphics.printf(
+                        "Lv " .. tostring(uiState.selectedQuestPrompt.recommendedLevel),
+                        uiState.dialogButtons.yes.x + 8,
+                        uiState.dialogButtons.yes.y + 9,
+                        uiState.dialogButtons.yes.width - 16,
+                        "left",
+                        0,
+                        0.48,
+                        0.48
+                    )
+                end
                 love.graphics.setColor(0.35, 0.27, 0.47, 0.96)
                 love.graphics.rectangle(
                     "fill",
@@ -790,7 +839,7 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                 )
                 love.graphics.setColor(1, 1, 1, 1)
                 love.graphics.printf(
-                    "No",
+                    "Not now.",
                     uiState.dialogButtons.no.x,
                     uiState.dialogButtons.no.y + 8,
                     uiState.dialogButtons.no.width,
@@ -918,10 +967,10 @@ function ____exports.drawEncounterUi(self, uiState, visitCount)
                 0.76
             )
         end
-        local ____uiState_genericButtons_44 = uiState.genericButtons
-        local backToMap = ____uiState_genericButtons_44.backToMap
-        local exploreFurther = ____uiState_genericButtons_44.exploreFurther
-        local previousArea = ____uiState_genericButtons_44.previousArea
+        local ____uiState_genericButtons_46 = uiState.genericButtons
+        local backToMap = ____uiState_genericButtons_46.backToMap
+        local exploreFurther = ____uiState_genericButtons_46.exploreFurther
+        local previousArea = ____uiState_genericButtons_46.previousArea
         local showPrevious = uiState.viewLevel > 0
         local showExplore = flow ~= nil and uiState.viewLevel < maxLevels - 1
         if showPrevious then

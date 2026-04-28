@@ -1,4 +1,5 @@
 local ____lualib = require("lualib_bundle")
+local __TS__ArrayMap = ____lualib.__TS__ArrayMap
 local __TS__ObjectAssign = ____lualib.__TS__ObjectAssign
 local __TS__ArrayFilter = ____lualib.__TS__ArrayFilter
 local ____exports = {}
@@ -36,17 +37,27 @@ function ____exports.getStandardDialogForNpc(self, npcId)
     local npc = getNpcById(nil, npcId)
     return {unpack(npc.standardDialog)}
 end
+function ____exports.getDialogOptionsForNpc(self, npcId)
+    local npc = getNpcById(nil, npcId)
+    if npc.dialogOptions == nil or #npc.dialogOptions == 0 then
+        return {{id = npcId .. ":default-greeting", playerLine = "How are things around town?", npcResponse = npc.standardDialog[1] or npc.notes, questReady = false}}
+    end
+    return __TS__ArrayMap(
+        npc.dialogOptions,
+        function(____, option) return {id = option.id, playerLine = option.playerLine, npcResponse = option.npcResponse, questReady = option.questReady == true} end
+    )
+end
 function ____exports.getQuestDialogPromptsForNpc(self, npcId)
     local prompts = {}
     local offers = QUEST_OFFERS_BY_NPC_ID[npcId] or ({})
     for ____, offer in ipairs(offers) do
         do
             if isQuestAccepted(nil, offer.questId) then
-                goto __continue8
+                goto __continue11
             end
             prompts[#prompts + 1] = __TS__ObjectAssign({}, offer)
         end
-        ::__continue8::
+        ::__continue11::
     end
     local readyToTurnIn = __TS__ArrayFilter(
         listQuestEntries(nil),

@@ -10,6 +10,13 @@ export type QuestDialogPrompt = {
   prompt: string;
 };
 
+export type NpcDialogOption = {
+  id: string;
+  playerLine: string;
+  npcResponse: string;
+  questReady: boolean;
+};
+
 const QUEST_OFFERS_BY_NPC_ID: Record<string, QuestDialogPrompt[]> = {};
 
 function buildQuestPromptMap(): void {
@@ -38,6 +45,27 @@ buildQuestPromptMap();
 export function getStandardDialogForNpc(npcId: string): string[] {
   const npc = getNpcById(npcId);
   return [...npc.standardDialog];
+}
+
+export function getDialogOptionsForNpc(npcId: string): NpcDialogOption[] {
+  const npc = getNpcById(npcId);
+  if (npc.dialogOptions === undefined || npc.dialogOptions.length === 0) {
+    return [
+      {
+        id: `${npcId}:default-greeting`,
+        playerLine: "How are things around town?",
+        npcResponse: npc.standardDialog[0] ?? npc.notes,
+        questReady: false,
+      },
+    ];
+  }
+
+  return npc.dialogOptions.map((option) => ({
+    id: option.id,
+    playerLine: option.playerLine,
+    npcResponse: option.npcResponse,
+    questReady: option.questReady === true,
+  }));
 }
 
 export function getQuestDialogPromptsForNpc(npcId: string): QuestDialogPrompt[] {

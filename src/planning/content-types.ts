@@ -11,6 +11,12 @@ export type ContentNpc = {
   residenceBuilding: NpcResidenceBuilding;
   notes: string;
   standardDialog: string[];
+  dialogOptions?: Array<{
+    id: string;
+    playerLine: string;
+    npcResponse: string;
+    questReady?: boolean;
+  }>;
 };
 
 export type ContentTile = {
