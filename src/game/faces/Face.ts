@@ -1,4 +1,12 @@
 import type { CombatEvent } from "../combat-event-bus";
+import {
+  CombatTagFactory,
+  CoreCombatTags,
+  hasCombatTag,
+  mergeCombatTags,
+  prefixCombatTags,
+} from "../combat-tags";
+import { EffectType } from "../dice";
 import type { DieSide, SideResolveContext } from "../dice";
 import type { FaceUpgrade } from "./FaceUpgrade";
 import type {
@@ -43,7 +51,7 @@ export abstract class Face implements DieSide {
     };
 
     this.beforeResolve(faceContext);
-    return this.onResolve(faceContext);
+    return this.decorateResolvedEvents(faceContext, this.onResolve(faceContext));
   }
 
   getRollCount(): number {
@@ -52,6 +60,34 @@ export abstract class Face implements DieSide {
 
   describe(): string {
     return this.label;
+  }
+
+  private static toKebabCase(value: string): string {
+    let result = "";
+
+    for (let index = 0; index < value.length; index += 1) {
+      const char = value[index];
+      const lower = char.toLowerCase();
+      const upper = char.toUpperCase();
+      const isUpper = char === upper && char !== lower;
+
+      if (isUpper && index > 0) {
+        result += "-";
+      }
+
+      result += lower;
+    }
+
+    return result;
+  }
+
+  getTags(): string[] {
+    const faceType = Face.toKebabCase(this.constructor.name);
+
+    return mergeCombatTags([
+      CombatTagFactory.faceCategory(this.category),
+      CombatTagFactory.faceType(faceType),
+    ]);
   }
 
   getResolvePopupText(): string {
@@ -118,6 +154,45 @@ export abstract class Face implements DieSide {
   }
 
   protected beforeResolve(_context: FaceResolveContext): void {}
+
+  protected decorateResolvedEvents(
+    context: FaceResolveContext,
+    events: CombatEvent[],
+  ): CombatEvent[] {
+    const dieTags = prefixCombatTags(CombatTagFactory.dieTag, context.dieTags);
+    const faceTags = this.getTags();
+
+    return events.map((event) => {
+      const baseTags = mergeCombatTags(
+        event.tags,
+        dieTags,
+        faceTags,
+        [
+          CombatTagFactory.effect(event.effect),
+          CombatTagFactory.actor(event.source),
+          CombatTagFactory.target(event.target),
+          CombatTagFactory.cause(event.cause),
+        ],
+      );
+
+      const attackTags =
+        event.effect === EffectType.Damage
+          ? mergeCombatTags(
+              [CoreCombatTags.Attack],
+              hasCombatTag(baseTags, CombatTagFactory.dieTag("weapon"))
+                ? [CoreCombatTags.AttackWeapon]
+                : undefined,
+              event.value > 0 ? [CoreCombatTags.Hit] : undefined,
+            )
+          : [];
+
+      return {
+        ...event,
+        originDieId: context.originDieId ?? context.dieId,
+        tags: mergeCombatTags(baseTags, attackTags),
+      };
+    });
+  }
 
   protected abstract onResolve(context: FaceResolveContext): CombatEvent[];
 }

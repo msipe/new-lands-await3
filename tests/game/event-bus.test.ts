@@ -17,6 +17,8 @@ function createDamageEvent(value: number): CombatEvent {
     cause: "player-roll",
     dieId: "die-1",
     sideId: "side-1",
+    originDieId: "die-1",
+    tags: ["effect:damage", "actor:player", "target:opponent", "cause:player-roll", "attack", "hit"],
   };
 }
 
@@ -54,6 +56,8 @@ describe("combat event bus", () => {
         cause: "triggered",
         dieId: "trigger-a",
         sideId: "trigger-a",
+        originDieId: "trigger-a",
+        tags: ["effect:heal", "actor:player", "target:self", "cause:triggered"],
       },
     ]);
 
@@ -66,6 +70,8 @@ describe("combat event bus", () => {
         cause: "triggered",
         dieId: "trigger-b",
         sideId: "trigger-b",
+        originDieId: "trigger-b",
+        tags: ["effect:damage", "actor:enemy", "target:opponent", "cause:triggered", "attack", "hit"],
       },
     ]);
 
@@ -105,6 +111,8 @@ describe("combat event bus", () => {
         cause: "triggered",
         dieId: "chain-a",
         sideId: "chain-a",
+        originDieId: "chain-a",
+        tags: ["effect:heal", "actor:player", "target:self", "cause:triggered"],
       },
     ]);
 
@@ -117,6 +125,8 @@ describe("combat event bus", () => {
         cause: "triggered",
         dieId: "chain-b",
         sideId: "chain-b",
+        originDieId: "chain-b",
+        tags: ["effect:damage", "actor:enemy", "target:opponent", "cause:triggered", "attack", "hit"],
       },
     ]);
 

@@ -1,4 +1,5 @@
 import { EffectType } from "./dice";
+import { CombatTagFactory, CoreCombatTags, hasAllCombatTags } from "./combat-tags";
 
 export type CombatEvent = {
   effect: EffectType;
@@ -8,6 +9,8 @@ export type CombatEvent = {
   cause: "enemy-intent" | "player-roll" | "triggered";
   dieId: string;
   sideId: string;
+  originDieId: string;
+  tags: string[];
   meta?: Record<string, string | number | boolean>;
 };
 
@@ -89,36 +92,38 @@ type CombatHitSubscriberEntry = {
 
 function eventMatchesTarget(event: CombatEvent, target: CombatEventSubscriberTarget): boolean {
   if (target === CombatEventSubscriberTarget.PlayerAttackDamage) {
-    return (
-      event.effect === EffectType.Damage &&
-      event.source === "player" &&
-      event.target === "opponent"
-    );
+    return hasAllCombatTags(event.tags, [
+      CombatTagFactory.effect(EffectType.Damage),
+      CombatTagFactory.actor("player"),
+      CoreCombatTags.Attack,
+    ]);
   }
 
-  return (
-    event.effect === EffectType.Damage &&
-    event.source === "enemy" &&
-    event.target === "opponent"
-  );
+  return hasAllCombatTags(event.tags, [
+    CombatTagFactory.effect(EffectType.Damage),
+    CombatTagFactory.actor("enemy"),
+    CoreCombatTags.Attack,
+  ]);
 }
 
 function eventMatchesHitTarget(event: CombatEvent, target: CombatHitSubscriberTarget): boolean {
   if (target === CombatHitSubscriberTarget.PlayerAttackHit) {
-    return (
-      event.effect === EffectType.Damage &&
-      event.source === "player" &&
-      event.target === "opponent" &&
-      event.value > 0
-    );
+    return hasAllCombatTags(event.tags, [
+      CombatTagFactory.effect(EffectType.Damage),
+      CombatTagFactory.actor("player"),
+      CombatTagFactory.target("opponent"),
+      CoreCombatTags.Attack,
+      CoreCombatTags.Hit,
+    ]);
   }
 
-  return (
-    event.effect === EffectType.Damage &&
-    event.source === "enemy" &&
-    event.target === "opponent" &&
-    event.value > 0
-  );
+  return hasAllCombatTags(event.tags, [
+    CombatTagFactory.effect(EffectType.Damage),
+    CombatTagFactory.actor("enemy"),
+    CombatTagFactory.target("opponent"),
+    CoreCombatTags.Attack,
+    CoreCombatTags.Hit,
+  ]);
 }
 
 function getModifierTypePriority(modifierType: EventSubscriberType): number {

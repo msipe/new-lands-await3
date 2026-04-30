@@ -58,6 +58,7 @@ type VisualDie = {
   parkProgress?: number;
   parkDuration?: number;
   flashTimer?: number;
+  flashColor?: { r: number; g: number; b: number };
   spawnedInspectorName?: string;
   spawnedInspectorSides?: InspectorSideView[];
   spawnedInspectorEnergyCost?: number;
@@ -171,6 +172,7 @@ const WHITE = { r: 1, g: 1, b: 1 };
 const GREEN = { r: 0.2, g: 0.72, b: 0.33 };
 const GRAY = { r: 0.62, g: 0.64, b: 0.67 };
 const BLACK = { r: 0, g: 0, b: 0 };
+const RED = { r: 0.94, g: 0.36, b: 0.36 };
 const ENERGY_ORB_ACTIVE = { r: 0.98, g: 0.62, b: 0.16 };
 const ENERGY_ORB_INACTIVE = { r: 0.31, g: 0.21, b: 0.14 };
 const RESOLVE_FLASH_DURATION = 0.26;
@@ -624,6 +626,7 @@ function updateEnemyParkingTransitions(uiState: CombatUiState, dt: number): void
       die.y = die.parkY;
       die.size = targetSize;
       die.flashTimer = RESOLVE_FLASH_DURATION;
+      die.flashColor = undefined;
       die.parkStartX = undefined;
       die.parkStartY = undefined;
       die.parkStartSize = undefined;
@@ -641,6 +644,9 @@ function updateDieFlashes(uiState: CombatUiState, dt: number): void {
     }
 
     die.flashTimer = Math.max(0, die.flashTimer - dt);
+    if (die.flashTimer <= 0) {
+      die.flashColor = undefined;
+    }
   }
 }
 
@@ -683,6 +689,7 @@ function settleEnemyArenaDice(uiState: CombatUiState): void {
     die.angle = 0;
     if (!die.faceLocked) {
       die.flashTimer = RESOLVE_FLASH_DURATION;
+      die.flashColor = undefined;
     }
     lockVisualDieFace(die);
   }
@@ -705,6 +712,7 @@ function parkEnemyDice(uiState: CombatUiState): void {
     die.parkProgress = 0;
     die.parkDuration = 0.32 + Math.random() * 0.16;
     die.flashTimer = undefined;
+    die.flashColor = undefined;
     lockVisualDieFace(die);
     uiState.enemyParkedDice.push(die);
     if (die.combatDieId) {
@@ -728,6 +736,7 @@ function parkEnemyDice(uiState: CombatUiState): void {
     die.parkProgress = 0;
     die.parkDuration = 0.32 + Math.random() * 0.16;
     die.flashTimer = undefined;
+    die.flashColor = undefined;
     lockVisualDieFace(die);
     uiState.enemyParkedDice.push(die);
     if (die.combatDieId) {
@@ -886,6 +895,7 @@ function enqueueSettledPlayerDice(uiState: CombatUiState): void {
     visualDie.vy = 0;
     visualDie.spin = 0;
     visualDie.flashTimer = RESOLVE_FLASH_DURATION;
+    visualDie.flashColor = undefined;
     visualDie.displayLabel = undefined;
     lockVisualDieFace(visualDie);
 
@@ -1059,6 +1069,34 @@ function executePlayerThrow(
   }
 
   return true;
+}
+
+function parkPlayerDie(die: VisualDie): void {
+  die.state = "parked";
+  if (die.parkX !== undefined && die.parkY !== undefined) {
+    die.x = die.parkX;
+    die.y = die.parkY;
+  }
+}
+
+function rejectPlayerThrowDrop(
+  uiState: CombatUiState,
+  die: VisualDie,
+  dropX: number,
+  dropY: number,
+  text: string,
+): void {
+  parkPlayerDie(die);
+  die.flashTimer = RESOLVE_FLASH_DURATION;
+  die.flashColor = RED;
+  uiState.floatingPopups.push({
+    x: dropX,
+    y: dropY - die.size * 0.72,
+    text,
+    source: "player",
+    powerTone: "negative",
+    timer: POPUP_DURATION,
+  });
 }
 
 export function fastForwardCombatUi(uiState: CombatUiState, state: CombatEncounterState): void {
@@ -1382,6 +1420,7 @@ export function enqueueCombatResolutionPopups(
     }
 
     die.flashTimer = RESOLVE_FLASH_DURATION;
+    die.flashColor = undefined;
     if (popup.sideLabel !== undefined) {
       die.label = popup.sideLabel;
       die.displayLabel = popup.sideLabel;
@@ -1428,10 +1467,6 @@ function canDragPlayerDie(
     uiState.settledPlayerDieIds.includes(dieId) ||
     state.rolledPlayerDieIds.includes(dieId)
   ) {
-    return false;
-  }
-
-  if (getDieEnergyCost(state, dieId) > getProjectedPlayerEnergy(uiState, state)) {
     return false;
   }
 
@@ -1953,7 +1988,7 @@ export function onCombatMousePressed(
       lastX: x,
       lastY: y,
       lastDt: 1 / 60,
-      skipOnRelease: !canPlayerThrow(uiState, state),
+      skipOnRelease: state.phase !== "player-turn" || uiState.pendingRound !== undefined,
     };
     return;
   }
@@ -2017,11 +2052,7 @@ export function onCombatMouseReleased(
 
   if (drag.skipOnRelease && !releaseCanThrow) {
     if (isInsideArena(uiState, x, y) && state.phase === "enemy-turn") {
-      dragged.state = "parked";
-      if (dragged.parkX !== undefined && dragged.parkY !== undefined) {
-        dragged.x = dragged.parkX;
-        dragged.y = dragged.parkY;
-      }
+      parkPlayerDie(dragged);
 
       uiState.queuedPlayerThrow = {
         dieId: dragged.id,
@@ -2034,16 +2065,20 @@ export function onCombatMouseReleased(
       return;
     }
 
-    dragged.state = "parked";
-    if (dragged.parkX !== undefined && dragged.parkY !== undefined) {
-      dragged.x = dragged.parkX;
-      dragged.y = dragged.parkY;
-    }
+    parkPlayerDie(dragged);
 
     if (isInsideArena(uiState, x, y)) {
       fastForwardCombatUi(uiState, state);
     }
 
+    return;
+  }
+
+  if (
+    isInsideArena(uiState, x, y) &&
+    getDieEnergyCost(state, dragged.combatDieId) > getProjectedPlayerEnergy(uiState, state)
+  ) {
+    rejectPlayerThrowDrop(uiState, dragged, x, y, "Out of energy");
     return;
   }
 
@@ -2156,7 +2191,8 @@ function drawDie(die: VisualDie): void {
   if (die.flashTimer !== undefined && die.flashTimer > 0) {
     const flashRatio = die.flashTimer / RESOLVE_FLASH_DURATION;
     const pad = 2 + (1 - flashRatio) * 4;
-    love.graphics.setColor(WHITE.r, WHITE.g, WHITE.b, 0.25 + flashRatio * 0.55);
+    const flashColor = die.flashColor ?? WHITE;
+    love.graphics.setColor(flashColor.r, flashColor.g, flashColor.b, 0.25 + flashRatio * 0.55);
     love.graphics.rectangle("line", -half - pad, -half - pad, die.size + pad * 2, die.size + pad * 2);
   }
 
